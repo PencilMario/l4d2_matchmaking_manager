@@ -2,10 +2,10 @@
 
 ## TodoCheckpointDraft
 
-- 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-5 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API 和共享库配置保护。
-- 当前工作项：Task 6，建立 Core 的认证、PostgreSQL 持久化实体和初始迁移。
-- 尚未开始：Task 6 至 Task 12；没有 Core Docker Compose 或新的外部 Core 管理 API 已交付。
-- 下一步：为管理 API Bearer 认证和每目标唯一预留租约写红灯测试。
+- 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-6 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API、共享库配置保护和 Core 认证/持久化基础。
+- 当前工作项：Task 7，提供目标服务器 endpoint parser 和受认证 CRUD API。
+- 尚未开始：Task 7 至 Task 12；没有 Core Docker Compose、Agent 生命周期管理或暖服调度已交付。
+- 下一步：为 hostname/IPv4 endpoint parser、默认字段和受认证服务器 API 写红灯测试。
 
 ## EvidenceBundleDraft
 
@@ -26,16 +26,20 @@
 - Task 4 提交：`9e3a2c5 feat(agent): 增加持久大厅控制和查询接口`。
 - Task 5 RED：新的 `Test-SteamAccountConfiguration.ps1` 在现有脚本缺少 `set_l4d2_update_policy`、`AutoUpdateBehavior=1` 和 `STEAM_DOWNLOAD_REGION` 时失败。
 - Task 5 GREEN：共享 `appmanifest_550.acf` fixture 保持 Steam 默认值 0；初始化脚本在实际 AppID 550 manifest 已存在时幂等写入值 1，账号私有 `config.vdf` 维持 `DisableShaderCache=1` 并可写入下载地区。Compose/Supervisor 将 `STEAM_DOWNLOAD_REGION` 传入 Agent，过时的 short-lived Probe 进程环境变量已移除。`Test-ComposeContract.ps1`、`Test-SteamAccountConfiguration.ps1` 与 Git Bash `-n` 均以 exit 0 完成。
+- Task 5 提交：`6bf0c79 feat(deploy): 共享游戏库并禁用常规自动更新`。
+- Task 6 RED：Core 测试因缺少 `Program`、`MatchmakingDbContext`、EF Core provider、Testcontainers 与 `ReservationLease` 编译失败。
+- Task 6 GREEN：Core 从 `CORE_API_TOKEN` 或 `CORE_API_TOKEN_FILE` 读取 token，所有 `/v1/servers` 请求受固定 Bearer handler 保护；数据库包含目标服务器、Agent、尝试、审计、预留 lease 与共享库维护 lease，预留 lease 用 `TargetServerId` 做主键。首次迁移已加入，非 Testing 环境启动时执行。认证测试验证无 token/错误 token 为 401、正确 token 为 200。完整回归为 Core 1/1（PostgreSQL Testcontainers 1 项因本机 Docker daemon 不可用而 skipped）、Agent 14/14、Probe 4/4、Protocol 10/10、contracts 1/1；solution build 为 0 警告、0 错误。
 
 ## DriftCheckDraft
 
 - 范围：仍为单 Docker 主机的 Core Controller 与受管 Agent；没有扩展至 Web UI、跨主机编排或 RCON。
-- 兼容：现有 health 路由、Probe CLI 与 standalone Compose 保留；Agent 的 Probe 状态路由保留 JSON 字段和 200/503 约定，数据来源已从短生命周期进程迁移为持久 actor。共享库仍仅挂载游戏内容，账号凭据仍留在独立 `steam-data` 卷。
+- 兼容：现有 health 路由、Probe CLI 与 standalone Compose 保留；Agent 的 Probe 状态路由保留 JSON 字段和 200/503 约定，数据来源已从短生命周期进程迁移为持久 actor。共享库仍仅挂载游戏内容，账号凭据仍留在独立 `steam-data` 卷。Core 的 `/v1/servers` 当前仅为认证占位路由，Task 7 会用 CRUD owner 替换。
 - 运行时权威：后续调度只可依据实时 Agent 与 A2S 读取，数据库仅保存配置、关联、审计与租约。
-- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。下一切片进入 Core 认证与 PostgreSQL 持久化基础。
+- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。下一切片为目标服务器配置建立唯一 CRUD owner，替换认证占位路由。
 
 ## Risk / Unknown
 
 - `AutoUpdateBehavior=1` 可阻止 AppID 550 在不启动 L4D2 时的后台更新；Agent 不启动游戏。Steam 客户端自身更新的跨版本配置尚无本机可验证证据，必须在 Ubuntu 真机验收中单独确认，不能把它表述为已经禁用。
 - Steam 下载地区写入的精确 VDF 位置也需要真机验收；凭据隔离、共享库路径与 AppID 550 策略已有自动化契约覆盖计划。
 - 本机未运行 Steam Desktop。`STEAM_DOWNLOAD_REGION` 在 Ubuntu Steam 客户端实际生效及 Steam 客户端自更新抑制均只能由真机验收确认；`AutoUpdateBehavior=1` 仅覆盖 AppID 550 在未启动游戏时不自动更新的策略。
+- 本机 Docker daemon 不可用，Testcontainers 无法启动 PostgreSQL 17；`ReservationLeases` 在真实 PostgreSQL 中拒绝重复主键的集成证据待 Docker/CI 或目标 Ubuntu 主机补充。当前迁移和模型的编译已通过。

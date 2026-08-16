@@ -415,7 +415,7 @@ git commit -m "feat(deploy): 共享游戏库并禁用常规自动更新"
 
 **Verification:** dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "CoreAuthenticationTests|PostgresPersistenceTests".
 
-- [ ] **Step 1: Write failing authentication and unique-lease tests**
+- [x] **Step 1: Write failing authentication and unique-lease tests**
 
 ~~~csharp
 [TestMethod]
@@ -436,13 +436,13 @@ public async Task OneReservationLeaseExistsPerTarget()
 }
 ~~~
 
-- [ ] **Step 2: Run Core infrastructure tests and confirm RED**
+- [x] **Step 2: Run Core infrastructure tests and confirm RED**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "CoreAuthenticationTests|PostgresPersistenceTests"
 
 Expected: compile failure because Core host, DbContext and ReservationLease are absent.
 
-- [ ] **Step 3: Implement options, auth, entities and migration**
+- [x] **Step 3: Implement options, auth, entities and migration**
 
 ~~~xml
 <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
@@ -461,13 +461,13 @@ public sealed class ReservationLease
 
 Register the static Bearer authentication handler, authorization, DbContext and startup migration. Add TargetServer, WarmupAgent, WarmupAttempt, LobbyOperationAudit, ReservationLease and SharedLibraryMaintenanceLease.
 
-- [ ] **Step 4: Run authentication and PostgreSQL tests**
+- [x] **Step 4: Run authentication and PostgreSQL tests**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "CoreAuthenticationTests|PostgresPersistenceTests"
 
 Expected: 401 without/with wrong token, 200 with correct token, and PostgreSQL rejects a duplicate reservation lease.
 
-- [ ] **Step 5: Commit Core infrastructure**
+- [x] **Step 5: Commit Core infrastructure**
 
 ~~~text
 git add src/L4d2MatchmakingCore L4d2MatchmakingManager.sln
