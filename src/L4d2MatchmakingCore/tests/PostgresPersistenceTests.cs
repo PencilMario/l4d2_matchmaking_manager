@@ -45,6 +45,7 @@ public sealed class PostgresPersistenceTests
                 ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1),
             });
             await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
             context.ReservationLeases.Add(new ReservationLease
             {
                 TargetServerId = targetServerId,

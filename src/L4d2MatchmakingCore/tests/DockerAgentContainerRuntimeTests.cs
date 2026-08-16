@@ -18,7 +18,7 @@ public sealed class DockerAgentContainerRuntimeTests
             18083,
             18183);
         var service = new WarmupAgentContainerService(runtime, options);
-        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1" };
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083 };
 
         await service.CreateAsync(agent, CancellationToken.None);
 
@@ -56,6 +56,9 @@ public sealed class DockerAgentContainerRuntimeTests
             Definition = definition;
             return Task.FromResult("container-id");
         }
+
+        public Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<int>>(new HashSet<int>());
 
         public Task StartAsync(string containerId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StopAsync(string containerId, CancellationToken cancellationToken) => Task.CompletedTask;

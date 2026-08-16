@@ -2,10 +2,10 @@
 
 ## TodoCheckpointDraft
 
-- 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-7 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API、共享库配置保护、Core 认证/持久化和目标服务器配置 API。
-- 当前工作项：Task 8，管理本机 Agent Docker 生命周期并实现 Core 到 Agent 的内部 client。
-- 尚未开始：Task 8 至 Task 12；没有 Core Docker Compose、Agent 生命周期管理或暖服调度已交付。
-- 下一步：为受管容器标签、独立 volume、内部端口与 noVNC loopback 映射写红灯测试。
+- 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-8 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API、共享库配置保护、Core 认证/持久化、目标服务器配置和本机 Agent Docker 生命周期。
+- 当前工作项：Task 9，增加 A2S 实时观测和由健康 Agent 提供的大厅查询代理。
+- 尚未开始：Task 9 至 Task 12；没有 Core Docker Compose、A2S 查询、暖服状态机或调度后台服务已交付。
+- 下一步：为 Source A2S challenge 流程和匿名/无健康 Agent 的 lobby 查询路由写红灯测试。
 
 ## EvidenceBundleDraft
 
@@ -32,17 +32,22 @@
 - Task 6 提交：`a8950f9 feat(core): 增加认证和 PostgreSQL 持久化基础`。
 - Task 7 RED：parser/API 测试因缺少 `L4d2MatchmakingCore.Servers` 模块而编译失败。
 - Task 7 GREEN：受认证的 `/v1/servers` 现在提供 create/list/get/update/delete。parser 接受 hostname 或 IPv4（缺省端口 27015），拒绝 URL、IPv6、空白、嵌入凭据及非法端口；hostnames 规范化保留。默认 priority=0、normal concurrency=36、attempt window=720、player target=6，预留目标强制 effective concurrency=1。每个变更写入无运行时真值的审计记录。`TargetServer` 14/14，完整回归为 Core 15/15、PostgreSQL 1 skipped、Agent 14/14、Probe 4/4、Protocol 10/10、contracts 1/1；solution build 为 0 警告、0 错误。
+- PostgreSQL 真实环境修正：首次在远端 Docker 测试中，重复租约被同一 `DbContext` 的 ChangeTracker 拒绝，未触达数据库约束；在首个保存后调用 `ChangeTracker.Clear()` 后，测试准确断言 PostgreSQL 主键冲突。
+- PostgreSQL 真实证据：`100.72.137.92`（Docker Engine 29.6.1，Ubuntu 26.04）内的临时 .NET 10 SDK 容器执行 `dotnet test ... --filter OneReservationLeaseExistsPerTarget`，Testcontainers 成功启动 `postgres:17`、应用迁移并以 1/1 通过验证同一 `TargetServerId` 只能有一个 reservation lease。远端测试容器使用 `--rm`，测试数据库容器由 Testcontainers/Ryuk 清理；源码临时目录仍在 `/tmp/l4d2-core-test-20260817-1` 与 `-2`，仅含测试归档，待最终远端验收完成后删除。
+- Task 8 RED：`WarmupAgentEndpointTests` 因缺少 `NoVncPort`、Agent DTO 和生命周期端点而编译失败；`AgentControlClientTests` 因缺少 Agent HTTP client 而编译失败。
+- Task 8 GREEN：`/v1/agents` 受 Bearer 认证保护，提供 create/list/get/update/start/stop/recreate/delete；创建会持久化分配 noVNC loopback 端口、独立 Steam/account-config 卷名并启动容器。端口分配同时避开现有 Agent 和任意 Docker 已绑定端口，数据库以唯一索引保存分配；删除/重建从不删除账号卷。Docker runtime 对 start/stop/delete 检查受管标签，Container API 保持 8080 未发布、8083 仅映射 `127.0.0.1`。响应不返回卷名或容器 ID。`IAgentControlClient` 固定通过内部 Docker network 的 `l4d2-agent-{id}:8080` 调用 Agent；健康选择器只返回运行且实时 Ready 的 Agent。定向 Task 8 为 6/6；Core 21/21、本机 PostgreSQL 1 skipped；solution 构建 0 警告、0 错误，完整 solution 回归为 Core 21/21 + PostgreSQL 1 skipped、Agent 14/14、Probe 4/4、Protocol 10/10、contracts 1/1。
 
 ## DriftCheckDraft
 
 - 范围：仍为单 Docker 主机的 Core Controller 与受管 Agent；没有扩展至 Web UI、跨主机编排或 RCON。
 - 兼容：现有 health 路由、Probe CLI 与 standalone Compose 保留；Agent 的 Probe 状态路由保留 JSON 字段和 200/503 约定，数据来源已从短生命周期进程迁移为持久 actor。共享库仍仅挂载游戏内容，账号凭据仍留在独立 `steam-data` 卷。Core 的 `/v1/servers` 认证占位路由已由 TargetServerEndpoints CRUD owner 替换。
 - 运行时权威：后续调度只可依据实时 Agent 与 A2S 读取，数据库仅保存配置、关联、审计与租约。
-- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。下一切片限定为 Docker Agent 生命周期和内部 Agent HTTP client。
+- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。Docker lifecycle 仍只使用 Core 到 Docker 和 Core 到 Agent 的独立 owner；下一切片限定为 A2S 观测与大厅查询代理。
 
 ## Risk / Unknown
 
 - `AutoUpdateBehavior=1` 可阻止 AppID 550 在不启动 L4D2 时的后台更新；Agent 不启动游戏。Steam 客户端自身更新的跨版本配置尚无本机可验证证据，必须在 Ubuntu 真机验收中单独确认，不能把它表述为已经禁用。
 - Steam 下载地区写入的精确 VDF 位置也需要真机验收；凭据隔离、共享库路径与 AppID 550 策略已有自动化契约覆盖计划。
 - 本机未运行 Steam Desktop。`STEAM_DOWNLOAD_REGION` 在 Ubuntu Steam 客户端实际生效及 Steam 客户端自更新抑制均只能由真机验收确认；`AutoUpdateBehavior=1` 仅覆盖 AppID 550 在未启动游戏时不自动更新的策略。
-- 本机 Docker daemon 不可用，Testcontainers 无法启动 PostgreSQL 17；`ReservationLeases` 在真实 PostgreSQL 中拒绝重复主键的集成证据待 Docker/CI 或目标 Ubuntu 主机补充。当前迁移和模型的编译已通过。
+- 本机 Docker daemon 不可用，故本机 PostgreSQL 测试仍显示 skipped；但远端 Docker 已提供真实 PostgreSQL 17 的 1/1 通过证据。
+- Core Agent lifecycle 尚未在远端以真实受管容器执行，因为其 Compose 部署属于 Task 12；Docker 标签保护、卷隔离和 noVNC host mapping 目前由定义/API 自动化测试覆盖，真机容器创建将留待 Ubuntu 验收。

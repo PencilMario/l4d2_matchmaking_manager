@@ -548,7 +548,7 @@ git commit -m "feat(core): 增加目标服务器配置接口"
 
 **Verification:** dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "WarmupAgent|DockerAgent".
 
-- [ ] **Step 1: Write failing container-definition tests**
+- [x] **Step 1: Write failing container-definition tests**
 
 ~~~csharp
 [TestMethod]
@@ -565,13 +565,13 @@ public async Task CreateUsesOnlyTheManagedContainerDefinition()
 }
 ~~~
 
-- [ ] **Step 2: Run Agent lifecycle tests and confirm RED**
+- [x] **Step 2: Run Agent lifecycle tests and confirm RED**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "WarmupAgent|DockerAgent"
 
 Expected: compile failure because IAgentContainerRuntime does not exist.
 
-- [ ] **Step 3: Implement Docker runtime, lifecycle endpoints and Agent client**
+- [x] **Step 3: Implement Docker runtime, lifecycle endpoints and Agent client**
 
 ~~~csharp
 public interface IAgentControlClient
@@ -591,13 +591,13 @@ public interface IHealthyAgentSelector
 
 Use Docker.DotNet only in DockerAgentContainerRuntime. Core options own the image, shared-library host path, network, noVNC range and internal Agent port. Every managed container receives the configured shared-library bind mount and exactly its own steam-data/account-config volumes; account data volumes are never reused across Agent IDs. Map authenticated create/list/update/start/stop/recreate/delete routes.
 
-- [ ] **Step 4: Run lifecycle tests**
+- [x] **Step 4: Run lifecycle tests**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "WarmupAgent|DockerAgent"
 
 Expected: fake Docker checks labels, volumes and ports; API responses contain no secrets.
 
-- [ ] **Step 5: Commit Agent lifecycle**
+- [x] **Step 5: Commit Agent lifecycle**
 
 ~~~text
 git add src/L4d2MatchmakingCore

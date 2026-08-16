@@ -7,6 +7,17 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
 {
     private readonly DockerClient _client = new DockerClientConfiguration().CreateClient();
 
+    public async Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken)
+    {
+        var containers = await _client.Containers.ListContainersAsync(
+            new ContainersListParameters { All = true }, cancellationToken);
+        return containers
+            .SelectMany(container => container.Ports)
+            .Where(port => port.PublicPort > 0)
+            .Select(port => (int)port.PublicPort)
+            .ToHashSet();
+    }
+
     public async Task<string> CreateAsync(ManagedAgentContainerDefinition definition, CancellationToken cancellationToken)
     {
         foreach (var volume in definition.VolumeNames)
@@ -42,18 +53,38 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
         return response.ID;
     }
 
-    public Task StartAsync(string containerId, CancellationToken cancellationToken) =>
-        _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), cancellationToken);
+    public async Task StartAsync(string containerId, CancellationToken cancellationToken)
+    {
+        await EnsureManagedAsync(containerId, cancellationToken);
+        await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), cancellationToken);
+    }
 
-    public Task StopAsync(string containerId, CancellationToken cancellationToken) =>
-        _client.Containers.StopContainerAsync(containerId, new ContainerStopParameters(), cancellationToken);
+    public async Task StopAsync(string containerId, CancellationToken cancellationToken)
+    {
+        await EnsureManagedAsync(containerId, cancellationToken);
+        await _client.Containers.StopContainerAsync(containerId, new ContainerStopParameters(), cancellationToken);
+    }
 
-    public Task DeleteAsync(string containerId, bool deleteVolumes, CancellationToken cancellationToken) =>
-        _client.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters
+    public async Task DeleteAsync(string containerId, bool deleteVolumes, CancellationToken cancellationToken)
+    {
+        await EnsureManagedAsync(containerId, cancellationToken);
+        await _client.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters
         {
             Force = true,
             RemoveVolumes = deleteVolumes,
         }, cancellationToken);
+    }
+
+    private async Task EnsureManagedAsync(string containerId, CancellationToken cancellationToken)
+    {
+        var container = await _client.Containers.InspectContainerAsync(containerId, cancellationToken);
+        if (container.Config.Labels is null ||
+            !container.Config.Labels.TryGetValue("com.l4d2.matchmaking.managed", out var managed) ||
+            !string.Equals(managed, "true", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("unmanaged_agent_container");
+        }
+    }
 
     public void Dispose() => _client.Dispose();
 }

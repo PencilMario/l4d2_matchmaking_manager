@@ -2,6 +2,7 @@ namespace L4d2MatchmakingCore.Agents;
 
 public interface IAgentContainerRuntime
 {
+    Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken);
     Task<string> CreateAsync(ManagedAgentContainerDefinition definition, CancellationToken cancellationToken);
     Task StartAsync(string containerId, CancellationToken cancellationToken);
     Task StopAsync(string containerId, CancellationToken cancellationToken);

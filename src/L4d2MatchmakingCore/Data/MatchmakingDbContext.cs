@@ -36,6 +36,9 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.HasIndex(agent => agent.AccountConfigVolumeName).IsUnique();
             entity.Property(agent => agent.DownloadRegion).HasMaxLength(128);
             entity.Property(agent => agent.ContainerId).HasMaxLength(128);
+            entity.Property(agent => agent.NoVncPort).IsRequired();
+            entity.HasIndex(agent => agent.NoVncPort).IsUnique();
+            entity.Property(agent => agent.Status).HasMaxLength(32).IsRequired().HasDefaultValue("created");
         });
 
         modelBuilder.Entity<WarmupAttempt>(entity =>

@@ -23,6 +23,8 @@ public sealed class WarmupAgent
     public string AccountConfigVolumeName { get; set; } = string.Empty;
     public string? DownloadRegion { get; set; }
     public string? ContainerId { get; set; }
+    public int NoVncPort { get; set; }
+    public string Status { get; set; } = "created";
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
