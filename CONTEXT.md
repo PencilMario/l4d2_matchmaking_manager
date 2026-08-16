@@ -15,6 +15,7 @@
 | Warm-up Attempt Window | 某个 Agent 针对一个目标服务器持续执行暖服状态机的最大时长，默认值为 12 分钟。 | 大厅空闲倒计时、调度间隔 |
 | Player Target | 由 A2S 观测到、达到后即停止为目标服务器暖服的服务器玩家人数阈值，默认值为 6。 | Steam 大厅成员数、暖服机数量 |
 | Server Priority | 目标服务器参与调度时的整数优先级，数值越高越先被分配，默认值为 0，允许负数。 | 列表位置、服务器人数 |
+| Reservation Admission Check | 预留服务器在创建大厅前进行的 A2S 空服检查，观测到任意玩家即跳过本轮。 | 人数目标检查、大厅成员检查 |
 
 ## Relationships
 
@@ -24,6 +25,7 @@
 - A **Target Server** defines one **Concurrent Warm-up Limit** and one **Warm-up Attempt Window**.
 - A **Target Server** also defines one **Player Target**.
 - A **Target Server** has one **Server Priority**.
+- A **Reservation Lobby** starts only after its **Reservation Admission Check** finds no players.
 
 ## Flagged Ambiguities
 
