@@ -47,6 +47,8 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.Property(attempt => attempt.Mode).HasMaxLength(32).IsRequired();
             entity.Property(attempt => attempt.State).HasMaxLength(64).IsRequired();
             entity.Property(attempt => attempt.LobbyId).HasMaxLength(20);
+            entity.Property(attempt => attempt.Phase).HasMaxLength(32).IsRequired();
+            entity.Property(attempt => attempt.ExternalMemberIdsJson).HasColumnType("jsonb").IsRequired();
             entity.HasIndex(attempt => attempt.OperationId).IsUnique();
             entity.HasIndex(attempt => new { attempt.TargetServerId, attempt.State });
             entity.HasIndex(attempt => new { attempt.WarmupAgentId, attempt.State });

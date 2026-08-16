@@ -42,7 +42,7 @@
 - Task 9 提交：`7f39cd7 feat(core): 增加 A2S 观测与大厅查询代理`。
 - Task 10 RED：`WarmupDecisionEngineTests` 因缺少 `Scheduling` 命名空间、attempt snapshot 和 decision engine 而无法编译。
 - Task 10 部分 GREEN：纯 `WarmupDecisionEngine` 根据实时 A2S、12 分钟 deadline、预留 selecting/awaiting-first-member/active 阶段决定继续、跳过、同目标重建或释放重调度。覆盖预留服入场前 A2S>0 跳过、120 秒无成员、30 秒静默、A2S 达到 Player Target 和 deadline 到期；外部成员首次/后续加入均正确维护集合及静默倒计时，预留有效并发为 1，普通服务器按容量和 priority 选择。Core 31/31、本机 PostgreSQL 1 skipped；同优先级持久 round-robin 游标待 Task 11 的调度持久化完成。
-- Task 11 部分 GREEN：`WarmupSchedulerService` 在重启时先读取 Agent operation snapshot，只有 snapshot 缺失/非 active 才释放同 operation 的 reservation lease；共享库维护锁会短路 tick。无锁时，调度器选择容量可用的高优先级目标、健康 Agent 与 IPv4 A2S 空服观测，调用幂等 Agent operation 后持久化 attempt 和 reservation lease。生产环境由每 5 秒新 scope 的后台服务驱动，Testing 环境不启动该循环。Core 34/34、本机 PostgreSQL 1 skipped；active lobby 轮询、成员计时和重建/release 执行仍待完成。
+- Task 11 部分 GREEN：`WarmupSchedulerService` 在重启时先读取 Agent operation snapshot，只有 snapshot 缺失/非 active 才释放同 operation 的 reservation lease；共享库维护锁会短路 tick。无锁时，调度器选择容量可用的高优先级目标、健康 Agent 与 IPv4 A2S 空服观测，调用幂等 Agent operation 后持久化 attempt 和 reservation lease。生产环境由每 5 秒新 scope 的后台服务驱动，Testing 环境不启动该循环。attempt 持久化 phase、lobby ready、首位外部成员、静默时刻与成员集合；活跃 lobby snapshot 达 30 秒静默后会 stop 旧 operation、结束 attempt 并释放同 operation lease。Core 35/35、本机 PostgreSQL 1 skipped；120 秒与 A2S 阈值复用同一 engine 分支，优先级同值 round-robin 仍待补充。
 
 ## DriftCheckDraft
 

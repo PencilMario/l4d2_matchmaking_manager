@@ -38,6 +38,11 @@ public sealed class WarmupAttempt
     public string Mode { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
     public string? LobbyId { get; set; }
+    public string Phase { get; set; } = "awaiting_first_member";
+    public DateTimeOffset? LobbyReadyAt { get; set; }
+    public DateTimeOffset? FirstExternalMemberAt { get; set; }
+    public DateTimeOffset? QuietSince { get; set; }
+    public string ExternalMemberIdsJson { get; set; } = "[]";
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public DateTimeOffset ObservedAt { get; set; }
