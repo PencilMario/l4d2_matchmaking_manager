@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using L4d2Matchmaking.Contracts;
 
-internal sealed class SteamSessionActor : ISteamSessionActor
+public sealed class SteamSessionActor : ISteamSessionActor
 {
     private readonly ISteamNativeRuntime _runtime;
     private readonly ICampaignSelector _campaignSelector;
@@ -25,6 +25,11 @@ internal sealed class SteamSessionActor : ISteamSessionActor
         };
         _thread.Start();
     }
+
+    public static ISteamSessionActor Create(string steamApiLibraryPath) =>
+        new SteamSessionActor(
+            new SteamNativeRuntime(steamApiLibraryPath),
+            new RandomCampaignSelector());
 
     public Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken) =>
         Enqueue(static actor => actor.ObserveHealth(), cancellationToken);

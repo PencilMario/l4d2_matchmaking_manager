@@ -1,4 +1,5 @@
 using L4d2LobbyAgent.Probe;
+using L4d2Matchmaking.Contracts;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace L4d2LobbyAgent.Tests;
@@ -7,17 +8,16 @@ namespace L4d2LobbyAgent.Tests;
 public sealed class ProbeStatusServiceTests
 {
     [TestMethod]
-    public async Task GetAsyncRunsTheProbeForEveryRequestAndSerializesCalls()
+    public async Task GetAsyncObservesTheActorForEveryRequestAndReturnsFreshObservations()
     {
-        var runner = new BlockingFakeRunner();
-        var service = new ProbeStatusService(runner, new FakeDesktopDetector(true));
+        var sessionService = new BlockingFakeSessionService();
+        var service = new ProbeStatusService(sessionService, new FakeDesktopDetector(true));
 
         var results = await Task.WhenAll(
             service.GetAsync(CancellationToken.None),
             service.GetAsync(CancellationToken.None));
 
-        Assert.AreEqual(2, runner.CallCount);
-        Assert.AreEqual(1, runner.MaximumConcurrency);
+        Assert.AreEqual(2, sessionService.HealthCalls);
         Assert.IsTrue(results.All(result => result.Ready));
         Assert.AreNotEqual(results[0].ObservedAt, results[1].ObservedAt);
     }
@@ -25,21 +25,21 @@ public sealed class ProbeStatusServiceTests
     [TestMethod]
     public async Task GetAsyncReportsDesktopFailureWithoutPersistingThePreviousSuccess()
     {
-        var runner = new ReadyFakeRunner();
-        var service = new ProbeStatusService(runner, new FakeDesktopDetector(false));
+        var sessionService = new FixedFakeSessionService(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow));
+        var service = new ProbeStatusService(sessionService, new FakeDesktopDetector(false));
 
         var result = await service.GetAsync(CancellationToken.None);
 
         Assert.IsFalse(result.Ready);
         Assert.AreEqual("steam_desktop_unavailable", result.Failure);
-        Assert.AreEqual(1, runner.CallCount);
+        Assert.AreEqual(1, sessionService.HealthCalls);
     }
 
     [TestMethod]
     public async Task GetAsyncMarksSteamApiInitializationFailureAsFailed()
     {
         var service = new ProbeStatusService(
-            new FixedFakeRunner(new ProbeCommandResult(false, "steam_api_init_failed", null, null)),
+            new FixedFakeSessionService(new AgentHealthSnapshot(false, "steam_api_init_failed", DateTimeOffset.UtcNow)),
             new FakeDesktopDetector(true));
 
         var result = await service.GetAsync(CancellationToken.None);
@@ -53,7 +53,7 @@ public sealed class ProbeStatusServiceTests
     public async Task GetAsyncMarksInitializationAsUnknownWhenTheProbeWasNotConfigured()
     {
         var service = new ProbeStatusService(
-            new FixedFakeRunner(new ProbeCommandResult(false, "steam_api_library_not_configured", null, null)),
+            new FixedFakeSessionService(new AgentHealthSnapshot(false, "steam_api_library_not_configured", DateTimeOffset.UtcNow)),
             new FakeDesktopDetector(true));
 
         var result = await service.GetAsync(CancellationToken.None);
@@ -62,40 +62,37 @@ public sealed class ProbeStatusServiceTests
         Assert.AreEqual("unknown", result.Checks.SteamApiInit);
     }
 
-    private sealed class BlockingFakeRunner : IProbeCommandRunner
+    private sealed class BlockingFakeSessionService : IAgentSteamSessionService
     {
-        private int activeCalls;
-        private int maximumConcurrency;
-        private int callCount;
+        public int HealthCalls { get; private set; }
 
-        public int CallCount => callCount;
-        public int MaximumConcurrency => maximumConcurrency;
-
-        public async Task<ProbeCommandResult> RunAsync(CancellationToken cancellationToken)
+        public async Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken)
         {
-            Interlocked.Increment(ref callCount);
-            var active = Interlocked.Increment(ref activeCalls);
-            maximumConcurrency = Math.Max(maximumConcurrency, active);
+            HealthCalls++;
             await Task.Delay(50, cancellationToken);
-            Interlocked.Decrement(ref activeCalls);
-            return ProbeCommandResult.Success(550, 0);
+            return new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow);
         }
+
+        public Task<AgentOperationStartResult> StartAsync(AgentOperationRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentOperationSnapshot?> GetAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> StopAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class ReadyFakeRunner : IProbeCommandRunner
+    private sealed class FixedFakeSessionService(AgentHealthSnapshot result) : IAgentSteamSessionService
     {
-        public int CallCount { get; private set; }
+        public int HealthCalls { get; private set; }
 
-        public Task<ProbeCommandResult> RunAsync(CancellationToken cancellationToken)
+        public Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken)
         {
-            CallCount++;
-            return Task.FromResult(ProbeCommandResult.Success(550, 0));
+            HealthCalls++;
+            return Task.FromResult(result);
         }
-    }
 
-    private sealed class FixedFakeRunner(ProbeCommandResult result) : IProbeCommandRunner
-    {
-        public Task<ProbeCommandResult> RunAsync(CancellationToken cancellationToken) => Task.FromResult(result);
+        public Task<AgentOperationStartResult> StartAsync(AgentOperationRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentOperationSnapshot?> GetAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> StopAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeDesktopDetector(bool isRunning) : ISteamDesktopDetector

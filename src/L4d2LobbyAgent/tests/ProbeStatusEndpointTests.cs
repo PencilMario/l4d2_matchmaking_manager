@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using L4d2LobbyAgent.Probe;
+using L4d2Matchmaking.Contracts;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,21 +16,21 @@ public sealed class ProbeStatusEndpointTests
     [TestMethod]
     public async Task HealthzDoesNotRunTheProbe()
     {
-        var runner = new FakeRunner(ProbeCommandResult.Success(550, 0));
-        await using var factory = new AgentFactory(runner, true);
+        var sessionService = new FakeSessionService(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow));
+        await using var factory = new AgentFactory(sessionService, true);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/healthz");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.AreEqual(0, runner.CallCount);
+        Assert.AreEqual(0, sessionService.HealthCalls);
     }
 
     [TestMethod]
     public async Task ProbeStatusReturnsOkForAReadyFreshCheck()
     {
-        var runner = new FakeRunner(ProbeCommandResult.Success(550, 2));
-        await using var factory = new AgentFactory(runner, true);
+        var sessionService = new FakeSessionService(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow));
+        await using var factory = new AgentFactory(sessionService, true);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/v1/probe/status");
@@ -38,14 +39,14 @@ public sealed class ProbeStatusEndpointTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(payload);
         Assert.IsTrue(payload.Ready);
-        Assert.AreEqual(1, runner.CallCount);
+        Assert.AreEqual(1, sessionService.HealthCalls);
     }
 
     [TestMethod]
     public async Task ProbeStatusReturnsServiceUnavailableForAFailedFreshCheck()
     {
-        var runner = new FakeRunner(new ProbeCommandResult(false, "steam_not_logged_on", 550, null));
-        await using var factory = new AgentFactory(runner, true);
+        var sessionService = new FakeSessionService(new AgentHealthSnapshot(false, "steam_not_logged_on", DateTimeOffset.UtcNow));
+        await using var factory = new AgentFactory(sessionService, true);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/v1/probe/status");
@@ -54,32 +55,37 @@ public sealed class ProbeStatusEndpointTests
         Assert.AreEqual(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.IsNotNull(payload);
         Assert.AreEqual("steam_not_logged_on", payload.Failure);
-        Assert.AreEqual(1, runner.CallCount);
+        Assert.AreEqual(1, sessionService.HealthCalls);
     }
 
-    private sealed class AgentFactory(IProbeCommandRunner runner, bool desktopRunning) : WebApplicationFactory<global::Program>
+    private sealed class AgentFactory(IAgentSteamSessionService sessionService, bool desktopRunning) : WebApplicationFactory<global::Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<IProbeCommandRunner>();
+                services.RemoveAll<IAgentSteamSessionService>();
                 services.RemoveAll<ISteamDesktopDetector>();
-                services.AddSingleton(runner);
+                services.AddSingleton(sessionService);
                 services.AddSingleton<ISteamDesktopDetector>(new FakeDesktopDetector(desktopRunning));
             });
         }
     }
 
-    private sealed class FakeRunner(ProbeCommandResult result) : IProbeCommandRunner
+    private sealed class FakeSessionService(AgentHealthSnapshot result) : IAgentSteamSessionService
     {
-        public int CallCount { get; private set; }
+        public int HealthCalls { get; private set; }
 
-        public Task<ProbeCommandResult> RunAsync(CancellationToken cancellationToken)
+        public Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken)
         {
-            CallCount++;
+            HealthCalls++;
             return Task.FromResult(result);
         }
+
+        public Task<AgentOperationStartResult> StartAsync(AgentOperationRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentOperationSnapshot?> GetAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> StopAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeDesktopDetector(bool isRunning) : ISteamDesktopDetector

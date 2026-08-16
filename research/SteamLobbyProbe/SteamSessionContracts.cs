@@ -1,6 +1,6 @@
 using L4d2Matchmaking.Contracts;
 
-internal interface ISteamSessionActor : IAsyncDisposable
+public interface ISteamSessionActor : IAsyncDisposable
 {
     Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken);
     Task<AgentOperationStartResult> StartAsync(AgentOperationRequest request, CancellationToken cancellationToken);

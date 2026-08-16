@@ -12,5 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\L4d2Matchmaking.Contracts\L4d2Matchmaking.Contracts.csproj" />
+    <ProjectReference Include="..\..\research\SteamLobbyProbe\SteamLobbyProbe.csproj" />
   </ItemGroup>
 </Project>

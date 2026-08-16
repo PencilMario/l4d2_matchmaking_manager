@@ -262,7 +262,7 @@ git commit -m "refactor(steam): 抽取单账号持久会话 actor"
 
 **Verification:** dotnet test src/L4d2LobbyAgent/tests/L4d2LobbyAgent.Tests.csproj.
 
-- [ ] **Step 1: Write failing idempotency and active-state query endpoint tests**
+- [x] **Step 1: Write failing idempotency and active-state query endpoint tests**
 
 ~~~csharp
 [TestMethod]
@@ -276,13 +276,13 @@ public async Task StartIsIdempotentAndReadLobbyWorksDuringAnActiveOperation()
 }
 ~~~
 
-- [ ] **Step 2: Run Agent endpoint tests and confirm RED**
+- [x] **Step 2: Run Agent endpoint tests and confirm RED**
 
 Run: dotnet test src/L4d2LobbyAgent/tests/L4d2LobbyAgent.Tests.csproj --filter AgentLobbyEndpointTests
 
 Expected: /v1/operations returns 404.
 
-- [ ] **Step 3: Register the singleton actor and map internal routes**
+- [x] **Step 3: Register the singleton actor and map internal routes**
 
 ~~~csharp
 app.MapPost("/v1/operations", async (AgentOperationRequest request, IAgentSteamSessionService service, CancellationToken ct) =>
@@ -302,13 +302,13 @@ app.MapGet("/v1/lobbies/{lobbyId}", async (string lobbyId, IAgentSteamSessionSer
 
 ProbeStatusService must observe the actor and generate a fresh ObservedAt. Remove Agent registration of the old process launcher after the actor replaces it.
 
-- [ ] **Step 4: Run full Agent tests**
+- [x] **Step 4: Run full Agent tests**
 
 Run: dotnet test src/L4d2LobbyAgent/tests/L4d2LobbyAgent.Tests.csproj
 
 Expected: health compatibility and new 202/200/404/400 endpoint tests pass.
 
-- [ ] **Step 5: Commit Agent control APIs**
+- [x] **Step 5: Commit Agent control APIs**
 
 ~~~text
 git add src/L4d2LobbyAgent research/SteamLobbyProbe
