@@ -4,10 +4,13 @@ using static BinaryKeyValues;
 internal static class RealSessionSettings
 {
     internal const int NumSlots = 8;
+    private static readonly CampaignProfile HistoricalDefault = CampaignProfile.Official[1];
 
-    internal static BinaryKvEntry CreateReservationSettings() =>
+    internal static BinaryKvEntry CreateReservationSettings() => CreateReservationSettings(HistoricalDefault);
+
+    internal static BinaryKvEntry CreateReservationSettings(CampaignProfile profile) =>
         Object("Settings",
-            CreateGameSettings(),
+            CreateGameSettings(profile),
             Object("Members",
                 Int32("numMachines", 1),
                 Int32("numPlayers", 1),
@@ -52,7 +55,7 @@ internal static class RealSessionSettings
         }
 
         return Object("Settings",
-            CreateGameSettings(),
+            CreateGameSettings(HistoricalDefault),
             Object("Members", memberChildren.ToArray()),
             Object("Options", String("Server", "official")),
             CreateSystemSettings(),
@@ -63,24 +66,26 @@ internal static class RealSessionSettings
                 UInt64("reservationid", lobbyId)));
     }
 
-    internal static byte[] EncodeReservationSettings() =>
-        BinaryKeyValues.EncodeLittleEndian(CreateReservationSettings());
+    internal static byte[] EncodeReservationSettings() => EncodeReservationSettings(HistoricalDefault);
 
-    private static BinaryKvEntry CreateGameSettings() =>
+    internal static byte[] EncodeReservationSettings(CampaignProfile profile) =>
+        BinaryKeyValues.EncodeLittleEndian(CreateReservationSettings(profile));
+
+    private static BinaryKvEntry CreateGameSettings(CampaignProfile profile) =>
         Object("Game",
-            String("campaign", "L4D2C2"),
+            String("campaign", profile.CampaignId),
             Int32("chapter", 1),
             String("difficulty", "normal"),
             Int32("dlcrequired", 0),
             Int32("maxrounds", 3),
             Object("MissionInfo",
                 Int32("addon", 0),
-                String("Author", "Valve"),
+                String("Author", profile.Author),
                 Int32("builtin", 1),
-                String("DisplayTitle", "#L4D360UI_CampaignName_C2"),
+                String("DisplayTitle", profile.DisplayTitle),
                 Int32("InfectedOnly", 0),
-                String("MissionFile", "missions/campaign2.txt"),
-                Int32("SurvivorSet", 2),
+                String("MissionFile", profile.MissionFile),
+                Int32("SurvivorSet", profile.SurvivorSet),
                 Int32("Version", 1),
                 String("Website", "http://store.steampowered.com"),
                 Int32("workshopid", 0)),
@@ -98,10 +103,12 @@ internal static class RealSessionSettings
             String("lock", string.Empty),
             String("network", "LIVE"));
 
-    internal static Dictionary<string, string> CreateLobbyMetadata()
+    internal static Dictionary<string, string> CreateLobbyMetadata() => CreateLobbyMetadata(HistoricalDefault);
+
+    internal static Dictionary<string, string> CreateLobbyMetadata(CampaignProfile profile)
     {
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
-        var settings = CreateReservationSettings();
+        var settings = CreateReservationSettings(profile);
         foreach (var entry in (IReadOnlyList<BinaryKvEntry>)settings.Value)
             AddLobbyMetadata(entry, string.Empty, metadata);
         return metadata;

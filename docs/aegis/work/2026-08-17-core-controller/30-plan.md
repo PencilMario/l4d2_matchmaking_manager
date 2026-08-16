@@ -108,7 +108,7 @@ git commit -m "feat(contracts): 增加核心与 Agent 内部协议"
 
 **Verification:** dotnet test research/L4d2Protocol/tests/L4d2Protocol.Tests.csproj; dotnet test research/SteamLobbyProbe/tests/SteamLobbyProbe.Tests.csproj.
 
-- [ ] **Step 1: Write the failing C14 and catalog tests**
+- [x] **Step 1: Write the failing C14 and catalog tests**
 
 ~~~csharp
 [TestMethod]
@@ -122,13 +122,13 @@ public void OfficialProfilesKeepC14FieldsTogether()
 }
 ~~~
 
-- [ ] **Step 2: Run the protocol test and confirm RED**
+- [x] **Step 2: Run the protocol test and confirm RED**
 
 Run: dotnet test research/L4d2Protocol/tests/L4d2Protocol.Tests.csproj --filter CampaignProfileTests
 
 Expected: compile failure because CampaignProfile is absent.
 
-- [ ] **Step 3: Implement immutable profiles and parameterized settings**
+- [x] **Step 3: Implement immutable profiles and parameterized settings**
 
 ~~~csharp
 public sealed record CampaignProfile(string CampaignId, string DisplayTitle, string MissionFile, string Author, int SurvivorSet)
@@ -155,14 +155,14 @@ public sealed record CampaignProfile(string CampaignId, string DisplayTitle, str
 
 Add CreateReservationSettings(CampaignProfile) and CreateLobbyMetadata(CampaignProfile). Keep parameterless overloads delegating to C2. The Probe and actor select exactly one profile before generating both metadata and reservation settings.
 
-- [ ] **Step 4: Run all protocol and Probe regression tests**
+- [x] **Step 4: Run all protocol and Probe regression tests**
 
 Run: dotnet test research/L4d2Protocol/tests/L4d2Protocol.Tests.csproj
 Run: dotnet test research/SteamLobbyProbe/tests/SteamLobbyProbe.Tests.csproj
 
 Expected: new 14-profile tests pass and existing C2 reservation-vector output remains valid.
 
-- [ ] **Step 5: Commit metadata ownership**
+- [x] **Step 5: Commit metadata ownership**
 
 ~~~text
 git add research/L4d2Protocol research/SteamLobbyProbe

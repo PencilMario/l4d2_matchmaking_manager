@@ -211,8 +211,9 @@ internal static class Program
                     $"CreateLobbyHold lobby_id={result.LobbyId} type={lobbyType} seconds={keepaliveSeconds}");
             }
 
+            var campaignProfile = reservedServerMode ? CampaignProfile.SelectRandom() : null;
             var values = reservedServerMode
-                ? RealSessionSettings.CreateLobbyMetadata()
+                ? RealSessionSettings.CreateLobbyMetadata(campaignProfile!)
                 : serverMode
                     ? BuildServerLobbyData(endpoint, result.LobbyId, serverGameState)
                     : BuildProbeLobbyData();
@@ -251,7 +252,7 @@ internal static class Program
             }
             else if (reservedServerMode)
             {
-                var settings = RealSessionSettings.EncodeReservationSettings();
+                var settings = RealSessionSettings.EncodeReservationSettings(campaignProfile!);
                 Console.WriteLine($"ReservationSettings lobby_id={result.LobbyId} size={settings.Length}");
                 var reservedReservationExitCode = ReservationCommand.RunLive(
                     endpoint.ToIPEndPoint(),
