@@ -32,7 +32,7 @@ PostgreSQL <---- audit, configuration, operation correlation, leases
                                    +--> Steam Desktop + Steam API + L4D2 lobby
 ```
 
-核心、PostgreSQL 和所有 Agent 使用专用 Docker 网络。核心是唯一持有 Docker socket 的容器，且只管理带有本项目受控标签的容器、网络和卷。每个 Agent 的 Steam 数据卷独立；共享 Steam library 继续是受控 bind mount。noVNC 仅在创建或重建 Agent 时按需映射至 `127.0.0.1` 的独立宿主机端口，供管理员经本机或 SSH 隧道完成 Steam 登录。
+核心、PostgreSQL 和所有 Agent 使用专用 Docker 网络。核心是唯一持有 Docker socket 的容器，且只管理带有本项目受控标签的容器、网络和卷。所有 Agent 将同一个受控 `Shared Game Library` bind mount 到相同容器路径，其中包含 L4D2 游戏本体、Steam runtime、Steam API 及运行所需依赖；该库不保存任何登录凭据。每个 Agent 的 `Account Data Volume` 独立，只保存 Steam 登录、Steam Guard、userdata 和账号级客户端配置。noVNC 仅在创建或重建 Agent 时按需映射至 `127.0.0.1` 的独立宿主机端口，供管理员经本机或 SSH 隧道完成 Steam 登录。
 
 PostgreSQL 保存静态配置、操作 ID、状态转换审计和调度租约，但不作为 Steam、lobby、A2S 或 Agent 就绪状态的权威来源。每次调度判断、查询和恢复均重新观测运行时。
 
@@ -62,7 +62,9 @@ Agent 有稳定 ID、显示名、Docker container ID、独立 `steam-data-<agent
 - 使用受控 Agent 镜像、网络、共享 Steam library 及项目标签；外部调用者不能传入任意镜像、volume、挂载或 Docker 参数。
 - 为每个 Agent 分配唯一的 `steam-data-<agent>` 卷，正常删除、停止或重建默认不删除此卷。
 - 未配置下载地区时使用 Steam 默认策略；已配置时由 Agent 在账号本地 Steam 配置中写入该地区。
-- 账号本地 Steam 配置默认禁用 Shader Pre-Caching，且共享游戏库不保存账号凭据。
+- 账号本地 Steam 配置默认禁用 Shader Pre-Caching；共享库的 `appmanifest_550.acf` 固定 `AutoUpdateBehavior` 为 `1`，使 L4D2 仅在启动游戏时更新。暖服 Agent 不启动 L4D2，因此常规运行不会触发游戏自动更新；共享游戏库不保存账号凭据。
+
+首次部署或显式维护时，核心以独占的共享库维护锁允许一个受控 Agent 下载或更新 L4D2 与依赖；其他 Agent 在维护期间不启动 Steam，也不会并发读写该库。维护结束后核心验证所需 Steam API 库存在并将 `AutoUpdateBehavior` 恢复为 `1`，再恢复 Agent 调度。日常暖服 Agent 不能自行改变共享库版本。
 
 ## 官方战役 metadata
 
@@ -159,8 +161,8 @@ Agent 不接受 Docker 参数、Steam 凭据、服务器 RCON 凭据或外部指
 
 - 单元测试：端点解析、默认值、C1-C14 目录、完整 metadata 原子替换、成员增量、所有定时器、优先级轮询、并发上限、预留独占和预留前的 A2S 空服检查。
 - 集成测试：带 PostgreSQL 的核心 API、Bearer Token、持久化租约、重启恢复和核心/Agent 幂等协议。
-- Docker 测试：受控 Agent 容器的标签、独立卷、共享库挂载、内部控制端口和回环 noVNC 映射。
-- 真机人工验收：首次 noVNC 登录、下载地区、Shader Pre-Caching 关闭、连续大厅创建、Agent reservation 成功结果、A2S 阈值停止及 lobby 查询。该验收需要真实已登录 Steam 账号和 L4D2 服务器，不能由模拟替代。
+- Docker 测试：受控 Agent 容器的标签、独立账号卷、共享游戏库挂载、自动更新禁用、内部控制端口和回环 noVNC 映射。
+- 真机人工验收：共享库首次游戏下载、首次 noVNC 登录、下载地区、Shader Pre-Caching 与自动更新关闭、连续大厅创建、Agent reservation 成功结果、A2S 阈值停止及 lobby 查询。该验收需要真实已登录 Steam 账号和 L4D2 服务器，不能由模拟替代。
 
 ## 非目标
 

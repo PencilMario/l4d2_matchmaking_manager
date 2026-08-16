@@ -16,6 +16,8 @@
 | Player Target | 由 A2S 观测到、达到后即停止为目标服务器暖服的服务器玩家人数阈值，默认值为 6。 | Steam 大厅成员数、暖服机数量 |
 | Server Priority | 目标服务器参与调度时的整数优先级，数值越高越先被分配，默认值为 0，允许负数。 | 列表位置、服务器人数 |
 | Reservation Admission Check | 预留服务器在创建大厅前进行的 A2S 空服检查，观测到任意玩家即跳过本轮。 | 人数目标检查、大厅成员检查 |
+| Shared Game Library | 由全部 Agent 共同使用的 L4D2 游戏本体、Steam runtime 与 Steam API 依赖存储，不保存任何账号登录凭据。 | Steam 账号数据卷、登录目录 |
+| Account Data Volume | 一个 Agent 独有的 Steam 登录、Steam Guard、userdata 与账号级客户端配置存储。 | 共享游戏库、游戏安装目录 |
 
 ## Relationships
 
@@ -26,6 +28,7 @@
 - A **Target Server** also defines one **Player Target**.
 - A **Target Server** has one **Server Priority**.
 - A **Reservation Lobby** starts only after its **Reservation Admission Check** finds no players.
+- Each **Warm-up Agent** has one **Account Data Volume** and mounts the same **Shared Game Library**.
 
 ## Flagged Ambiguities
 
