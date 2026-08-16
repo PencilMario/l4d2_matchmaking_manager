@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\L4d2Protocol\L4d2Protocol.csproj" />
+    <ProjectReference Include="..\..\src\L4d2Matchmaking.Contracts\L4d2Matchmaking.Contracts.csproj" />
   </ItemGroup>
 </Project>

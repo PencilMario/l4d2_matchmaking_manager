@@ -1,6 +1,6 @@
 # 单主机暖服核心控制器：原子任务
 
-- [ ] 建立共享 HTTP contracts、核心解决方案与测试工程。
+- [x] 建立共享 HTTP contracts、核心解决方案与测试工程。
 - [ ] 将真实 metadata 参数化为 C1-C14 完整 campaign profile catalog。
 - [ ] 从研究 Probe 抽取每账号单一 Manual Dispatch session actor。
 - [ ] 将 Agent HTTP 改接 actor，并增加幂等操作与任意 lobby 查询 API。

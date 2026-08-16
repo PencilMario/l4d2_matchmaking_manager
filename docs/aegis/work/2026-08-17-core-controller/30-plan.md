@@ -34,7 +34,7 @@
 
 **Verification:** dotnet test src/L4d2Matchmaking.Contracts/tests/L4d2Matchmaking.Contracts.Tests.csproj; dotnet build L4d2MatchmakingManager.sln -warnaserror.
 
-- [ ] **Step 1: Write the failing contracts round-trip test**
+- [x] **Step 1: Write the failing contracts round-trip test**
 
 ~~~csharp
 [TestMethod]
@@ -58,13 +58,13 @@ public void LobbySnapshotSerializesSteamIdentifiersAsStrings()
 }
 ~~~
 
-- [ ] **Step 2: Run the test and confirm RED**
+- [x] **Step 2: Run the test and confirm RED**
 
 Run: dotnet test src/L4d2Matchmaking.Contracts/tests/L4d2Matchmaking.Contracts.Tests.csproj
 
 Expected: compile failure because LobbySnapshot does not exist.
 
-- [ ] **Step 3: Create the solution, projects and minimal contracts**
+- [x] **Step 3: Create the solution, projects and minimal contracts**
 
 ~~~csharp
 public enum AgentLobbyMode { Standard, Reserved }
@@ -79,14 +79,14 @@ public sealed record AgentHealthSnapshot(bool Ready, string? Failure, DateTimeOf
 
 Create the solution with dotnet new sln -n L4d2MatchmakingManager. Add the new Core and Contracts projects and their test projects; retain the existing Agent project and tests. Reference Contracts from Core, Agent and SteamLobbyProbe.
 
-- [ ] **Step 4: Run the contracts and build checks**
+- [x] **Step 4: Run the contracts and build checks**
 
 Run: dotnet test src/L4d2Matchmaking.Contracts/tests/L4d2Matchmaking.Contracts.Tests.csproj
 Run: dotnet build L4d2MatchmakingManager.sln -warnaserror
 
 Expected: the JSON test and all project builds pass.
 
-- [ ] **Step 5: Commit the boundary**
+- [x] **Step 5: Commit the boundary**
 
 ~~~text
 git add L4d2MatchmakingManager.sln src/L4d2Matchmaking.Contracts src/L4d2MatchmakingCore
