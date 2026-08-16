@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Headers;
+using L4d2MatchmakingCore.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace L4d2MatchmakingCore.Tests;
@@ -34,10 +38,18 @@ public sealed class CoreAuthenticationTests
     private sealed class CoreFactory : WebApplicationFactory<global::Program>
     {
         public const string ApiToken = "test-core-api-token";
+        private readonly string _databaseName = Guid.NewGuid().ToString("N");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<MatchmakingDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<MatchmakingDbContext>>();
+                services.AddDbContext<MatchmakingDbContext>(options =>
+                    options.UseInMemoryDatabase(_databaseName));
+            });
         }
     }
 

@@ -2,10 +2,10 @@
 
 ## TodoCheckpointDraft
 
-- 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-6 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API、共享库配置保护和 Core 认证/持久化基础。
-- 当前工作项：Task 7，提供目标服务器 endpoint parser 和受认证 CRUD API。
-- 尚未开始：Task 7 至 Task 12；没有 Core Docker Compose、Agent 生命周期管理或暖服调度已交付。
-- 下一步：为 hostname/IPv4 endpoint parser、默认字段和受认证服务器 API 写红灯测试。
+- 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-7 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API、共享库配置保护、Core 认证/持久化和目标服务器配置 API。
+- 当前工作项：Task 8，管理本机 Agent Docker 生命周期并实现 Core 到 Agent 的内部 client。
+- 尚未开始：Task 8 至 Task 12；没有 Core Docker Compose、Agent 生命周期管理或暖服调度已交付。
+- 下一步：为受管容器标签、独立 volume、内部端口与 noVNC loopback 映射写红灯测试。
 
 ## EvidenceBundleDraft
 
@@ -29,13 +29,16 @@
 - Task 5 提交：`6bf0c79 feat(deploy): 共享游戏库并禁用常规自动更新`。
 - Task 6 RED：Core 测试因缺少 `Program`、`MatchmakingDbContext`、EF Core provider、Testcontainers 与 `ReservationLease` 编译失败。
 - Task 6 GREEN：Core 从 `CORE_API_TOKEN` 或 `CORE_API_TOKEN_FILE` 读取 token，所有 `/v1/servers` 请求受固定 Bearer handler 保护；数据库包含目标服务器、Agent、尝试、审计、预留 lease 与共享库维护 lease，预留 lease 用 `TargetServerId` 做主键。首次迁移已加入，非 Testing 环境启动时执行。认证测试验证无 token/错误 token 为 401、正确 token 为 200。完整回归为 Core 1/1（PostgreSQL Testcontainers 1 项因本机 Docker daemon 不可用而 skipped）、Agent 14/14、Probe 4/4、Protocol 10/10、contracts 1/1；solution build 为 0 警告、0 错误。
+- Task 6 提交：`a8950f9 feat(core): 增加认证和 PostgreSQL 持久化基础`。
+- Task 7 RED：parser/API 测试因缺少 `L4d2MatchmakingCore.Servers` 模块而编译失败。
+- Task 7 GREEN：受认证的 `/v1/servers` 现在提供 create/list/get/update/delete。parser 接受 hostname 或 IPv4（缺省端口 27015），拒绝 URL、IPv6、空白、嵌入凭据及非法端口；hostnames 规范化保留。默认 priority=0、normal concurrency=36、attempt window=720、player target=6，预留目标强制 effective concurrency=1。每个变更写入无运行时真值的审计记录。`TargetServer` 14/14，完整回归为 Core 15/15、PostgreSQL 1 skipped、Agent 14/14、Probe 4/4、Protocol 10/10、contracts 1/1；solution build 为 0 警告、0 错误。
 
 ## DriftCheckDraft
 
 - 范围：仍为单 Docker 主机的 Core Controller 与受管 Agent；没有扩展至 Web UI、跨主机编排或 RCON。
-- 兼容：现有 health 路由、Probe CLI 与 standalone Compose 保留；Agent 的 Probe 状态路由保留 JSON 字段和 200/503 约定，数据来源已从短生命周期进程迁移为持久 actor。共享库仍仅挂载游戏内容，账号凭据仍留在独立 `steam-data` 卷。Core 的 `/v1/servers` 当前仅为认证占位路由，Task 7 会用 CRUD owner 替换。
+- 兼容：现有 health 路由、Probe CLI 与 standalone Compose 保留；Agent 的 Probe 状态路由保留 JSON 字段和 200/503 约定，数据来源已从短生命周期进程迁移为持久 actor。共享库仍仅挂载游戏内容，账号凭据仍留在独立 `steam-data` 卷。Core 的 `/v1/servers` 认证占位路由已由 TargetServerEndpoints CRUD owner 替换。
 - 运行时权威：后续调度只可依据实时 Agent 与 A2S 读取，数据库仅保存配置、关联、审计与租约。
-- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。下一切片为目标服务器配置建立唯一 CRUD owner，替换认证占位路由。
+- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。下一切片限定为 Docker Agent 生命周期和内部 Agent HTTP client。
 
 ## Risk / Unknown
 

@@ -1,6 +1,7 @@
 using L4d2MatchmakingCore.Auth;
 using L4d2MatchmakingCore.Configuration;
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Servers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +16,7 @@ builder.Services
         StaticBearerAuthenticationHandler.SchemeName,
         static _ => { });
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<TargetServerService>();
 
 var app = builder.Build();
 if (!app.Environment.IsEnvironment("Testing"))
@@ -27,7 +29,9 @@ if (!app.Environment.IsEnvironment("Testing"))
 }
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "alive" }));
-app.MapGet("/v1/servers", () => Results.Ok(Array.Empty<object>())).RequireAuthorization();
+app.MapGroup("/v1/servers")
+    .RequireAuthorization()
+    .MapTargetServerEndpoints();
 
 app.Run();
 

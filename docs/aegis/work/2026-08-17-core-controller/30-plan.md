@@ -490,7 +490,7 @@ git commit -m "feat(core): 增加认证和 PostgreSQL 持久化基础"
 
 **Verification:** dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter TargetServer.
 
-- [ ] **Step 1: Write failing parser and API-default tests**
+- [x] **Step 1: Write failing parser and API-default tests**
 
 ~~~csharp
 [DataTestMethod]
@@ -500,13 +500,13 @@ public void ParseAcceptsHostOrIpv4(string input, string host, ushort port) =>
     Assert.AreEqual(new TargetServerAddress(host, port), TargetServerEndpointParser.Parse(input));
 ~~~
 
-- [ ] **Step 2: Run target-server tests and confirm RED**
+- [x] **Step 2: Run target-server tests and confirm RED**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter TargetServer
 
 Expected: compile failure because TargetServerEndpointParser does not exist.
 
-- [ ] **Step 3: Implement authenticated CRUD and validation**
+- [x] **Step 3: Implement authenticated CRUD and validation**
 
 ~~~csharp
 app.MapGroup("/v1/servers").RequireAuthorization()
@@ -518,13 +518,13 @@ app.MapGroup("/v1/servers").RequireAuthorization()
 
 CreateTargetServerRequest applies the confirmed defaults in TargetServerService and records each mutation in LobbyOperationAudit.
 
-- [ ] **Step 4: Run target-server API tests**
+- [x] **Step 4: Run target-server API tests**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter TargetServer
 
 Expected: endpoint normalization, defaults, CRUD, authorization and malformed input handling pass.
 
-- [ ] **Step 5: Commit server configuration**
+- [x] **Step 5: Commit server configuration**
 
 ~~~text
 git add src/L4d2MatchmakingCore
