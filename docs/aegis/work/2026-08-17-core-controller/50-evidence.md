@@ -41,7 +41,7 @@
 - Task 9 GREEN：`SourceA2sClient` 通过 IPv4 UDP 发送 A2S_INFO，收到 challenge 时精确重发一次，并仅从完整 INFO 包读取当前玩家数；取消或超时不会复用历史数。受认证的 `GET /v1/lobbies/{id}` 只会调用实时 Ready 的 Agent，公开响应不含 Agent 身份；非法 ID 为 400、无健康 Agent 或 Agent HTTP 不可达为 503。定向为 3/3；Core 24/24、本机 PostgreSQL 1 skipped，solution build 为 0 警告、0 错误。
 - Task 9 提交：`7f39cd7 feat(core): 增加 A2S 观测与大厅查询代理`。
 - Task 10 RED：`WarmupDecisionEngineTests` 因缺少 `Scheduling` 命名空间、attempt snapshot 和 decision engine 而无法编译。
-- Task 10 部分 GREEN：纯 `WarmupDecisionEngine` 根据实时 A2S、12 分钟 deadline、预留 selecting/awaiting-first-member/active 阶段决定继续、跳过、同目标重建或释放重调度。覆盖预留服入场前 A2S>0 跳过、120 秒无成员、30 秒静默、A2S 达到 Player Target 和 deadline 到期。Core 28/28、本机 PostgreSQL 1 skipped；成员增量、优先级和并发上限仍待实现。
+- Task 10 部分 GREEN：纯 `WarmupDecisionEngine` 根据实时 A2S、12 分钟 deadline、预留 selecting/awaiting-first-member/active 阶段决定继续、跳过、同目标重建或释放重调度。覆盖预留服入场前 A2S>0 跳过、120 秒无成员、30 秒静默、A2S 达到 Player Target 和 deadline 到期；外部成员首次/后续加入均正确维护集合及静默倒计时，预留有效并发为 1，普通服务器按容量和 priority 选择。Core 31/31、本机 PostgreSQL 1 skipped；同优先级持久 round-robin 游标待 Task 11 的调度持久化完成。
 
 ## DriftCheckDraft
 

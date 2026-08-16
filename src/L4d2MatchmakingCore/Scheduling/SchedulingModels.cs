@@ -8,4 +8,5 @@ public sealed record WarmupAttemptSnapshot(
     DateTimeOffset Deadline,
     DateTimeOffset LobbyReadyAt,
     DateTimeOffset? FirstExternalMemberAt,
-    DateTimeOffset? QuietSince);
+    DateTimeOffset? QuietSince,
+    IReadOnlySet<string>? ExternalMemberIds = null);
