@@ -4,7 +4,9 @@ This Compose service extends the maintained `josh5/steam-headless` Steam Desktop
 
 Steam application content is deliberately outside that account volume. Every lobby agent mounts the same existing host directory at `/mnt/steam-library`; initialization writes that path to the account-local Steam library configuration. The shared directory contains `steamapps` depots and manifests but no Steam account credentials. Each account keeps a separate `steam-data-<agent>` volume for login, Steam Guard, userdata and client configuration.
 
-Shader Pre-Caching is disabled in each account-local Steam configuration (`DisableShaderCache=1`). This setting is not stored in the shared game library.
+Shader Pre-Caching is disabled in each account-local Steam configuration (`DisableShaderCache=1`). An optional `STEAM_DOWNLOAD_REGION` is also written only to that account's `config.vdf`. Neither setting is stored in the shared game library.
+
+After AppID 550 is installed, initialization changes its shared manifest to `AutoUpdateBehavior=1` (update only when launched). Lobby agents never launch the game client, so ordinary Agent startup does not trigger a game update. The Core's future shared-library maintenance lease must serialize installation, validation, update and uninstall work before this value is restored. This does not establish that Steam client self-updates are disabled; validate that separately on the Ubuntu deployment host.
 
 ## Host prerequisite
 
@@ -32,7 +34,7 @@ The directory must already exist; Compose refuses to create it automatically. On
 ssh -L 8083:127.0.0.1:8083 <user>@<host>
 ```
 
-Open `http://127.0.0.1:8083/`, select **Connect**, then sign in to Steam and complete Steam Guard. Steam is deliberately started without `-silent`, so its window is visible in the desktop. Install AppID 550 only to obtain its Linux Steam API library; the service never launches the game executable. Locate the installed `libsteam_api.so`, set `STEAM_API_LIBRARY_PATH` in `.env`, then recreate the service with `docker compose up -d`.
+Open `http://127.0.0.1:8083/`, select **Connect**, then sign in to Steam and complete Steam Guard. Steam is deliberately started without `-silent`, so its window is visible in the desktop. Install AppID 550 only to obtain its Linux Steam API library; the service never launches the game executable. Locate the installed `libsteam_api.so`, set `STEAM_API_LIBRARY_PATH` in `.env`, optionally set `STEAM_DOWNLOAD_REGION`, then recreate the service with `docker compose up -d`. The restart applies the AppID 550 update policy after the manifest exists.
 
 For additional agents, reuse the same `STEAM_SHARED_LIBRARY_HOST_PATH` and image, but give each service a unique `steam-data-<agent>` volume. Do not run simultaneous install, validate, update or uninstall operations against the shared library.
 
@@ -45,7 +47,7 @@ curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/v1/probe/status
 ```
 
-The second request runs a new read-only Probe invocation. It reports `503` until Steam Desktop is running, logged in, uses AppID 550 and completes a lobby-list callback. Its response contains no Steam credentials, native library path or raw Steam data.
+The second request uses the Agent's persistent Steam session actor. It reports `503` until Steam Desktop is running, logged in, uses AppID 550 and completes a lobby-list callback. Its response contains no Steam credentials, native library path or raw Steam data.
 
 ## Rollback
 

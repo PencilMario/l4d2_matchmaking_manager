@@ -332,7 +332,7 @@ git commit -m "feat(agent): 增加持久大厅控制和查询接口"
 
 **Verification:** pwsh deploy/steam-lobby-agent/Test-ComposeContract.ps1; pwsh deploy/steam-lobby-agent/Test-SteamAccountConfiguration.ps1 -SharedLibraryPath deploy/steam-lobby-agent/tests/fixtures/shared-library.
 
-- [ ] **Step 1: Write the failing shared-library configuration test**
+- [x] **Step 1: Write the failing shared-library configuration test**
 
 ~~~powershell
 # Create deploy/steam-lobby-agent/tests/fixtures/shared-library/steamapps/appmanifest_550.acf:
@@ -364,13 +364,13 @@ if ($initializer -notmatch '"DisableShaderCache" "1"') {
 }
 ~~~
 
-- [ ] **Step 2: Run it and confirm RED**
+- [x] **Step 2: Run it and confirm RED**
 
 Run: pwsh deploy/steam-lobby-agent/Test-SteamAccountConfiguration.ps1 -SharedLibraryPath deploy/steam-lobby-agent/tests/fixtures/shared-library
 
 Expected: failure because AutoUpdateBehavior 1 is not configured.
 
-- [ ] **Step 3: Implement idempotent account and shared manifest configuration**
+- [x] **Step 3: Implement idempotent account and shared manifest configuration**
 
 ~~~bash
 set_l4d2_update_policy() {
@@ -382,14 +382,14 @@ set_l4d2_update_policy() {
 
 Write STEAM_DOWNLOAD_REGION only into the account-local Steam VDF. Retain DisableShaderCache 1. Apply the manifest policy only after AppID 550 is installed and document that the Core maintenance lock serializes bootstrap/update before restoring the value to 1.
 
-- [ ] **Step 4: Run deployment configuration tests**
+- [x] **Step 4: Run deployment configuration tests**
 
 Run: pwsh deploy/steam-lobby-agent/Test-ComposeContract.ps1
 Run: pwsh deploy/steam-lobby-agent/Test-SteamAccountConfiguration.ps1 -SharedLibraryPath deploy/steam-lobby-agent/tests/fixtures/shared-library
 
 Expected: shared mount, credential isolation, shader policy and AppID 550 update policy all pass.
 
-- [ ] **Step 5: Commit shared-library protection**
+- [x] **Step 5: Commit shared-library protection**
 
 ~~~text
 git add deploy/steam-lobby-agent

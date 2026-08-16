@@ -8,6 +8,43 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     steam_config_directory="${steam_root}/config"
     steam_config_file="${steam_config_directory}/config.vdf"
 
+    set_l4d2_update_policy() {
+        manifest="${STEAM_SHARED_LIBRARY_PATH:-}/steamapps/appmanifest_550.acf"
+        [ -n "${STEAM_SHARED_LIBRARY_PATH:-}" ] && [ -f "${manifest}" ] || return 0
+        sed -i 's|"AutoUpdateBehavior"[[:space:]]*"[^"]*"|"AutoUpdateBehavior" "1"|' "${manifest}"
+    }
+
+    set_download_region() {
+        download_region="${STEAM_DOWNLOAD_REGION:-}"
+        [ -n "${download_region}" ] || return 0
+        if printf '%s' "${download_region}" | grep -q '["\r\n]'; then
+            echo 'STEAM_DOWNLOAD_REGION must not contain a quote or newline.' >&2
+            return 1
+        fi
+
+        escaped_download_region="$(printf '%s' "${download_region}" | sed 's/[\\&|]/\\&/g')"
+        if grep -q '"DownloadRegion"' "${steam_config_file}"; then
+            sed -i "s|\"DownloadRegion\"[[:space:]]*\"[^\"]*\"|\"DownloadRegion\" \"${escaped_download_region}\"|" "${steam_config_file}"
+            return 0
+        fi
+
+        temporary_file="$(mktemp "${steam_config_file}.tmp.XXXXXX")"
+        awk -v region="${download_region}" '
+            /^[[:space:]]*"Steam"[[:space:]]*$/ && !inserted {
+                print
+                if (getline > 0) print
+                print "                \"DownloadRegion\" \"" region "\""
+                inserted = 1
+                next
+            }
+            { print }
+            END { if (!inserted) exit 1 }
+        ' "${steam_config_file}" > "${temporary_file}"
+        chown "${PUID:-1000}:${PGID:-1000}" "${temporary_file}"
+        chmod 0600 "${temporary_file}"
+        mv "${temporary_file}" "${steam_config_file}"
+    }
+
     if [ -n "${STEAM_SHARED_LIBRARY_PATH:-}" ]; then
         install -d -o "${PUID:-1000}" -g "${PGID:-1000}" -m 0700 "${library_directory}"
         temporary_file="$(mktemp "${library_file}.tmp.XXXXXX")"
@@ -71,6 +108,8 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     fi
     chown "${PUID:-1000}:${PGID:-1000}" "${steam_config_file}"
     chmod 0600 "${steam_config_file}"
+    set_download_region
+    set_l4d2_update_policy
 
     sed -i 's|^autostart=.*$|autostart=true|' /etc/supervisor.d/steam.ini
 fi

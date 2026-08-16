@@ -90,6 +90,15 @@ if ($compose -notmatch 'STEAM_SHARED_LIBRARY_PATH:\s*/mnt/steam-library') {
     throw 'Steam Desktop must receive the shared library path inside the container.'
 }
 
+if ($compose -notmatch 'STEAM_DOWNLOAD_REGION:\s*\$\{STEAM_DOWNLOAD_REGION:-\}') {
+    throw 'Steam Desktop must pass the optional download region to the account initializer.'
+}
+
+$agentSupervisor = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'l4d2-lobby-agent.ini')
+if ($agentSupervisor -notmatch 'STEAM_DOWNLOAD_REGION') {
+    throw 'The Agent supervisor must receive the optional account download region.'
+}
+
 if ($compose -notmatch 'target:\s*/mnt/steam-library') {
     throw 'The shared Steam library must mount at its own library-root path.'
 }
