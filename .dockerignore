@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+.git/
+.playwright-mcp/
+**/.env
+research/SteamLobbyProbe/*.log
+research/SteamLobbyProbe/*.png
+research/SteamLobbyProbe/*.zip
+research/SteamLobbyProbe/publish*/

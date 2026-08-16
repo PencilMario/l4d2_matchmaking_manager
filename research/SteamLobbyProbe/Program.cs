@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 internal static class Program
 {
@@ -11,10 +12,15 @@ internal static class Program
     private const int LobbyEnterCallback = 504;
     private const int LobbyMatchListCallback = 510;
     private const int LobbyCreatedCallback = 513;
+    private const int LobbyCreatedCompactPayloadSize = 12;
+    private const int LobbyCreatedPaddedPayloadSize = 16;
     private const int SteamApiCallCompletedCallback = 703;
 
     private static int Main(string[] args)
     {
+        if (TryRunHealthCheck(args, out var healthCheckExitCode))
+            return healthCheckExitCode;
+
         if (ReservationCommand.TryRun(args, out var reservationExitCode))
             return reservationExitCode;
 
@@ -312,6 +318,117 @@ internal static class Program
 
             Directory.SetCurrentDirectory(oldCurrentDirectory);
         }
+    }
+
+    private static bool TryRunHealthCheck(string[] args, out int exitCode)
+    {
+        exitCode = 0;
+        if (args.Length < 2 || !string.Equals(args[1], "health-check", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var libraryPath = Path.GetFullPath(args[0]);
+        var oldCurrentDirectory = Directory.GetCurrentDirectory();
+        nint module = 0;
+        SteamApi? api = null;
+        var initialized = false;
+
+        try
+        {
+            Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+            module = NativeLibrary.Load(libraryPath);
+            api = SteamApi.Load(module);
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException)
+        {
+            return WriteHealthCheckResult(false, "steam_api_load_failed", out exitCode);
+        }
+
+        try
+        {
+            initialized = api.Init();
+            if (!initialized)
+                return WriteHealthCheckResult(false, "steam_api_init_failed", out exitCode);
+
+            api.ManualDispatchInit();
+            var appId = api.GetUtilsAppId();
+            if (appId != 550)
+                return WriteHealthCheckResult(false, "appid_mismatch", out exitCode, appId);
+
+            var user = api.SteamUser();
+            var loggedOn = api.IsLoggedOn(user);
+            var steamId = api.GetSteamId(user);
+            if (!loggedOn || steamId == 0)
+                return WriteHealthCheckResult(false, "steam_not_logged_on", out exitCode, appId);
+
+            var matchmaking = api.SteamMatchmaking();
+            var utils = api.SteamUtils();
+            var pipe = api.GetHSteamPipe();
+            var listCall = api.RequestLobbyList(matchmaking);
+            if (listCall == 0)
+                return WriteHealthCheckResult(false, "lobby_list_request_failed", out exitCode, appId);
+
+            var listResult = WaitForApiCallManual(api, pipe, utils, listCall, LobbyMatchListCallback, 4);
+            if (!listResult.Ok)
+            {
+                var failure = listResult.Failed ? "lobby_list_callback_failed" : "lobby_list_timeout";
+                return WriteHealthCheckResult(false, failure, out exitCode, appId);
+            }
+
+            var lobbyCount = listResult.Raw.Length >= 4 ? BitConverter.ToUInt32(listResult.Raw, 0) : 0;
+            return WriteHealthCheckResult(true, null, out exitCode, appId, lobbyCount);
+        }
+        catch (Exception)
+        {
+            return WriteHealthCheckResult(false, "steam_api_runtime_failed", out exitCode);
+        }
+        finally
+        {
+            if (initialized && api is not null)
+            {
+                try
+                {
+                    api.Shutdown();
+                }
+                catch
+                {
+                    // The health result is already emitted and must remain machine-readable.
+                }
+            }
+
+            if (module != 0)
+                NativeLibrary.Free(module);
+
+            Directory.SetCurrentDirectory(oldCurrentDirectory);
+        }
+    }
+
+    private static bool WriteHealthCheckResult(
+        bool ready,
+        string? failure,
+        out int exitCode,
+        uint? appId = null,
+        uint? lobbyCount = null)
+    {
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            ready,
+            failure,
+            checks = new
+            {
+                steamApiInit = ready || failure is not ("steam_api_load_failed" or "steam_api_init_failed") ? "ok" : "failed",
+                appId,
+                loggedOn = ready || failure is "lobby_list_request_failed" or "lobby_list_callback_failed" or "lobby_list_timeout"
+                    ? "ok"
+                    : "unknown",
+                manualDispatch = ready || failure is "lobby_list_request_failed" or "lobby_list_callback_failed" or "lobby_list_timeout"
+                    ? "ok"
+                    : "unknown",
+                lobbyListCallback = ready ? "ok" : "failed",
+                lobbyCount
+            }
+        }));
+        exitCode = ready ? 0 : 2;
+        return true;
     }
 
     private static Dictionary<string, string> BuildProbeLobbyData() => new()
@@ -739,12 +856,12 @@ internal static class Program
 
     private static LobbyCreatedResult WaitForLobbyCreated(SteamApi api, nint utils, ulong call)
     {
-        return DecodeLobbyCreated(WaitForApiCall(api, utils, call, LobbyCreatedCallback, 16));
+        return DecodeLobbyCreated(WaitForApiCall(api, utils, call, LobbyCreatedCallback, LobbyCreatedPaddedPayloadSize));
     }
 
     private static LobbyCreatedResult WaitForLobbyCreatedManual(SteamApi api, int pipe, nint utils, ulong call)
     {
-        return DecodeLobbyCreated(WaitForApiCallManual(api, pipe, utils, call, LobbyCreatedCallback, 16));
+        return DecodeLobbyCreated(WaitForApiCallManual(api, pipe, utils, call, LobbyCreatedCallback, LobbyCreatedCompactPayloadSize));
     }
 
     private static ApiCallResult WaitForApiCall(SteamApi api, nint utils, ulong call, int callbackId, int callbackSize)
@@ -843,7 +960,12 @@ internal static class Program
     private static LobbyCreatedResult DecodeLobbyCreated(ApiCallResult callResult)
     {
         var result = callResult.Raw.Length >= 4 ? BitConverter.ToInt32(callResult.Raw, 0) : 0;
-        var lobbyId = callResult.Raw.Length >= 16 ? BitConverter.ToUInt64(callResult.Raw, 8) : 0;
+        var lobbyIdOffset = callResult.Raw.Length >= LobbyCreatedPaddedPayloadSize
+            ? sizeof(int) * 2
+            : sizeof(int);
+        var lobbyId = callResult.Raw.Length >= lobbyIdOffset + sizeof(ulong)
+            ? BitConverter.ToUInt64(callResult.Raw, lobbyIdOffset)
+            : 0;
         Console.WriteLine($"LobbyCreated result={result} lobby_id={lobbyId} callback_ok={callResult.Ok && !callResult.Failed}");
         return new LobbyCreatedResult(result, lobbyId, callResult.Ok && !callResult.Failed);
     }
@@ -899,7 +1021,8 @@ internal static class Program
 
     private sealed class SteamApi
     {
-        private readonly SteamApiInit _init;
+        private readonly SteamApiInit? _init;
+        private readonly SteamApiInitFlat? _initFlat;
         private readonly SteamApiShutdown _shutdown;
         private readonly SteamApiRunCallbacks _runCallbacks;
         private readonly SteamApiGetHSteamPipe _getHSteamPipe;
@@ -908,9 +1031,11 @@ internal static class Program
         private readonly SteamApiManualDispatchGetNextCallback _manualDispatchGetNextCallback;
         private readonly SteamApiManualDispatchFreeLastCallback _manualDispatchFreeLastCallback;
         private readonly SteamApiManualDispatchGetApiCallResult _manualDispatchGetApiCallResult;
-        private readonly SteamApiSteamMatchmaking _steamMatchmaking;
-        private readonly SteamApiSteamUtils _steamUtils;
-        private readonly SteamApiSteamUser _steamUser;
+        private readonly SteamApiSteamMatchmaking? _steamMatchmaking;
+        private readonly SteamApiSteamUtils? _steamUtils;
+        private readonly SteamApiSteamUser? _steamUser;
+        private readonly SteamApiGetHSteamUser? _getHSteamUser;
+        private readonly SteamInternalFindOrCreateUserInterface? _findOrCreateUserInterface;
         private readonly SteamApiUtilsAppId _getUtilsAppId;
         private readonly SteamApiUserLoggedOn _isLoggedOn;
         private readonly SteamApiUserSteamId _getSteamId;
@@ -935,7 +1060,8 @@ internal static class Program
 
         private SteamApi(nint module)
         {
-            _init = Get<SteamApiInit>(module, "SteamAPI_Init");
+            _init = TryGet<SteamApiInit>(module, "SteamAPI_Init");
+            _initFlat = _init is null ? Get<SteamApiInitFlat>(module, "SteamAPI_InitFlat") : null;
             _shutdown = Get<SteamApiShutdown>(module, "SteamAPI_Shutdown");
             _runCallbacks = Get<SteamApiRunCallbacks>(module, "SteamAPI_RunCallbacks");
             _getHSteamPipe = Get<SteamApiGetHSteamPipe>(module, "SteamAPI_GetHSteamPipe");
@@ -944,9 +1070,16 @@ internal static class Program
             _manualDispatchGetNextCallback = Get<SteamApiManualDispatchGetNextCallback>(module, "SteamAPI_ManualDispatch_GetNextCallback");
             _manualDispatchFreeLastCallback = Get<SteamApiManualDispatchFreeLastCallback>(module, "SteamAPI_ManualDispatch_FreeLastCallback");
             _manualDispatchGetApiCallResult = Get<SteamApiManualDispatchGetApiCallResult>(module, "SteamAPI_ManualDispatch_GetAPICallResult");
-            _steamMatchmaking = Get<SteamApiSteamMatchmaking>(module, "SteamAPI_SteamMatchmaking_v009");
-            _steamUtils = Get<SteamApiSteamUtils>(module, "SteamAPI_SteamUtils_v010");
-            _steamUser = Get<SteamApiSteamUser>(module, "SteamAPI_SteamUser_v021");
+            _steamMatchmaking = TryGet<SteamApiSteamMatchmaking>(module, "SteamAPI_SteamMatchmaking_v009");
+            _steamUtils = TryGet<SteamApiSteamUtils>(module, "SteamAPI_SteamUtils_v010", "SteamAPI_SteamUtils_v011");
+            _steamUser = TryGet<SteamApiSteamUser>(module, "SteamAPI_SteamUser_v021", "SteamAPI_SteamUser_v023");
+            _getHSteamUser = null;
+            _findOrCreateUserInterface = null;
+            if (_steamMatchmaking is null || _steamUtils is null || _steamUser is null)
+            {
+                _getHSteamUser = Get<SteamApiGetHSteamUser>(module, "SteamAPI_GetHSteamUser");
+                _findOrCreateUserInterface = Get<SteamInternalFindOrCreateUserInterface>(module, "SteamInternal_FindOrCreateUserInterface");
+            }
             _getUtilsAppId = Get<SteamApiUtilsAppId>(module, "SteamAPI_ISteamUtils_GetAppID");
             _isLoggedOn = Get<SteamApiUserLoggedOn>(module, "SteamAPI_ISteamUser_BLoggedOn");
             _getSteamId = Get<SteamApiUserSteamId>(module, "SteamAPI_ISteamUser_GetSteamID");
@@ -971,7 +1104,21 @@ internal static class Program
         }
 
         public static SteamApi Load(nint module) => new(module);
-        public bool Init() => _init() != 0;
+        public bool Init()
+        {
+            if (_init is not null)
+                return _init() != 0;
+
+            var errorMessage = Marshal.AllocHGlobal(1024);
+            try
+            {
+                return _initFlat!(errorMessage) == 0;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(errorMessage);
+            }
+        }
         public void Shutdown() => _shutdown();
         public void RunCallbacks() => _runCallbacks();
         public void ManualDispatchInit() => _manualDispatchInit();
@@ -981,9 +1128,9 @@ internal static class Program
         public void ManualDispatchFreeLastCallback(int pipe) => _manualDispatchFreeLastCallback(pipe);
         public byte ManualDispatchGetApiCallResult(int pipe, ulong call, nint callback, int callbackSize, int callbackId, ref byte failed) =>
             _manualDispatchGetApiCallResult(pipe, call, callback, callbackSize, callbackId, ref failed);
-        public nint SteamMatchmaking() => _steamMatchmaking();
-        public nint SteamUtils() => _steamUtils();
-        public nint SteamUser() => _steamUser();
+        public nint SteamMatchmaking() => _steamMatchmaking?.Invoke() ?? FindOrCreateUserInterface("SteamMatchMaking009");
+        public nint SteamUtils() => _steamUtils?.Invoke() ?? FindOrCreateUserInterface("SteamUtils011");
+        public nint SteamUser() => _steamUser?.Invoke() ?? FindOrCreateUserInterface("SteamUser023");
         public uint GetUtilsAppId() => _getUtilsAppId(SteamUtils());
         public bool IsLoggedOn(nint self) => _isLoggedOn(self) != 0;
         public ulong GetSteamId(nint self) => _getSteamId(self);
@@ -1036,14 +1183,37 @@ internal static class Program
 
         public void LeaveLobby(nint self, ulong lobbyId) => _leaveLobby(self, lobbyId);
 
-        private static T Get<T>(nint module, string name) where T : Delegate =>
-            Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(module, name));
+        private nint FindOrCreateUserInterface(string version)
+        {
+            var result = _findOrCreateUserInterface!(_getHSteamUser!(), version);
+            if (result == 0)
+                throw new InvalidOperationException($"Steam did not provide interface {version}.");
+
+            return result;
+        }
+
+        private static T Get<T>(nint module, params string[] names) where T : Delegate =>
+            TryGet<T>(module, names) ?? throw new EntryPointNotFoundException($"None of the expected exports were found: {string.Join(", ", names)}");
+
+        private static T? TryGet<T>(nint module, params string[] names) where T : Delegate
+        {
+            foreach (var name in names)
+            {
+                if (NativeLibrary.TryGetExport(module, name, out var export))
+                    return Marshal.GetDelegateForFunctionPointer<T>(export);
+            }
+
+            return null;
+        }
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte SteamApiInit();
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SteamApiInitFlat(nint errorMessage);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SteamApiShutdown();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SteamApiRunCallbacks();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SteamApiGetHSteamPipe();
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SteamApiGetHSteamUser();
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate nint SteamInternalFindOrCreateUserInterface(int user, [MarshalAs(UnmanagedType.LPStr)] string version);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SteamApiManualDispatchInit();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SteamApiManualDispatchRunFrame(int pipe);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte SteamApiManualDispatchGetNextCallback(int pipe, ref CallbackMsg callback);

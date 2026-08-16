@@ -1,6 +1,10 @@
 # Local browser-automation artifacts
 .playwright-mcp/
 
+# Local deployment configuration and Steam setup screenshots
+.env
+steam*.png
+
 # Build and publish outputs
 [Bb]in/
 [Oo]bj/

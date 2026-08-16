@@ -1,0 +1,46 @@
+services:
+  steam-lobby-agent:
+    build:
+      context: ../..
+      dockerfile: deploy/steam-lobby-agent/Dockerfile
+    image: l4d2-steam-lobby-agent:local
+    restart: unless-stopped
+    shm_size: 2gb
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      UMASK: "077"
+      WEB_UI_MODE: vnc
+      PORT_NOVNC_WEB: "8083"
+      ENABLE_VNC_AUDIO: "false"
+      ENABLE_STEAM: "true"
+      STEAM_ARGS: ""
+      ENABLE_SUNSHINE: "false"
+      ENABLE_EVDEV_INPUTS: "false"
+      FORCE_X11_DUMMY_CONFIG: "true"
+      NVIDIA_VISIBLE_DEVICES: ""
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      STEAM_SHARED_LIBRARY_PATH: /mnt/steam-library
+      PROBE_TIMEOUT_SECONDS: ${PROBE_TIMEOUT_SECONDS:-10}
+      STEAM_API_LIBRARY_PATH: ${STEAM_API_LIBRARY_PATH:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8083:8083"
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    volumes:
+      - steam-data:/home/default
+      - agent-config:/var/lib/l4d2-agent
+      - type: bind
+        source: ${STEAM_SHARED_LIBRARY_HOST_PATH:?Set STEAM_SHARED_LIBRARY_HOST_PATH to the shared steamapps host directory}
+        target: /mnt/steam-library
+        bind:
+          create_host_path: false
+
+volumes:
+  steam-data:
+  agent-config:
