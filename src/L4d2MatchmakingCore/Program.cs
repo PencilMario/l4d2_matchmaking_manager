@@ -1,7 +1,9 @@
 using L4d2MatchmakingCore.Agents;
+using L4d2MatchmakingCore.A2s;
 using L4d2MatchmakingCore.Auth;
 using L4d2MatchmakingCore.Configuration;
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Lobbies;
 using L4d2MatchmakingCore.Servers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +29,7 @@ builder.Services.AddScoped<WarmupAgentContainerService>();
 builder.Services.AddScoped<WarmupAgentService>();
 builder.Services.AddHttpClient<IAgentControlClient, AgentControlClient>();
 builder.Services.AddScoped<IHealthyAgentSelector, HealthyAgentSelector>();
+builder.Services.AddSingleton<ISourceA2sClient>(new SourceA2sClient(TimeSpan.FromSeconds(3)));
 
 var app = builder.Build();
 if (!app.Environment.IsEnvironment("Testing"))
@@ -45,6 +48,7 @@ app.MapGroup("/v1/servers")
 app.MapGroup("/v1/agents")
     .RequireAuthorization()
     .MapWarmupAgentEndpoints();
+app.MapLobbyQueryEndpoints();
 
 app.Run();
 

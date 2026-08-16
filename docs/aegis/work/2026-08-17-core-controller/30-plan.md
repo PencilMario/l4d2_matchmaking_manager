@@ -620,7 +620,7 @@ git commit -m "feat(core): 管理本机 Steam Agent 容器"
 
 **Verification:** dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "A2s|LobbyQuery".
 
-- [ ] **Step 1: Write failing A2S challenge and query-proxy tests**
+- [x] **Step 1: Write failing A2S challenge and query-proxy tests**
 
 ~~~csharp
 [TestMethod]
@@ -633,13 +633,13 @@ public async Task GetInfoRepliesToChallengeAndParsesPlayers()
 }
 ~~~
 
-- [ ] **Step 2: Run A2S/query tests and confirm RED**
+- [x] **Step 2: Run A2S/query tests and confirm RED**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "A2s|LobbyQuery"
 
 Expected: compile failure because ISourceA2sClient and route are absent.
 
-- [ ] **Step 3: Implement bounded UDP query and authenticated proxy route**
+- [x] **Step 3: Implement bounded UDP query and authenticated proxy route**
 
 ~~~csharp
 public interface ISourceA2sClient
@@ -660,13 +660,13 @@ app.MapGet("/v1/lobbies/{lobbyId}", async (string lobbyId, IHealthyAgentSelector
 
 Resolve hostnames to IPv4 before both A2S and Agent operation requests. Map unavailable Agent and A2S dependencies to stable 503/504 errors without raw output.
 
-- [ ] **Step 4: Run A2S and lobby-query tests**
+- [x] **Step 4: Run A2S and lobby-query tests**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "A2s|LobbyQuery"
 
 Expected: challenge flow, player count, Agent query during active operation, 401 and no Agent leakage pass.
 
-- [ ] **Step 5: Commit real-time observation**
+- [x] **Step 5: Commit real-time observation**
 
 ~~~text
 git add src/L4d2MatchmakingCore

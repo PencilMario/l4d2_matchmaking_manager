@@ -3,9 +3,9 @@
 ## TodoCheckpointDraft
 
 - 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-8 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API、共享库配置保护、Core 认证/持久化、目标服务器配置和本机 Agent Docker 生命周期。
-- 当前工作项：Task 9，增加 A2S 实时观测和由健康 Agent 提供的大厅查询代理。
-- 尚未开始：Task 9 至 Task 12；没有 Core Docker Compose、A2S 查询、暖服状态机或调度后台服务已交付。
-- 下一步：为 Source A2S challenge 流程和匿名/无健康 Agent 的 lobby 查询路由写红灯测试。
+- 当前工作项：Task 10，实现纯暖服决策引擎与所有时间/并发约束。
+- 尚未开始：Task 10 至 Task 12；没有 Core Docker Compose、暖服状态机或调度后台服务已交付。
+- 下一步：为预留/普通大厅的 120/30 秒、A2S 门槛和 12 分钟上限写纯状态转换红灯测试。
 
 ## EvidenceBundleDraft
 
@@ -36,13 +36,16 @@
 - PostgreSQL 真实证据：`100.72.137.92`（Docker Engine 29.6.1，Ubuntu 26.04）内的临时 .NET 10 SDK 容器执行 `dotnet test ... --filter OneReservationLeaseExistsPerTarget`，Testcontainers 成功启动 `postgres:17`、应用迁移并以 1/1 通过验证同一 `TargetServerId` 只能有一个 reservation lease。远端测试容器使用 `--rm`，测试数据库容器由 Testcontainers/Ryuk 清理；源码临时目录仍在 `/tmp/l4d2-core-test-20260817-1` 与 `-2`，仅含测试归档，待最终远端验收完成后删除。
 - Task 8 RED：`WarmupAgentEndpointTests` 因缺少 `NoVncPort`、Agent DTO 和生命周期端点而编译失败；`AgentControlClientTests` 因缺少 Agent HTTP client 而编译失败。
 - Task 8 GREEN：`/v1/agents` 受 Bearer 认证保护，提供 create/list/get/update/start/stop/recreate/delete；创建会持久化分配 noVNC loopback 端口、独立 Steam/account-config 卷名并启动容器。端口分配同时避开现有 Agent 和任意 Docker 已绑定端口，数据库以唯一索引保存分配；删除/重建从不删除账号卷。Docker runtime 对 start/stop/delete 检查受管标签，Container API 保持 8080 未发布、8083 仅映射 `127.0.0.1`。响应不返回卷名或容器 ID。`IAgentControlClient` 固定通过内部 Docker network 的 `l4d2-agent-{id}:8080` 调用 Agent；健康选择器只返回运行且实时 Ready 的 Agent。定向 Task 8 为 6/6；Core 21/21、本机 PostgreSQL 1 skipped；solution 构建 0 警告、0 错误，完整 solution 回归为 Core 21/21 + PostgreSQL 1 skipped、Agent 14/14、Probe 4/4、Protocol 10/10、contracts 1/1。
+- Task 8 提交：`2f4b70d feat(core): 管理本机 Steam Agent 容器`。
+- Task 9 RED：`SourceA2sClientTests` 因缺少 `L4d2MatchmakingCore.A2s` 模块而无法编译。
+- Task 9 GREEN：`SourceA2sClient` 通过 IPv4 UDP 发送 A2S_INFO，收到 challenge 时精确重发一次，并仅从完整 INFO 包读取当前玩家数；取消或超时不会复用历史数。受认证的 `GET /v1/lobbies/{id}` 只会调用实时 Ready 的 Agent，公开响应不含 Agent 身份；非法 ID 为 400、无健康 Agent 或 Agent HTTP 不可达为 503。定向为 3/3；Core 24/24、本机 PostgreSQL 1 skipped，solution build 为 0 警告、0 错误。
 
 ## DriftCheckDraft
 
 - 范围：仍为单 Docker 主机的 Core Controller 与受管 Agent；没有扩展至 Web UI、跨主机编排或 RCON。
 - 兼容：现有 health 路由、Probe CLI 与 standalone Compose 保留；Agent 的 Probe 状态路由保留 JSON 字段和 200/503 约定，数据来源已从短生命周期进程迁移为持久 actor。共享库仍仅挂载游戏内容，账号凭据仍留在独立 `steam-data` 卷。Core 的 `/v1/servers` 认证占位路由已由 TargetServerEndpoints CRUD owner 替换。
 - 运行时权威：后续调度只可依据实时 Agent 与 A2S 读取，数据库仅保存配置、关联、审计与租约。
-- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。Docker lifecycle 仍只使用 Core 到 Docker 和 Core 到 Agent 的独立 owner；下一切片限定为 A2S 观测与大厅查询代理。
+- 决定：`continue`，Probe CLI 保留其 native ABI wrapper 作为诊断兼容层；SteamNativeRuntime 复用它而不再引入第二个 Steam API owner。Core 只通过 `IAgentControlClient` 与 Agent 交互，且实时 A2S/Agent 读取将作为后续调度的唯一运行时真值；下一切片限定为纯暖服决策引擎。
 
 ## Risk / Unknown
 
