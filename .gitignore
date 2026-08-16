@@ -31,5 +31,8 @@ research/SteamLobbyProbe/SteamLobbyProbe-*.zip
 # IDE workspace state
 .vs/
 
+# Isolated local development worktrees
+.worktrees/
+
 # Externally supplied ASF source checkout
 research/vendor/
