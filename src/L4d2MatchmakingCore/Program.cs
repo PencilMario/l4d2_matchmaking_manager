@@ -4,6 +4,7 @@ using L4d2MatchmakingCore.Auth;
 using L4d2MatchmakingCore.Configuration;
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Lobbies;
+using L4d2MatchmakingCore.Scheduling;
 using L4d2MatchmakingCore.Servers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,11 @@ builder.Services.AddScoped<WarmupAgentService>();
 builder.Services.AddHttpClient<IAgentControlClient, AgentControlClient>();
 builder.Services.AddScoped<IHealthyAgentSelector, HealthyAgentSelector>();
 builder.Services.AddSingleton<ISourceA2sClient>(new SourceA2sClient(TimeSpan.FromSeconds(3)));
+builder.Services.AddSingleton<WarmupDecisionEngine>();
+builder.Services.AddScoped<SharedLibraryMaintenanceService>();
+builder.Services.AddScoped<WarmupSchedulerService>();
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<WarmupSchedulerBackgroundService>();
 
 var app = builder.Build();
 if (!app.Environment.IsEnvironment("Testing"))
