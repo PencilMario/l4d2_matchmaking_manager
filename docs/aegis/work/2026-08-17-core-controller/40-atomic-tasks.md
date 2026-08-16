@@ -2,7 +2,7 @@
 
 - [x] 建立共享 HTTP contracts、核心解决方案与测试工程。
 - [x] 将真实 metadata 参数化为 C1-C14 完整 campaign profile catalog。
-- [ ] 从研究 Probe 抽取每账号单一 Manual Dispatch session actor。
+- [x] 从研究 Probe 抽取每账号单一 Manual Dispatch session actor。
 - [ ] 将 Agent HTTP 改接 actor，并增加幂等操作与任意 lobby 查询 API。
 - [ ] 固化共享库、下载地区、Shader Pre-Caching 与 AppID 550 自动更新策略。
 - [ ] 建立 Core 的配置、认证、PostgreSQL 实体和迁移。

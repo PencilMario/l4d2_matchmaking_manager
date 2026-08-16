@@ -1012,7 +1012,7 @@ internal static class Program
         LobbySettingsProfile SettingsProfile);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CallbackMsg
+    internal struct CallbackMsg
     {
         public int SteamUser;
         public int Callback;
@@ -1020,7 +1020,7 @@ internal static class Program
         public int ParamSize;
     }
 
-    private sealed class SteamApi
+    internal sealed class SteamApi
     {
         private readonly SteamApiInit? _init;
         private readonly SteamApiInitFlat? _initFlat;
@@ -1049,6 +1049,8 @@ internal static class Program
         private readonly SteamApiRequestLobbyData _requestLobbyData;
         private readonly SteamApiSetLobbyData _setLobbyData;
         private readonly SteamApiGetLobbyData _getLobbyData;
+        private readonly SteamApiGetLobbyDataCount _getLobbyDataCount;
+        private readonly SteamApiGetLobbyDataByIndex _getLobbyDataByIndex;
         private readonly SteamApiGetLobbyOwner _getLobbyOwner;
         private readonly SteamApiGetNumLobbyMembers _getNumLobbyMembers;
         private readonly SteamApiGetLobbyMemberByIndex _getLobbyMemberByIndex;
@@ -1093,6 +1095,8 @@ internal static class Program
             _requestLobbyData = Get<SteamApiRequestLobbyData>(module, "SteamAPI_ISteamMatchmaking_RequestLobbyData");
             _setLobbyData = Get<SteamApiSetLobbyData>(module, "SteamAPI_ISteamMatchmaking_SetLobbyData");
             _getLobbyData = Get<SteamApiGetLobbyData>(module, "SteamAPI_ISteamMatchmaking_GetLobbyData");
+            _getLobbyDataCount = Get<SteamApiGetLobbyDataCount>(module, "SteamAPI_ISteamMatchmaking_GetLobbyDataCount");
+            _getLobbyDataByIndex = Get<SteamApiGetLobbyDataByIndex>(module, "SteamAPI_ISteamMatchmaking_GetLobbyDataByIndex");
             _getLobbyOwner = Get<SteamApiGetLobbyOwner>(module, "SteamAPI_ISteamMatchmaking_GetLobbyOwner");
             _getNumLobbyMembers = Get<SteamApiGetNumLobbyMembers>(module, "SteamAPI_ISteamMatchmaking_GetNumLobbyMembers");
             _getLobbyMemberByIndex = Get<SteamApiGetLobbyMemberByIndex>(module, "SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex");
@@ -1182,6 +1186,35 @@ internal static class Program
             return ptr == 0 ? "<null>" : Marshal.PtrToStringAnsi(ptr) ?? "<empty>";
         }
 
+        public int GetLobbyDataCount(nint self, ulong lobbyId) => _getLobbyDataCount(self, lobbyId);
+
+        public bool GetLobbyDataByIndex(nint self, ulong lobbyId, int index, out string key, out string value)
+        {
+            const int keyBufferSize = 256;
+            const int valueBufferSize = 8192;
+            var keyBuffer = Marshal.AllocHGlobal(keyBufferSize);
+            var valueBuffer = Marshal.AllocHGlobal(valueBufferSize);
+            try
+            {
+                var found = _getLobbyDataByIndex(
+                    self,
+                    lobbyId,
+                    index,
+                    keyBuffer,
+                    keyBufferSize,
+                    valueBuffer,
+                    valueBufferSize) != 0;
+                key = found ? Marshal.PtrToStringAnsi(keyBuffer) ?? string.Empty : string.Empty;
+                value = found ? Marshal.PtrToStringAnsi(valueBuffer) ?? string.Empty : string.Empty;
+                return found;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(valueBuffer);
+                Marshal.FreeHGlobal(keyBuffer);
+            }
+        }
+
         public void LeaveLobby(nint self, ulong lobbyId) => _leaveLobby(self, lobbyId);
 
         private nint FindOrCreateUserInterface(string version)
@@ -1235,6 +1268,8 @@ internal static class Program
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte SteamApiRequestLobbyData(nint self, ulong lobbyId);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte SteamApiSetLobbyData(nint self, ulong lobbyId, [MarshalAs(UnmanagedType.LPStr)] string key, [MarshalAs(UnmanagedType.LPStr)] string value);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate nint SteamApiGetLobbyData(nint self, ulong lobbyId, [MarshalAs(UnmanagedType.LPStr)] string key);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SteamApiGetLobbyDataCount(nint self, ulong lobbyId);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte SteamApiGetLobbyDataByIndex(nint self, ulong lobbyId, int index, nint key, int keyBufferSize, nint value, int valueBufferSize);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate ulong SteamApiGetLobbyOwner(nint self, ulong lobbyId);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SteamApiGetNumLobbyMembers(nint self, ulong lobbyId);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate ulong SteamApiGetLobbyMemberByIndex(nint self, ulong lobbyId, int memberIndex);

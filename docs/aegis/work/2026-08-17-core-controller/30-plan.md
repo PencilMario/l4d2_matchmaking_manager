@@ -189,7 +189,7 @@ git commit -m "feat(agent): 支持随机官方战役 metadata 档案"
 
 **Verification:** dotnet test research/SteamLobbyProbe/tests/SteamLobbyProbe.Tests.csproj.
 
-- [ ] **Step 1: Write the failing active-operation query test**
+- [x] **Step 1: Write the failing active-operation query test**
 
 ~~~csharp
 [TestMethod]
@@ -205,13 +205,13 @@ public async Task ReadLobbyUsesTheSameActorWhileAnOperationIsHeld()
 }
 ~~~
 
-- [ ] **Step 2: Run the actor test and confirm RED**
+- [x] **Step 2: Run the actor test and confirm RED**
 
 Run: dotnet test research/SteamLobbyProbe/tests/SteamLobbyProbe.Tests.csproj --filter SteamSessionActorTests
 
 Expected: compile failure because SteamSessionActor and ISteamNativeRuntime are absent.
 
-- [ ] **Step 3: Implement actor contracts, runtime extraction and command loop**
+- [x] **Step 3: Implement actor contracts, runtime extraction and command loop**
 
 ~~~csharp
 public interface ISteamSessionActor : IAsyncDisposable
@@ -229,16 +229,16 @@ public interface ICampaignSelector
 }
 ~~~
 
-SteamSessionActor owns one Channel of commands, initializes Manual Dispatch once, pumps callbacks at a bounded interval and refreshes the active lobby snapshot. Start writes a randomly-selected CampaignProfile, executes reservation when requested, maps failures to stable codes and holds the lobby until StopAsync calls LeaveLobby.
+SteamSessionActor owns one single-thread command queue, initializes Manual Dispatch once through SteamNativeRuntime, pumps callbacks at a bounded interval and refreshes the active lobby snapshot. SteamNativeRuntime remains the sole actor-side owner of an initialized Steam session; it reuses the Probe's native export wrapper rather than duplicating ABI delegates. Start writes a randomly-selected CampaignProfile, executes reservation when requested, maps failures to stable codes and holds the lobby until StopAsync calls LeaveLobby.
 
-- [ ] **Step 4: Run actor and legacy CLI regression tests**
+- [x] **Step 4: Run actor and legacy CLI regression tests**
 
 Run: dotnet test research/SteamLobbyProbe/tests/SteamLobbyProbe.Tests.csproj
 Run: dotnet test research/L4d2Protocol/tests/L4d2Protocol.Tests.csproj
 
 Expected: fake native calls never overlap; existing Probe vector assertions remain green.
 
-- [ ] **Step 5: Commit the Steam actor**
+- [x] **Step 5: Commit the Steam actor**
 
 ~~~text
 git add research/SteamLobbyProbe research/L4d2Protocol
