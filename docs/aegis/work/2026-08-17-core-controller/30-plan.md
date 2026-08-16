@@ -688,7 +688,7 @@ git commit -m "feat(core): 增加 A2S 观测与大厅查询代理"
 
 **Verification:** dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter WarmupDecisionEngineTests.
 
-- [ ] **Step 1: Write all key transition tests**
+- [x] **Step 1: Write all key transition tests**
 
 ~~~csharp
 [TestMethod]
@@ -704,7 +704,7 @@ public void NormalQuietFor30SecondsRecreatesSameTarget() =>
     Assert.AreEqual(WarmupDecision.RecreateSameTarget, engine.Evaluate(normalQuiet, 0, now));
 ~~~
 
-- [ ] **Step 2: Run engine tests and confirm RED**
+- [x] **Step 2: Run engine tests and confirm RED**
 
 Run: dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter WarmupDecisionEngineTests
 

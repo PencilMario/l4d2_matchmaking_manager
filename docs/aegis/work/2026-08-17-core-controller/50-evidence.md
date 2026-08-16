@@ -3,9 +3,9 @@
 ## TodoCheckpointDraft
 
 - 已完成：需求澄清、术语、基线读取、架构规格、原子任务、实施计划，以及 Task 1-8 的共享 contracts、C1-C14 metadata、单账号 Steam session actor、Agent 内部 HTTP API、共享库配置保护、Core 认证/持久化、目标服务器配置和本机 Agent Docker 生命周期。
-- 当前工作项：Task 10，实现纯暖服决策引擎与所有时间/并发约束。
-- 尚未开始：Task 10 至 Task 12；没有 Core Docker Compose、暖服状态机或调度后台服务已交付。
-- 下一步：为预留/普通大厅的 120/30 秒、A2S 门槛和 12 分钟上限写纯状态转换红灯测试。
+- 当前工作项：Task 10，实现纯暖服决策引擎的成员增量与优先级/并发选择。
+- 尚未开始：Task 11 至 Task 12；没有 Core Docker Compose 或后台调度服务已交付。
+- 下一步：为外部成员加入重置 30 秒计时器、reservation=1 和普通服务器并发上限写纯状态转换红灯测试。
 
 ## EvidenceBundleDraft
 
@@ -39,6 +39,9 @@
 - Task 8 提交：`2f4b70d feat(core): 管理本机 Steam Agent 容器`。
 - Task 9 RED：`SourceA2sClientTests` 因缺少 `L4d2MatchmakingCore.A2s` 模块而无法编译。
 - Task 9 GREEN：`SourceA2sClient` 通过 IPv4 UDP 发送 A2S_INFO，收到 challenge 时精确重发一次，并仅从完整 INFO 包读取当前玩家数；取消或超时不会复用历史数。受认证的 `GET /v1/lobbies/{id}` 只会调用实时 Ready 的 Agent，公开响应不含 Agent 身份；非法 ID 为 400、无健康 Agent 或 Agent HTTP 不可达为 503。定向为 3/3；Core 24/24、本机 PostgreSQL 1 skipped，solution build 为 0 警告、0 错误。
+- Task 9 提交：`7f39cd7 feat(core): 增加 A2S 观测与大厅查询代理`。
+- Task 10 RED：`WarmupDecisionEngineTests` 因缺少 `Scheduling` 命名空间、attempt snapshot 和 decision engine 而无法编译。
+- Task 10 部分 GREEN：纯 `WarmupDecisionEngine` 根据实时 A2S、12 分钟 deadline、预留 selecting/awaiting-first-member/active 阶段决定继续、跳过、同目标重建或释放重调度。覆盖预留服入场前 A2S>0 跳过、120 秒无成员、30 秒静默、A2S 达到 Player Target 和 deadline 到期。Core 28/28、本机 PostgreSQL 1 skipped；成员增量、优先级和并发上限仍待实现。
 
 ## DriftCheckDraft
 
