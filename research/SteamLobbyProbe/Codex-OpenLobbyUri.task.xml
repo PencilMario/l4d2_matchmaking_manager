@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>WIN-GG79C2CJMTP\Administrator</Author>
+    <URI>\Codex-L4D2OpenLobbyUri</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <TimeTrigger>
+      <StartBoundary>2026-08-16T23:59:00</StartBoundary>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-21-3274398065-2573621070-1024767407-500</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <ExecutionTimeLimit>PT1M</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>C:\Windows\System32\cmd.exe</Command>
+      <Arguments>/d /c start &quot;&quot; &quot;C:\Program Files (x86)\Steam\steam.exe&quot; &quot;steam://joinlobby/550/109775242236079803/76561199012457364&quot;</Arguments>
+    </Exec>
+  </Actions>
+</Task>

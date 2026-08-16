@@ -1,0 +1,32 @@
+# 原子任务状态
+
+- [x] 核对现有 probe、Steam 进程、L4D2 文件和官方 SetLobbyGameServer 参数约束。
+- [x] 新增 `Test-ServerLobby.ps1`。
+- [x] 运行测试并记录预期 RED。
+- [x] 实现 server 参数解析与字段生成。
+- [x] 实现 Set/GetLobbyGameServer wrapper。
+- [x] 实现 ManualDispatch keepalive 和可靠清理。
+- [x] 运行测试并记录 GREEN。
+- [x] 回归旧 probe 模式。
+- [x] 创建端到端日志化启动脚本 `Start-L4D2CondebugDiagnostic.py`，并用交互式计划任务取证。
+- [x] 使用 `sv_allow_lobby_connect_only=0` 的对照服务器验证 Reply 中的 `connectstring` 可让真实客户端进入游戏。
+- [x] 启动真实 L4D2 并验证连接。
+- [x] 更新中文 README 和证据记录。
+- [x] 新增 ownership transfer 失败测试并确认 RED。
+- [x] 实现 `transfer-owner` 模式及 Steam owner API wrapper。
+- [x] 将 lobby 转让给远端真实客户端并验证 metadata 保留。
+- [x] 退出 helper 后测试旧大厅重入，确认新房主没有接管 MatchFramework StartGame 行为。
+- [x] 记录 ownership transfer 的失败边界，并由无转让路径替代主实验方案。
+- [x] 明确不转让 owner 的双分支实验规范。
+- [x] 新增 lobby membership action 契约测试并确认 RED。
+- [x] 实现 `create-lobby-hold` 与 `leave-lobby`。
+- [x] 实现并验证 `join-lobby-hold` 限流回退实验路径。
+- [x] 运行契约测试与相关回归测试。
+- [x] 部署远端交互式诊断任务。
+- [x] 记录创建第二大厅时服务器连接是否保留。
+- [x] 记录离开原大厅时服务器连接是否保留。
+- [x] 更新中文 README 和证据文档。
+- [x] 使用 `-condebug` 客户端日志复核 LeaveLobby 后无断开记录。
+- [x] 新增真实 reservation lobby 的 x86 只读枚举脚本。
+- [x] 对 lobby `109775242120604580` 读取 owner、成员、全部 metadata 与 game-server binding。
+- [x] 将 reservation cookie 状态归属更新到中文 README 和证据文档。

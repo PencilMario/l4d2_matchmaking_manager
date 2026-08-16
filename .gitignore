@@ -1,0 +1,31 @@
+# Local browser-automation artifacts
+.playwright-mcp/
+
+# Build and publish outputs
+[Bb]in/
+[Oo]bj/
+*.exe
+*.dll
+*.pdb
+*.obj
+research/SteamLobbyProbe/publish*/
+
+# Local interpreter caches
+__pycache__/
+*.py[cod]
+
+# Diagnostic output
+*.log
+*.dmp
+research/SteamLobbyProbe/codex-edge-current-screen.png
+research/SteamLobbyProbe/lobby-owner-screen.png
+research/SteamLobbyProbe/remote-l4d2-*-pktmon.txt
+
+# One-off packaged probe output
+research/SteamLobbyProbe/SteamLobbyProbe-*.zip
+
+# IDE workspace state
+.vs/
+
+# Externally supplied ASF source checkout
+research/vendor/

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>WIN-GG79C2CJMTP\Administrator</Author>
+    <URI>\Codex-L4D2ConnectLobby</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <TimeTrigger>
+      <StartBoundary>2026-08-16T23:59:00</StartBoundary>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-21-3274398065-2573621070-1024767407-500</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>C:\Windows\System32\cmd.exe</Command>
+      <Arguments>/d /c &quot;py C:\Users\Administrator\Desktop\warmsv\RestartEdgeL4d2Lobby.py 109775242236536302 &gt; C:\Users\Administrator\Desktop\warmsv\codex-connect-lobby.out 2&gt; C:\Users\Administrator\Desktop\warmsv\codex-connect-lobby.err&quot;</Arguments>
+    </Exec>
+  </Actions>
+</Task>

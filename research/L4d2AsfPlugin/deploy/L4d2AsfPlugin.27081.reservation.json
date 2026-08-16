@@ -1,0 +1,9 @@
+{
+  "EnabledBots": ["sirp"],
+  "Endpoint": "202.105.108.88:27081",
+  "ReservationEnabled": true,
+  "LobbyType": "Public",
+  "MaxMembers": 8,
+  "ReservationTimeoutMilliseconds": 5000,
+  "HostVersion": 2243
+}

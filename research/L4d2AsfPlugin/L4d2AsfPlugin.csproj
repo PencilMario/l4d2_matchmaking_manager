@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>L4d2AsfPlugin</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" IncludeAssets="compile" />
+    <PackageReference Include="SteamKit2" Version="3.4.0" IncludeAssets="compile" />
+    <PackageReference Include="System.Composition.AttributedModel" Version="10.0.10" IncludeAssets="compile" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\L4d2Protocol\L4d2Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(ASFSourcePath)' != ''">
+    <ProjectReference Include="$(ASFSourcePath)\ArchiSteamFarm\ArchiSteamFarm.csproj" ExcludeAssets="all" Private="false" />
+  </ItemGroup>
+
+  <Target Name="RequireAsfSourcePath" BeforeTargets="ResolveReferences" Condition="'$(ASFSourcePath)' == ''">
+    <Error Text="Set ASFSourcePath to the root of the ASF 6.3.8.4 source tree." />
+  </Target>
+</Project>
