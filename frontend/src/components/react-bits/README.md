@@ -15,6 +15,9 @@ These files are copied from [DavidHDev/react-bits](https://github.com/DavidHDev/
 | `SpotlightCard` | `src/ts-default/Components/SpotlightCard/` |
 | `LineSidebar` | `src/ts-default/Components/LineSidebar/` |
 
+SpecularButton is sourced from `src/ts-default/Components/SpecularButton/` and
+adapted to the management workspace's compact desktop command controls.
+
 ## License notice
 
 Upstream license: **MIT + Commons Clause License Condition v1.0**. Copyright (c) 2026 David Haz.

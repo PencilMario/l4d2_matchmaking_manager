@@ -15,6 +15,7 @@ describe('TargetServerForm', () => {
     render(<TargetServerForm onSubmit={onSubmit} server={server} />);
 
     expect(screen.getByLabelText('RCON 密码')).toHaveValue('');
+    expect(screen.getByRole('button', { name: '保存配置' })).toHaveClass('specular-button');
     fireEvent.change(screen.getByLabelText('endpoint'), { target: { value: '203.0.113.50:27015' } });
     fireEvent.change(screen.getByLabelText('priority'), { target: { value: '' } });
     fireEvent.click(screen.getByLabelText('启用调度'));

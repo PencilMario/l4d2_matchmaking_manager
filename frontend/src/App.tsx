@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { CoreClient } from './api/core-client';
+import SpecularButton from './components/react-bits/SpecularButton/SpecularButton';
 import { WorkspaceShell } from './features/workspace/WorkspaceShell';
 
 export default function App() {
@@ -21,7 +22,7 @@ export default function App() {
         <h1>L4D2 Matchmaking Manager</h1>
         <p className="app-bootstrap__label">管理工作区</p>
         <label className="app-bootstrap__token">CORE API TOKEN<input autoFocus onChange={event => setTokenInput(event.target.value)} type="password" value={tokenInput} /></label>
-        <button type="submit">连接 Core</button>
+        <SpecularButton size="lg" type="submit">连接 Core</SpecularButton>
         <div className="app-bootstrap__status" aria-hidden="true">
           <span />
           <span />

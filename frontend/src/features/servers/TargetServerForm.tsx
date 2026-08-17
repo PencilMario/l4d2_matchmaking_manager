@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import type { TargetServer, TargetServerInput } from '../../api/models';
+import SpecularButton from '../../components/react-bits/SpecularButton/SpecularButton';
 
 interface TargetServerFormProps {
   busy?: boolean;
@@ -60,7 +61,7 @@ export function TargetServerForm({ busy = false, error, onCancel, onSubmit, serv
     <div className="target-server-form__numbers"><NumberField label="priority" onChange={value => setValues(current => ({ ...current, priority: value }))} value={values.priority} /><NumberField label="maxConcurrentWarmups" onChange={value => setValues(current => ({ ...current, maxConcurrentWarmups: value }))} value={values.maxConcurrentWarmups} /><NumberField label="attemptWindowSeconds" onChange={value => setValues(current => ({ ...current, attemptWindowSeconds: value }))} value={values.attemptWindowSeconds} /><NumberField label="playerTarget" onChange={value => setValues(current => ({ ...current, playerTarget: value }))} value={values.playerTarget} /></div>
     {values.requiresReservation ? <label className="target-server-form__rcon"><span>RCON 密码</span><input aria-label="RCON 密码" autoComplete="new-password" onChange={event => setValues(current => ({ ...current, rconPassword: event.target.value }))} placeholder={server.hasRconCredentials ? '留空会清除当前凭据' : '仅写入，不会回填'} type="password" value={values.rconPassword} /><small>密码为只写字段，读取结果不会包含它。</small></label> : null}
     {error ? <p className="target-server-form__error">{error}</p> : null}
-    <div className="target-server-form__actions">{onCancel ? <button onClick={onCancel} type="button">取消</button> : null}<button className="command-button" disabled={busy} type="submit">{busy ? '保存中...' : '保存配置'}</button></div>
+    <div className="target-server-form__actions">{onCancel ? <SpecularButton className="target-server-form__cancel" onClick={onCancel}>取消</SpecularButton> : null}<SpecularButton disabled={busy} type="submit">{busy ? '保存中...' : '保存配置'}</SpecularButton></div>
   </form>;
 }
 
