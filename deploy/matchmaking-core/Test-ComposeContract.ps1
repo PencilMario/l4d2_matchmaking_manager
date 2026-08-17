@@ -38,6 +38,10 @@ if ($compose -notmatch 'CORE_AGENT_STEAM_LOGIN_UI_MODE') {
     throw 'Core must receive the managed Agent Steam login UI mode.'
 }
 
+if ($compose -notmatch 'CORE_SCHEDULER_MAX_STARTS_PER_TICK') {
+    throw 'Core must receive the bounded scheduler batch start limit.'
+}
+
 if ($compose -notmatch 'CORE_AGENT_IMAGE') {
     throw 'Core must receive the managed Agent image tag.'
 }

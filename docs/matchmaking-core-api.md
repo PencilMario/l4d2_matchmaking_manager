@@ -31,6 +31,7 @@ POSTGRES_PASSWORD=<unique-postgresql-password>
 CORE_SHARED_LIBRARY_HOST_PATH=/mnt/storage/l4d2-steam-library
 CORE_AGENT_STEAM_API_LIBRARY_PATH=<container-visible-path-to-libsteam_api.so>
 CORE_AGENT_STEAM_LOGIN_UI_MODE=auto
+CORE_SCHEDULER_MAX_STARTS_PER_TICK=16
 CORE_IMAGE=l4d2-matchmaking-core:local
 CORE_AGENT_IMAGE=l4d2-steam-lobby-agent:local
 CORE_AGENT_NETWORK=l4d2-matchmaking
@@ -87,7 +88,14 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
 目标 6。预留目标的有效并发始终强制为 1。创建成功返回 `201`，读取/更新成功返回 `200`，
 删除成功返回 `204`，非法配置返回 `400`，未知 ID 返回 `404`。
 
-`rconPassword` 是仅写字段，用于对 reservation UDP 超时执行服务器 `status` 二次验证。Core
+将 `enabled` 更新为 `false` 或删除服务器时，Core 会先持久化禁用状态，再停止该服务器的所有
+`active`/`uncertain` 暖服操作。只有全部 stop 确认成功才完成请求；若任一 stop 无法确认，Agent
+会被隔离，未确认的尝试及其 reservation lease 会保留，接口返回 `409`。删除失败时服务器保留在
+禁用状态，之后可再次更新为 `enabled: false` 重试 drain。
+
+`rconPassword` 是仅写字段，仅可在 `requiresReservation: true` 时提供，用于对 reservation UDP
+超时执行服务器 `status` 二次验证。普通服务器提供非空密码返回 `400 rcon_requires_reservation`；将
+预留服务器更新为普通服务器会清除已保存的凭据。Core
 使用 `CORE_RCON_ENCRYPTION_KEY_FILE_HOST` 指向的 32-byte Base64 密钥以 AES-GCM 加密保存它；
 读取响应只提供 `hasRconCredentials`，不会返回密码、密文或密钥。更新时传 `null` 可清除既有
 凭据。对于带凭据的预留服务器，Agent 仅在 reservation UDP 超时时以同一游戏端口连接 Source
@@ -152,6 +160,16 @@ Agent，使其回到静默小内存模式。
 
 非法 ID 返回 `400`；没有健康 Agent 或 Agent 通信失败返回 `503`。查询不会暴露用于读取的
 Agent 身份，也不会创建、加入或离开目标 lobby。
+
+## 当前暖服状态
+
+`GET /v1/warmups` 返回当前数据库中 `active` 或 `uncertain` 的暖服尝试，不提供已完成历史。每一项
+包含目标服务器 ID/endpoint、Agent ID/display name、operation/lobby ID、mode/state/phase、生命周期
+时间戳、deadline 和 `remainingSeconds`。该接口是只读快照，不会为查询额外调用 Agent 或 A2S，且不会
+返回 RCON 密文、Docker 信息、Steam 凭据或账号卷信息。
+
+调度器每五秒最多启动 `CORE_SCHEDULER_MAX_STARTS_PER_TICK` 个操作，默认 `16`。这个值只限制单次
+启动吞吐量；目标服的并发上限、reservation 独占和服务器优先级仍由目标服配置及调度规则决定。
 
 ## 调度可见性
 
