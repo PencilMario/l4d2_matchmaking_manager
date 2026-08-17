@@ -35,6 +35,7 @@ builder.Services.AddSingleton<ISourceA2sClient>(new SourceA2sClient(TimeSpan.Fro
 builder.Services.AddSingleton<WarmupDecisionEngine>();
 builder.Services.AddScoped<SharedLibraryMaintenanceService>();
 builder.Services.AddScoped<WarmupSchedulerService>();
+builder.Services.AddScoped<WarmupStatusService>();
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService<WarmupSchedulerBackgroundService>();
 
@@ -56,6 +57,7 @@ app.MapGroup("/v1/agents")
     .RequireAuthorization()
     .MapWarmupAgentEndpoints();
 app.MapLobbyQueryEndpoints();
+app.MapWarmupStatusEndpoints();
 
 app.Run();
 
