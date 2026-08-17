@@ -360,12 +360,12 @@ Expected result: all Core tests, frontend unit tests, desktop Playwright project
 
 ## TodoCheckpointDraft
 
-- Current todo: update the approved spec for desktop-only scope, write this implementation plan and atomic checklist.
-- Completed: API/design exploration, React Bits revision inspection, A2S/parser baseline read, user approval of visual design and desktop-only boundary.
-- Active slice: plan authoring; no source implementation started.
-- Evidence refs: `6a91a71` design commit, current `SourceA2sClient`/test files, Core route registration.
-- Blocked on: nothing for planning; implementation requires user selection of subagent-driven or inline execution after this plan review.
-- Next: review plan, then execute Task 1 in an isolated implementation worktree.
+- Current todo: select execution mode, then begin Task 1 in an isolated implementation worktree.
+- Completed: API/design exploration, React Bits revision inspection, A2S/parser baseline read, user approval of visual design and desktop-only boundary, plan and atomic checklist authoring.
+- Active slice: no source implementation started; execution handoff is pending.
+- Evidence refs: `6a91a71` design commit, `f91f41e` plan commit, current `SourceA2sClient`/test files, Core route registration.
+- Blocked on: user selection of subagent-driven or inline execution.
+- Next: initialize the implementation worktree, reread this checkpoint and execute Task 1.
 
 ## DriftCheckDraft
 
