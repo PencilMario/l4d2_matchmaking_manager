@@ -1,0 +1,16 @@
+services:
+  frontend:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_BIND_ADDRESS:?Set FRONTEND_BIND_ADDRESS}:${FRONTEND_HTTP_PORT:-8084}:80"
+    volumes:
+      - "${FRONTEND_STATIC_ROOT:?Set FRONTEND_STATIC_ROOT}:/srv/matchmaking-frontend:ro"
+      - "./nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+    networks:
+      - matchmaking
+
+networks:
+  matchmaking:
+    external: true
+    name: ${CORE_NETWORK:-l4d2-matchmaking}
