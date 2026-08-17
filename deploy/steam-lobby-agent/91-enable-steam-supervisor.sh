@@ -45,6 +45,36 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         mv "${temporary_file}" "${steam_config_file}"
     }
 
+    configure_steam_ui_mode() {
+        login_ui_mode="${STEAM_LOGIN_UI_MODE:-auto}"
+        case "${login_ui_mode}" in
+            auto|always|never) ;;
+            *)
+                echo 'STEAM_LOGIN_UI_MODE must be auto, always or never.' >&2
+                return 1
+                ;;
+        esac
+
+        loginusers_file="${steam_config_directory}/loginusers.vdf"
+        case "${login_ui_mode}" in
+            always)
+                steam_arguments='-vgui -no-browser'
+                ;;
+            never)
+                steam_arguments='-silent -no-browser'
+                ;;
+            auto)
+                if [ -f "${loginusers_file}" ] && grep -Eq '"MostRecent"[[:space:]]*"1"' "${loginusers_file}"; then
+                    steam_arguments='-silent -no-browser'
+                else
+                    steam_arguments='-vgui -no-browser'
+                fi
+                ;;
+        esac
+
+        sed -i "s|^command=.*$|command=/usr/games/steam ${steam_arguments}|" /etc/supervisor.d/steam.ini
+    }
+
     if [ -n "${STEAM_SHARED_LIBRARY_PATH:-}" ]; then
         install -d -o "${PUID:-1000}" -g "${PGID:-1000}" -m 0700 "${library_directory}"
         temporary_file="$(mktemp "${library_file}.tmp.XXXXXX")"
@@ -110,6 +140,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     chmod 0600 "${steam_config_file}"
     set_download_region
     set_l4d2_update_policy
+    configure_steam_ui_mode
 
     sed -i 's|^autostart=.*$|autostart=true|' /etc/supervisor.d/steam.ini
 fi

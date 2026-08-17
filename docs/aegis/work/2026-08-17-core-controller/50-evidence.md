@@ -58,3 +58,29 @@
 - 本机未运行 Steam Desktop。`STEAM_DOWNLOAD_REGION` 在 Ubuntu Steam 客户端实际生效及 Steam 客户端自更新抑制均只能由真机验收确认；`AutoUpdateBehavior=1` 仅覆盖 AppID 550 在未启动游戏时不自动更新的策略。
 - 本机 Docker daemon 不可用，故本机 PostgreSQL 测试仍显示 skipped；但远端 Docker 已提供真实 PostgreSQL 17 的 1/1 通过证据。
 - Core Agent lifecycle 尚未在远端以真实受管容器执行，因为其 Compose 部署属于 Task 12；Docker 标签保护、卷隔离和 noVNC host mapping 目前由定义/API 自动化测试覆盖，真机容器创建将留待 Ubuntu 验收。
+
+## 2026-08-17：登录后 Steam UI 精简切片
+
+### TodoCheckpointDraft
+
+- 已完成：Agent 启动时依据账号私有登录状态选择 Steam UI 的实现、部署契约和远程脚本分支验证。
+- 当前工作项：恢复 Task 10/11 的同优先级 round-robin、调度错误隔离与完整状态转换测试；该切片未改变其工作范围。
+- 下一步：在 Task 12 的真机验收中，以实际 Steam 登录账号确认 `loginusers.vdf` 状态与 silent Steam 会话可被 Agent actor 正常使用。
+
+### EvidenceBundleDraft
+
+- RED：`pwsh -NoProfile -File deploy/steam-lobby-agent/Test-SteamAccountConfiguration.ps1 -SharedLibraryPath deploy/steam-lobby-agent/tests/fixtures/shared-library` 在新增契约后以 exit 1 失败，错误为初始化脚本缺少从持久账号登录状态选择 UI 模式的逻辑。
+- GREEN：同一账户配置契约与 `pwsh -NoProfile -File deploy/steam-lobby-agent/Test-ComposeContract.ps1` 均以 exit 0 通过；覆盖 `loginusers.vdf`、`auto|always|never`、首次 `-vgui -no-browser`、已登录 `-silent -no-browser`，以及 Compose 不再固定 `STEAM_ARGS`。
+- 静态检查：`git diff --check` 以 exit 0 通过。
+- 远程运行时：在 `100.72.137.92` 上，以 `l4d2-steam-lobby-agent:local` 的短生命周期 `--rm` 容器挂载当前初始化脚本。无 `loginusers.vdf` 的 `auto` 写入 `command=/usr/games/steam -vgui -no-browser`；带 `"MostRecent" "1"` 的 `auto` 和 `STEAM_LOGIN_UI_MODE=never` 写入 `command=/usr/games/steam -silent -no-browser`；`STEAM_LOGIN_UI_MODE=always` 写入 `command=/usr/games/steam -vgui -no-browser`。`bash -n` 对同一脚本以 exit 0 通过。
+- Compose 解析：远端运行 `STEAM_SHARED_LIBRARY_HOST_PATH=/tmp docker compose -f /tmp/l4d2-steam-ui-compose-test-20260817.yml config` 以 exit 0 输出 `STEAM_LOGIN_UI_MODE: auto`，且保留 loopback noVNC/HTTP、共享库 bind mount 和非 GPU 设置。
+
+### DriftCheckDraft
+
+- 范围：仅变更 Agent 的 Steam 启动参数选择、操作员恢复开关和对应文档/契约；没有触碰 Core 调度、Agent HTTP API、账号卷边界或 noVNC 网络暴露。
+- 兼容：首次启动继续使用小屏 UI；已有有效的最近登录记录后仅隐藏 Steam 窗口和浏览器进程，loopback noVNC 仍存在以便 `always` 模式重新认证。
+- 决定：`continue`。`STEAM_ARGS` 固定值已从 standalone Compose 移除；启动命令的唯一 owner 是容器初始化脚本。
+
+### Risk / Unknown
+
+- `loginusers.vdf` 的 `MostRecent=1` 仅表示账号曾成功登录，不证明当前 OAuth/Steam Guard 凭据没有过期。凭据过期时使用 `STEAM_LOGIN_UI_MODE=always` 重新登录；真机验收仍需证明 silent 会话可完成 Agent health 和 Steam actor 初始化。

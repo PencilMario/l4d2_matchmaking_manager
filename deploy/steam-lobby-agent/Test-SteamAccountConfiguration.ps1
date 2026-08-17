@@ -26,7 +26,27 @@ if ($initializer -notmatch '"DisableShaderCache" "1"') {
     throw 'The initializer must disable shader precaching in the account-local Steam configuration.'
 }
 
+if ($initializer -notmatch 'STEAM_LOGIN_UI_MODE' -or $initializer -notmatch 'loginusers\.vdf') {
+    throw 'The initializer must select the Steam UI mode from the persistent account login state.'
+}
+
+if ($initializer -notmatch 'auto\|always\|never') {
+    throw 'The initializer must retain explicit auto, always and never Steam UI mode choices for recovery.'
+}
+
+if ($initializer -notmatch '-vgui -no-browser') {
+    throw 'The initializer must retain the small-screen UI for first-time Steam login.'
+}
+
+if ($initializer -notmatch '-silent -no-browser') {
+    throw 'The initializer must suppress the Steam UI after account login is complete.'
+}
+
 $compose = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'docker-compose.yml')
-if ($compose -notmatch 'STEAM_ARGS:\s*"-vgui -no-browser"') {
-    throw 'The Agent must default Steam to the small-screen UI without the browser process.'
+if ($compose -match 'STEAM_ARGS:') {
+    throw 'The compose file must not pin Steam to UI mode after login has completed.'
+}
+
+if ($compose -notmatch 'STEAM_LOGIN_UI_MODE:\s*\$\{STEAM_LOGIN_UI_MODE:-auto\}') {
+    throw 'The compose file must expose auto UI selection with an operator recovery override.'
 }

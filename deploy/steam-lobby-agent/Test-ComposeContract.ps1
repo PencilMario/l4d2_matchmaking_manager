@@ -66,8 +66,18 @@ if ($compose -notmatch 'seccomp=unconfined') {
     throw 'Steam Desktop requires a seccomp profile that permits user namespaces.'
 }
 
-if ($compose -notmatch 'STEAM_ARGS:\s*"-vgui -no-browser"') {
-    throw 'Steam Desktop must start in small-screen mode without the browser UI.'
+if ($compose -notmatch 'STEAM_LOGIN_UI_MODE:\s*\$\{STEAM_LOGIN_UI_MODE:-auto\}') {
+    throw 'Steam Desktop must default to automatic first-login UI selection.'
+}
+
+if ($compose -match 'STEAM_ARGS:') {
+    throw 'Steam Desktop must not pin the Steam UI after account login is complete.'
+}
+
+if ($steamInit -notmatch 'loginusers\.vdf' -or
+    $steamInit -notmatch '-vgui -no-browser' -or
+    $steamInit -notmatch '-silent -no-browser') {
+    throw 'Steam Desktop must show the small-screen UI only until account login is complete.'
 }
 
 if ($compose -notmatch 'NVIDIA_VISIBLE_DEVICES:\s*""') {
