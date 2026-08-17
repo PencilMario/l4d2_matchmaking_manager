@@ -22,7 +22,7 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<TargetServerService>();
 var agentContainerOptions = builder.Environment.IsEnvironment("Testing")
-    ? new AgentContainerOptions("l4d2-steam-lobby-agent:local", "/mnt/steam-library", "l4d2-matchmaking", 18083, 18183)
+    ? new AgentContainerOptions("l4d2-steam-lobby-agent:local", "/mnt/steam-library", "l4d2-matchmaking", 18083, 18183, "/mnt/steam-library/libsteam_api.so")
     : AgentContainerOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(agentContainerOptions);
 builder.Services.AddSingleton<IAgentContainerRuntime, DockerAgentContainerRuntime>();

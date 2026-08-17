@@ -134,3 +134,61 @@
 ### Risk / Unknown
 
 - Start 成功但返回非 active 状态的 Agent 失败码尚需在 Agent 真机契约中分类；当前 Agent actor 的已知成功/停止状态为 active/stopped。
+
+## 2026-08-17：Core Compose、受管容器与 PostgreSQL 验收切片
+
+### TodoCheckpointDraft
+
+- 已完成：Task 11 的持久化调度、恢复、租约和不确定操作处理；Task 12 的 Core/PostgreSQL Compose、secret-file 配置、Core/Agent API 与部署文档、镜像构建契约，以及无 Steam 凭据的远端容器验收。
+- 当前工作项：真实 Steam 登录、AppID 550 下载与 `libsteam_api.so` 发现后的端到端暖服验收。
+- 下一步：在真实已登录 Steam 账号和目标 L4D2 服务器可用时，按 `docs/matchmaking-core-api.md` 配置共享库，完成 noVNC 登录、Agent health、reserved/standard 状态机、A2S 阈值和 lobby 查询验收。
+
+### EvidenceBundleDraft
+
+- RED/GREEN：Core Compose contract 依次因缺少 secret-file API token、Agent-visible `libsteam_api.so`、登录 UI 模式和 Agent image tag 而失败；`deploy/matchmaking-core/docker-compose.yml` 现在仅将 Core API 映射到 loopback、仅 Core 挂载 Docker socket、PostgreSQL 不发布端口，并以 Compose secret 读取 token。
+- RED/GREEN：Agent Dockerfile contract 先发现其未复制 `L4d2Matchmaking.Contracts`，导致干净 Docker restore 无法解析 Agent/Probe 依赖；复制 contracts project/source 后 Agent 与 Probe 构建通过。
+- RED/GREEN：受管 Agent 定义测试先缺少 Steam environment、FUSE、安全策略、2 GiB shm 和 `unless-stopped`；Core 现在显式创建与 standalone Agent Compose 等价的低内存/软件渲染运行配置，且 `CORE_AGENT_STEAM_LOGIN_UI_MODE` 可在重建时恢复 Steam UI。
+- RED/GREEN：远端临时 Core API 创建 Agent 时 PostgreSQL 返回 `23502`，根因为初始 migration 的 audit identity 注解被写成字符串，数据库没有生成 `LobbyOperationAudits.Id`。新增 `202608170005_RepairLobbyOperationAuditIdentity` 为已有数据库添加 identity 并将 sequence 推进到现有最大 ID；`AuditRowsReceiveDatabaseGeneratedIds` 在远端 Testcontainers PostgreSQL 17 以 1/1 通过。
+- 自动化：`pwsh deploy/matchmaking-core/Test-ComposeContract.ps1`、Agent Compose contract 和账号配置 contract 均 exit 0；`dotnet test L4d2MatchmakingManager.sln --no-restore` 为 46 passed、2 skipped（本机 Docker 不可用）；`dotnet build L4d2MatchmakingManager.sln --warnaserror --no-restore` 为 0 warnings、0 errors。
+- 远端 Docker：`100.72.137.92` 解析最终 Compose 后，以独立 image tag、网络、端口 28080、数据库卷和空共享库启动 Core/PostgreSQL。`/healthz` 为 200，未鉴权 `/v1/servers` 为 401，Bearer 请求为 200。Core 成功创建并删除无凭据 Agent；Docker inspect 确认只有 8083 映射至 `127.0.0.1:28083`、8080 未发布，包含共享库 bind mount、独立账号卷、FUSE、AppArmor/seccomp、2 GiB shm、`unless-stopped` 和所需 Steam 环境。
+- 清理：远端临时 Core、PostgreSQL、Agent、网络、数据库卷、账号卷、临时镜像、token、共享库和源码目录均已删除；验收前已存在的 `steam-lobby-agent-steam-lobby-agent-1` 保持 `Up`。
+
+### DriftCheckDraft
+
+- 范围：保持单 Docker 主机、Core 唯一 Docker socket owner 和 Agent 内网 HTTP 边界；没有加入 Web UI、跨主机编排、RCON 或公开 Agent 端口。
+- 兼容：standalone Agent Compose 和既有 health 路由保留。Core 创建 Agent 不再遗漏 standalone 运行前提，账号卷仍在正常删除/重建时保留；新 audit migration 仅修复 PostgreSQL 自增键。
+- 决定：`continue`。Core/Agent Docker 验证有直接证据；真实 Steam lobby 与服务器状态机仍必须由账号和服务器环境验收。
+
+### Risk / Unknown
+
+- 尚未使用真实 Steam 凭据登录 noVNC，未下载/定位实际 AppID 550 `libsteam_api.so`，因此不能声称 Steam actor、下载地区、silent 登录或 shader/update 策略已完成真实客户端验收。
+- 未使用真实 L4D2 目标服务器，reserved/standard lobby 创建、A2S 玩家阈值、120/30 秒计时、恢复与任意 lobby 查询尚未完成端到端验收。
+
+## 2026-08-17：部署审查修复切片
+
+### TodoCheckpointDraft
+
+- 已完成：审查中发现的 PostgreSQL identity 迁移兼容、Agent API 错误状态文档及 AppID 550 自动更新范围澄清。
+- 当前工作项：以真实 Steam 账号和真实 L4D2 服务器执行 Task 12 的端到端验收。
+- 下一步：完成 noVNC 登录和 AppID 550 下载后，逐项验证 Steam actor、下载地区、silent 登录、reserved/standard 调度、A2S 阈值、lobby 查询及 Core 重启恢复。
+
+### EvidenceBundleDraft
+
+- RED：远端临时 PostgreSQL 17 先将 `LobbyOperationAudits.Id` 人工补为 identity，再执行旧的无条件 `ADD GENERATED ... AS IDENTITY`；数据库按预期拒绝重复添加 identity。
+- GREEN：`202608170005_RepairLobbyOperationAuditIdentity` 现在仅在列既非 identity、也没有既有序列默认值时才添加 identity，并始终将序列推进至最大现有 ID。远端临时 PostgreSQL 对“官方旧表”和“已人工修复表”分别插入两条审计记录，得到 `{1,2}`；临时容器已移除。
+- 回归：`AuditIdentityRepairMigrationAcceptsAnAlreadyRepairedDatabase` 模拟 `004` 后的人工 identity 修复，再执行完整迁移并写入审计记录。本机 Docker 不可用，故该 Testcontainers 测试显示 skipped；测试工程成功编译，SQL 已由远端 PostgreSQL 17 直接执行验证。
+- API：`CreateReturnsConflictForDuplicateName` 锁定重复名称为 `409 Conflict`。`docs/matchmaking-core-api.md` 现在说明字段错误 `400`、名称/noVNC 冲突 `409`、未知 ID `404`、Docker 生命周期异常 `500`。
+- 更新策略：自动化保证范围是共享 `appmanifest_550.acf` 的 `AutoUpdateBehavior=1`，即 AppID 550 仅在游戏启动时更新；Agent 从不启动 L4D2。Steam 客户端 bootstrap 自更新没有跨版本可验证的控制开关，部署文档明确不将其表述为已禁用。
+- 全量回归：`dotnet test L4d2MatchmakingManager.sln --no-restore` 为 47 passed、3 skipped（本机 Docker/Testcontainers 不可用）；三个 Compose/Steam 配置合同脚本均 exit 0；`dotnet build L4d2MatchmakingManager.sln --warnaserror --no-restore` 为 0 warnings、0 errors。
+
+### DriftCheckDraft
+
+- 范围：仅修复已有 PostgreSQL 迁移的历史库兼容性并校正 API/更新策略文档；没有改变暖服状态机、网络暴露、凭据卷或 Docker 权限边界。
+- 兼容：已修复为 identity 或序列默认值的数据库均可继续升级；官方旧表仍取得 identity。Agent API 实现未改变，文档和回归测试现在与其实际状态码一致。
+- 决定：`continue`。部署自动化与数据库兼容性已有直接证据；Task 12 仍等待真实 Steam/服务器验收。
+
+### Risk / Unknown
+
+- 真实 Steam 登录、AppID 550 下载与 API 库路径、下载地区、silent UI、shader/AppID 更新策略尚无客户端级证据。
+- Steam 客户端自身 bootstrap 更新未被本项目禁用；这不属于已实现的 AppID 550 游戏更新策略，若业务需要必须先在目标 Steam 版本上验证稳定运维方案。
+- reserved/standard lobby、A2S 阈值、120/30 秒计时、任意 lobby 查询及 Core 重启恢复仍需真实服务器验收。

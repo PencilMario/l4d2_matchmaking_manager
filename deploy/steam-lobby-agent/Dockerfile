@@ -1,12 +1,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 WORKDIR /src
+COPY src/L4d2Matchmaking.Contracts/L4d2Matchmaking.Contracts.csproj src/L4d2Matchmaking.Contracts/
 COPY research/L4d2Protocol/L4d2Protocol.csproj research/L4d2Protocol/
 COPY research/SteamLobbyProbe/SteamLobbyProbe.csproj research/SteamLobbyProbe/
 COPY src/L4d2LobbyAgent/L4d2LobbyAgent.csproj src/L4d2LobbyAgent/
 RUN dotnet restore src/L4d2LobbyAgent/L4d2LobbyAgent.csproj -r linux-x64
 RUN dotnet restore research/SteamLobbyProbe/SteamLobbyProbe.csproj -r linux-x64
 
+COPY src/L4d2Matchmaking.Contracts/ src/L4d2Matchmaking.Contracts/
 COPY research/L4d2Protocol/ research/L4d2Protocol/
 COPY research/SteamLobbyProbe/ research/SteamLobbyProbe/
 COPY src/L4d2LobbyAgent/ src/L4d2LobbyAgent/

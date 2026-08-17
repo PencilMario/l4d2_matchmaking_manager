@@ -28,6 +28,14 @@ if ($dockerfile -notmatch '91-enable-steam-supervisor\.sh') {
     throw 'The image must enable Steam through the upstream supervisor after initialization.'
 }
 
+if ($dockerfile -notmatch 'COPY src/L4d2Matchmaking.Contracts/L4d2Matchmaking.Contracts\.csproj src/L4d2Matchmaking.Contracts/') {
+    throw 'The Docker build must copy shared Contracts before restoring the Agent and Probe projects.'
+}
+
+if ($dockerfile -notmatch 'COPY src/L4d2Matchmaking.Contracts/ src/L4d2Matchmaking.Contracts/') {
+    throw 'The Docker build must copy shared Contracts source before publishing the Agent and Probe projects.'
+}
+
 $steamInitPath = Join-Path $PSScriptRoot '91-enable-steam-supervisor.sh'
 if (-not (Test-Path -LiteralPath $steamInitPath)) {
     throw "Missing Steam supervisor initializer: $steamInitPath"

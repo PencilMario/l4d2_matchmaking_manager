@@ -10,6 +10,8 @@ public sealed class WarmupAgentContainerService(
     {
         if (agent.NoVncPort < options.NoVncPortStart || agent.NoVncPort > options.NoVncPortEnd)
             throw new InvalidOperationException("invalid_novnc_port");
+        if (string.IsNullOrWhiteSpace(options.SteamApiLibraryPath))
+            throw new InvalidOperationException("core_agent_steam_api_library_path_not_configured");
         agent.SteamDataVolumeName = string.IsNullOrWhiteSpace(agent.SteamDataVolumeName)
             ? $"steam-data-{agent.Id:N}"
             : agent.SteamDataVolumeName;
@@ -33,7 +35,28 @@ public sealed class WarmupAgentContainerService(
             [8083],
             new AgentPortBinding("127.0.0.1", agent.NoVncPort, 8083),
             options.Network,
-            agent.DownloadRegion), cancellationToken);
+            [
+                "PUID=1000",
+                "PGID=1000",
+                "UMASK=077",
+                "WEB_UI_MODE=vnc",
+                "PORT_NOVNC_WEB=8083",
+                "ENABLE_VNC_AUDIO=false",
+                "ENABLE_STEAM=true",
+                "STEAM_LOGIN_UI_MODE=" + options.SteamLoginUiMode,
+                "ENABLE_SUNSHINE=false",
+                "ENABLE_EVDEV_INPUTS=false",
+                "FORCE_X11_DUMMY_CONFIG=true",
+                "NVIDIA_VISIBLE_DEVICES=",
+                "LIBGL_ALWAYS_SOFTWARE=1",
+                "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
+                "STEAM_API_LIBRARY_PATH=" + options.SteamApiLibraryPath,
+                .. (agent.DownloadRegion is null ? [] : new[] { "STEAM_DOWNLOAD_REGION=" + agent.DownloadRegion }),
+            ],
+            2L * 1024 * 1024 * 1024,
+            [new AgentDeviceMapping("/dev/fuse", "/dev/fuse", "rwm")],
+            ["apparmor=unconfined", "seccomp=unconfined"],
+            "unless-stopped"), cancellationToken);
         agent.ContainerId = containerId;
         return containerId;
     }

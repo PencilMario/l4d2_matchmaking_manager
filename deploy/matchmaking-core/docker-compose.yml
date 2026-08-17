@@ -1,0 +1,57 @@
+services:
+  core:
+    build:
+      context: ../..
+      dockerfile: deploy/matchmaking-core/Dockerfile
+    image: ${CORE_IMAGE:-l4d2-matchmaking-core:local}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      CORE_API_TOKEN_FILE: /run/secrets/core_api_token
+      CORE_DATABASE_CONNECTION_STRING: Host=postgres;Port=5432;Database=matchmaking;Username=matchmaking;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      CORE_SHARED_LIBRARY_HOST_PATH: ${CORE_SHARED_LIBRARY_HOST_PATH:?Set CORE_SHARED_LIBRARY_HOST_PATH to the shared steamapps host directory}
+      CORE_AGENT_STEAM_API_LIBRARY_PATH: ${CORE_AGENT_STEAM_API_LIBRARY_PATH:?Set CORE_AGENT_STEAM_API_LIBRARY_PATH to libsteam_api.so inside the Agent container}
+      CORE_AGENT_STEAM_LOGIN_UI_MODE: ${CORE_AGENT_STEAM_LOGIN_UI_MODE:-auto}
+      CORE_AGENT_IMAGE: ${CORE_AGENT_IMAGE:-l4d2-steam-lobby-agent:local}
+      CORE_AGENT_NETWORK: ${CORE_AGENT_NETWORK:-l4d2-matchmaking}
+      CORE_NOVNC_PORT_START: ${CORE_NOVNC_PORT_START:-18083}
+      CORE_NOVNC_PORT_END: ${CORE_NOVNC_PORT_END:-18183}
+    ports:
+      - "127.0.0.1:${CORE_HTTP_PORT:-18080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    secrets:
+      - core_api_token
+    networks:
+      - l4d2-matchmaking
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: matchmaking
+      POSTGRES_USER: matchmaking
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matchmaking -d matchmaking"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - l4d2-matchmaking
+
+secrets:
+  core_api_token:
+    file: ${CORE_API_TOKEN_FILE_HOST:?Set CORE_API_TOKEN_FILE_HOST to a token file}
+
+volumes:
+  postgres-data:
+
+networks:
+  l4d2-matchmaking:
+    name: ${CORE_AGENT_NETWORK:-l4d2-matchmaking}

@@ -64,6 +64,20 @@ public sealed class WarmupAgentEndpointTests
     }
 
     [TestMethod]
+    public async Task CreateReturnsConflictForDuplicateName()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new AgentFactory(new FakeRuntime());
+        using var client = CreateAuthorizedClient(factory);
+
+        var first = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var duplicate = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+
+        Assert.AreEqual(HttpStatusCode.Created, first.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, duplicate.StatusCode);
+    }
+
+    [TestMethod]
     public async Task LifecycleEndpointsManageContainerWithoutDeletingAccountVolumes()
     {
         using var environment = new CoreTestEnvironment();
@@ -113,7 +127,7 @@ public sealed class WarmupAgentEndpointTests
                 services.RemoveAll<IAgentContainerRuntime>();
                 services.AddSingleton<IAgentContainerRuntime>(runtime);
                 services.RemoveAll<AgentContainerOptions>();
-                services.AddSingleton(new AgentContainerOptions("image", "/library", "network", 18083, 18183));
+                services.AddSingleton(new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
             });
         }
     }

@@ -58,6 +58,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
         modelBuilder.Entity<LobbyOperationAudit>(entity =>
         {
             entity.HasKey(audit => audit.Id);
+            entity.Property(audit => audit.Id).UseIdentityByDefaultColumn();
             entity.Property(audit => audit.EventType).HasMaxLength(128).IsRequired();
             entity.Property(audit => audit.DetailsJson).HasColumnType("jsonb").IsRequired();
             entity.HasIndex(audit => audit.ObservedAt);

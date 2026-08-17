@@ -1,54 +1,50 @@
-# Steam Lobby Agent Deployment
+# Steam Lobby Agent 镜像
 
-This Compose service extends the maintained `josh5/steam-headless` Steam Desktop image, pinned to a tested image digest. Its Xfce desktop and Web UI expose only loopback ports. The `steam-data` volume is the Steam account's persistent home directory; do not use `docker compose down -v` unless intentionally removing its login data.
+本目录构建供 Core 管理的单 Steam 账号 Agent 镜像。正式运行由
+[`deploy/matchmaking-core`](../matchmaking-core) 中的 Core 创建容器；不要为每个正式
+Agent 单独维护 Compose 服务。
 
-Steam application content is deliberately outside that account volume. Every lobby agent mounts the same existing host directory at `/mnt/steam-library`; initialization writes that path to the account-local Steam library configuration. The shared directory contains `steamapps` depots and manifests but no Steam account credentials. Each account keeps a separate `steam-data-<agent>` volume for login, Steam Guard, userdata and client configuration.
+每个 Core 管理的 Agent 使用独立的 `steam-data-<id>` 和 `agent-config-<id>` Docker
+volume，但共享同一个宿主机游戏库，并在容器中挂载为 `/mnt/steam-library`。共享库只能
+放 Steam App 内容和运行时，不能保存登录凭据或 Steam Guard 数据。
 
-Shader Pre-Caching is disabled in each account-local Steam configuration (`DisableShaderCache=1`). An optional `STEAM_DOWNLOAD_REGION` is also written only to that account's `config.vdf`. Neither setting is stored in the shared game library.
+## 构建镜像
 
-After AppID 550 is installed, initialization changes its shared manifest to `AutoUpdateBehavior=1` (update only when launched). Lobby agents never launch the game client, so ordinary Agent startup does not trigger a game update. The Core's future shared-library maintenance lease must serialize installation, validation, update and uninstall work before this value is restored. This does not establish that Steam client self-updates are disabled; validate that separately on the Ubuntu deployment host.
+从仓库根目录执行：
 
-## Host prerequisite
-
-Steam requires unprivileged user namespaces. On Ubuntu hosts that enable AppArmor's user-namespace restriction, an administrator must allow them before starting the service:
-
-```text
-printf '%s\n' 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/90-steam-userns.conf >/dev/null
-sudo sysctl --system
+```sh
+docker build -f deploy/steam-lobby-agent/Dockerfile -t l4d2-steam-lobby-agent:local .
 ```
 
-This is a host-wide security relaxation. Limit Docker administration access, keep the Compose service's ports on loopback, and review the setting when Steam or the host policy changes.
+Core 默认使用该 tag；通过 `CORE_AGENT_IMAGE` 可改用受控的私有镜像 tag。
 
-## First Login
+## 首次登录与资源策略
 
-Before the first start, create an `.env` from `.env.example` and create the configured shared library directory. The test host uses `/mnt/storage/l4d2-steam-library`:
+使用 Core 创建 Agent 后，它会返回一个仅回环绑定的 `noVncPort`。在 Docker 主机本机访问
+`http://127.0.0.1:<noVncPort>/`，或从管理工作站通过 SSH 将该端口转发到本机，再完成
+Steam 登录和 Steam Guard。
 
-```text
-cp .env.example .env
-sudo install -d -o 1000 -g 1000 -m 0750 /mnt/storage/l4d2-steam-library
-```
+首次登录时 Steam 使用小屏幕 `-vgui -no-browser` UI。账号的 `loginusers.vdf` 出现
+`MostRecent=1` 后，后续启动使用 `-silent -no-browser`，移除常规 Steam 窗口和浏览器
+进程。需要重新登录时，将 Core `.env` 中的
+`CORE_AGENT_STEAM_LOGIN_UI_MODE=always`，重启 Core 后重建目标 Agent；完成后恢复为
+`auto`。独立诊断 Compose 则使用自身的 `STEAM_LOGIN_UI_MODE=always`。
 
-The directory must already exist; Compose refuses to create it automatically. On the Docker host, start the service with `docker compose up -d --build`. From an administrator workstation, create a private SSH tunnel:
+每个账号的 Steam 配置均写入 `DisableShaderCache=1`。可在 Core 创建/更新 Agent 时设置
+`downloadRegion`；更新后需调用 Agent 的 `recreate` 路由，令新容器取得新的环境变量。
+共享 AppID 550 manifest 会设置 `AutoUpdateBehavior=1`，即仅游戏启动时更新；暖服 Agent
+不会启动 L4D2 客户端。这是本部署的自动更新边界：它关闭的是 L4D2 的后台/常规更新，不
+保证或阻止 Steam 客户端自身的 bootstrap 更新。后者没有可跨 Steam 版本验证的稳定配置，
+且客户端更新可能影响 Steam API 兼容性；如需限制它，必须在实际 Ubuntu Steam 客户端上
+另行验证后再作为运维策略实施。
 
-```text
-ssh -L 8083:127.0.0.1:8083 <user>@<host>
-```
+## 独立 Compose 的边界
 
-Open `http://127.0.0.1:8083/`, select **Connect**, then sign in to Steam and complete Steam Guard. Before a successful login, the Agent starts Steam with the small-screen `-vgui -no-browser` UI. After Steam records a most-recent account in the private `loginusers.vdf`, later starts use `-silent -no-browser`, removing the Steam window and browser process. The noVNC endpoint remains loopback-only for recovery; set `STEAM_LOGIN_UI_MODE=always` in `.env` and recreate the service when Steam Guard or reauthentication needs a visible window. Install AppID 550 only to obtain its Linux Steam API library; the service never launches the game executable. Locate the installed `libsteam_api.so`, set `STEAM_API_LIBRARY_PATH` in `.env`, optionally set `STEAM_DOWNLOAD_REGION`, then recreate the service with `docker compose up -d`. The restart applies the AppID 550 update policy after the manifest exists.
+本目录的 `docker-compose.yml` 仅用于镜像/Steam 首次配置诊断。它会把 8080 和 8083
+绑定至宿主机回环地址，不属于 Core 的正常业务路径。Core 创建的 Agent 只发布 noVNC
+端口，Agent HTTP 保持在 Docker 内网。内部 API 见
+[steam-lobby-agent-api.md](../../docs/steam-lobby-agent-api.md)。
 
-For additional agents, reuse the same `STEAM_SHARED_LIBRARY_HOST_PATH` and image, but give each service a unique `steam-data-<agent>` volume. Do not run simultaneous install, validate, update or uninstall operations against the shared library.
-
-## Health Check
-
-The agent process endpoint is local to the Docker host:
-
-```text
-curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/v1/probe/status
-```
-
-The second request uses the Agent's persistent Steam session actor. It reports `503` until Steam Desktop is running, logged in, uses AppID 550 and completes a lobby-list callback. Its response contains no Steam credentials, native library path or raw Steam data.
-
-## Rollback
-
-Use `docker compose down` to stop the Agent while retaining Steam login data. Do not append `-v` unless the account's persistent data should be deleted.
+Ubuntu 宿主机若启用了 AppArmor 用户命名空间限制，需要管理员按上游 Steam 镜像要求配置
+`kernel.apparmor_restrict_unprivileged_userns=0`。这是宿主机级安全放宽，应限制 Docker
+管理权限并定期复核。

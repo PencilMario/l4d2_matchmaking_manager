@@ -16,7 +16,8 @@ public sealed class DockerAgentContainerRuntimeTests
             "/srv/steam-library",
             "matchmaking-network",
             18083,
-            18183);
+            18183,
+            "/mnt/steam-library/libsteam_api.so");
         var service = new WarmupAgentContainerService(runtime, options);
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083 };
 
@@ -37,12 +38,60 @@ public sealed class DockerAgentContainerRuntimeTests
     public async Task DeleteDoesNotDeleteAccountVolumes()
     {
         var runtime = new FakeRuntime();
-        var service = new WarmupAgentContainerService(runtime, new AgentContainerOptions("image", "/library", "network", 18083, 18183));
+        var service = new WarmupAgentContainerService(runtime, new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
 
         await service.DeleteAsync(new WarmupAgent { Id = Guid.NewGuid() }, CancellationToken.None);
 
         Assert.IsTrue(runtime.DeleteCalled);
         Assert.IsFalse(runtime.DeleteVolumesRequested);
+    }
+
+    [TestMethod]
+    public async Task CreateProvidesRequiredSteamEnvironment()
+    {
+        var runtime = new FakeRuntime();
+        var options = new AgentContainerOptions(
+            "image",
+            "/library",
+            "network",
+            18083,
+            18183,
+            "/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so",
+            "always");
+        var service = new WarmupAgentContainerService(runtime, options);
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083 };
+
+        await service.CreateAsync(agent, CancellationToken.None);
+
+        Assert.IsNotNull(runtime.Definition);
+        CollectionAssert.AreEquivalent(
+            new[]
+            {
+                "PUID=1000",
+                "PGID=1000",
+                "UMASK=077",
+                "WEB_UI_MODE=vnc",
+                "PORT_NOVNC_WEB=8083",
+                "ENABLE_VNC_AUDIO=false",
+                "ENABLE_STEAM=true",
+                "STEAM_LOGIN_UI_MODE=always",
+                "ENABLE_SUNSHINE=false",
+                "ENABLE_EVDEV_INPUTS=false",
+                "FORCE_X11_DUMMY_CONFIG=true",
+                "NVIDIA_VISIBLE_DEVICES=",
+                "LIBGL_ALWAYS_SOFTWARE=1",
+                "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
+                "STEAM_API_LIBRARY_PATH=/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so",
+            },
+            runtime.Definition.Environment.ToArray());
+        Assert.AreEqual(2L * 1024 * 1024 * 1024, runtime.Definition.SharedMemoryBytes);
+        Assert.AreEqual("unless-stopped", runtime.Definition.RestartPolicy);
+        CollectionAssert.AreEquivalent(
+            new[] { "apparmor=unconfined", "seccomp=unconfined" },
+            runtime.Definition.SecurityOptions.ToArray());
+        CollectionAssert.Contains(
+            runtime.Definition.Devices.ToList(),
+            new AgentDeviceMapping("/dev/fuse", "/dev/fuse", "rwm"));
     }
 
     private sealed class FakeRuntime : IAgentContainerRuntime

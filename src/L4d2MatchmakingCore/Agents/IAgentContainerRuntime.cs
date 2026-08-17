@@ -15,6 +15,8 @@ public sealed record AgentVolumeMount(string Name, string Target);
 
 public sealed record AgentPortBinding(string HostIp, int HostPort, int ContainerPort);
 
+public sealed record AgentDeviceMapping(string HostPath, string ContainerPath, string Permissions);
+
 public sealed record ManagedAgentContainerDefinition(
     string Name,
     string Image,
@@ -25,4 +27,8 @@ public sealed record ManagedAgentContainerDefinition(
     IReadOnlyList<int> PublishedContainerPorts,
     AgentPortBinding NoVncBinding,
     string Network,
-    string? DownloadRegion);
+    IReadOnlyList<string> Environment,
+    long SharedMemoryBytes,
+    IReadOnlyList<AgentDeviceMapping> Devices,
+    IReadOnlyList<string> SecurityOptions,
+    string RestartPolicy);

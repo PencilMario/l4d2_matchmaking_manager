@@ -28,7 +28,7 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
             Name = definition.Name,
             Image = definition.Image,
             Labels = definition.Labels.ToDictionary(pair => pair.Key, pair => pair.Value),
-            Env = definition.DownloadRegion is null ? [] : ["STEAM_DOWNLOAD_REGION=" + definition.DownloadRegion],
+            Env = definition.Environment.ToList(),
             ExposedPorts = definition.PublishedContainerPorts.ToDictionary(
                 port => $"{port}/tcp",
                 _ => new EmptyStruct()),
@@ -39,6 +39,22 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
                     .Concat(definition.BindMounts.Select(mount => $"{mount.Source}:{mount.Target}"))
                     .ToList(),
                 NetworkMode = definition.Network,
+                ShmSize = definition.SharedMemoryBytes,
+                SecurityOpt = definition.SecurityOptions.ToList(),
+                RestartPolicy = new RestartPolicy
+                {
+                    Name = definition.RestartPolicy == "unless-stopped"
+                        ? RestartPolicyKind.UnlessStopped
+                        : throw new InvalidOperationException("invalid_managed_agent_restart_policy"),
+                },
+                Devices = definition.Devices
+                    .Select(device => new DeviceMapping
+                    {
+                        PathOnHost = device.HostPath,
+                        PathInContainer = device.ContainerPath,
+                        CgroupPermissions = device.Permissions,
+                    })
+                    .ToList(),
                 PortBindings = new Dictionary<string, IList<PortBinding>>
                 {
                     [$"{definition.NoVncBinding.ContainerPort}/tcp"] =
