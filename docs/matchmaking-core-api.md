@@ -4,6 +4,9 @@ Core 是单 Docker 主机上的 L4D2 暖服控制面。它管理 PostgreSQL 配�
 的 Agent 容器、以 A2S 和 Agent 实时观察执行调度，并代理任意 Steam lobby 的只读查询。
 Core API 与动态 noVNC 端口都只绑定宿主机 `127.0.0.1`。
 
+面向浏览器管理端的完整请求/响应契约见
+[matchmaking-core-frontend-api.md](matchmaking-core-frontend-api.md)。
+
 ## 部署
 
 先从仓库根目录构建 Agent 镜像：
