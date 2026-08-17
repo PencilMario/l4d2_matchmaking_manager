@@ -2,13 +2,12 @@
 
 ## Checkpoint
 
-- **Current todo:** deployment/docs update and local/remote integration
-  verification.
+- **Current todo:** all planned work implemented; awaiting final verification
+  review.
 - **Completed todos:** reservation-only RCON credentials; authenticated current
   warm-up status API; bounded multi-Agent scheduler batch planning; Target
   Server drain lifecycle.
-- **Next step:** expose the scheduler limit in Compose/docs, run full solution
-  verification, then deploy to the existing Core host.
+- **Next step:** retain the evidence for handoff.
 
 ## Task 1
 
@@ -74,3 +73,21 @@
 - **Drift check:** one drain service owns stop confirmation and failure
   quarantine. Target Server endpoints only translate the ownership result to
   HTTP, and no credentials are added to audits. Decision: continue.
+
+## Task 5
+
+- **Behavior:** Compose passes `CORE_SCHEDULER_MAX_STARTS_PER_TICK` with a
+  default of 16, and operator documentation covers the status endpoint, RCON
+  restriction and drain `409` lifecycle.
+- **Local evidence:** Compose contract passed; `dotnet test
+  L4d2MatchmakingManager.sln --no-restore` passed all runnable suites, with
+  the Core suite reporting 58 passed and 3 established PostgreSQL-precondition
+  skips. `dotnet build L4d2MatchmakingManager.sln --warnaserror --no-restore`
+  completed with 0 warnings and 0 errors.
+- **Remote evidence:** deployed the rebuilt Core image to the existing private
+  host. Core and PostgreSQL were running; loopback `/healthz` returned `alive`;
+  authenticated `GET /v1/warmups` returned an empty array while no warm-ups
+  were active. No token, key, RCON credential or ciphertext is recorded here.
+- **Drift check:** deployment updated only the Core Compose service. The
+  PostgreSQL service, remote secret/env file and standalone Agent remained
+  untouched. Decision: continue.

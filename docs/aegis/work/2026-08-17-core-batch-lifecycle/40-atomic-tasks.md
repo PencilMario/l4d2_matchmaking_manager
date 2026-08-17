@@ -2,4 +2,4 @@
 - [x] Add authenticated current warm-up status API.
 - [x] Add bounded multi-Agent selector and scheduler batch planning.
 - [x] Drain active operations before disabling or deleting a Target Server.
-- [ ] Update deployment/docs and verify locally and remotely.
+- [x] Update deployment/docs and verify locally and remotely.
