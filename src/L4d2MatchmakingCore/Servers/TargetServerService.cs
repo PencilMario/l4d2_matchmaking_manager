@@ -134,6 +134,8 @@ public sealed class TargetServerService(
             throw new ArgumentException("invalid_target_server_configuration");
         if (rconPassword is { Length: 0 })
             throw new ArgumentException("invalid_rcon_password");
+        if (!requiresReservation && rconPassword is not null)
+            throw new ArgumentException("rcon_requires_reservation");
 
         return new TargetServerConfiguration(
             TargetServerEndpointParser.Parse(endpoint),
@@ -143,7 +145,7 @@ public sealed class TargetServerService(
             effectiveAttemptWindow,
             effectivePlayerTarget,
             enabled ?? true,
-            rconPassword);
+            requiresReservation ? rconPassword : null);
     }
 
     private static TargetServerResponse ToResponse(TargetServer server) => new(

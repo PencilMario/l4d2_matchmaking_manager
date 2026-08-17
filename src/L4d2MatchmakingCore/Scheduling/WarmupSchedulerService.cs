@@ -259,7 +259,7 @@ public sealed class WarmupSchedulerService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         AgentOperationStartResult start;
-        var rconPassword = server.RconPasswordCiphertext is null
+        var rconPassword = !server.RequiresReservation || server.RconPasswordCiphertext is null
             ? null
             : (rconCredentials ?? throw new InvalidOperationException("rcon_credential_protector_not_configured"))
                 .Unprotect(server.RconPasswordCiphertext);

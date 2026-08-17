@@ -94,6 +94,36 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
+    public async Task TickNeverDecryptsRconPasswordForStandardAgentRequest()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var server = new TargetServer
+        {
+            Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27083, Enabled = true, RequiresReservation = false,
+            PlayerTarget = 6, AttemptWindowSeconds = 720, RconPasswordCiphertext = "unexpected-standard-credential",
+        };
+        db.AddRange(agent, server);
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var credentials = new FakeRconCredentialProtector("must-not-be-decrypted");
+        var scheduler = CreateSchedulerWithCredentials(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s(),
+            credentials);
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.IsNull(credentials.LastCiphertext);
+        Assert.IsNotNull(agents.LastStartRequest);
+        Assert.IsNull(agents.LastStartRequest.RconPassword);
+        Assert.AreEqual(AgentLobbyMode.Standard, agents.LastStartRequest.Mode);
+    }
+
+    [TestMethod]
     public async Task TickPersistsRoundRobinCursorBetweenEqualPriorityTargets()
     {
         await using var db = CreateDb();

@@ -174,6 +174,54 @@ public sealed class TargetServerEndpointTests
         Assert.IsFalse(updatedJson.GetProperty("hasRconCredentials").GetBoolean());
     }
 
+    [TestMethod]
+    public async Task NormalTargetRejectsRconPasswordAndClearsItWhenLeavingReservationMode()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new ServerFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+
+        var normal = await client.PostAsJsonAsync("/v1/servers", new CreateTargetServerRequest(
+            "203.0.113.7:27083",
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "must-not-be-accepted"));
+        var reserved = await client.PostAsJsonAsync("/v1/servers", new CreateTargetServerRequest(
+            "203.0.113.7:27083",
+            true,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "credential-to-clear"));
+        var reservedServer = await reserved.Content.ReadFromJsonAsync<TargetServerResponse>();
+        Assert.IsNotNull(reservedServer);
+
+        var converted = await client.PutAsJsonAsync($"/v1/servers/{reservedServer.Id}", new UpdateTargetServerRequest(
+            "203.0.113.7:27083",
+            false,
+            null,
+            null,
+            null,
+            null,
+            null));
+        var convertedServer = await converted.Content.ReadFromJsonAsync<TargetServerResponse>();
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, normal.StatusCode);
+        StringAssert.Contains(await normal.Content.ReadAsStringAsync(), "rcon_requires_reservation");
+        Assert.AreEqual(HttpStatusCode.Created, reserved.StatusCode);
+        Assert.IsTrue(reservedServer.HasRconCredentials);
+        Assert.AreEqual(HttpStatusCode.OK, converted.StatusCode);
+        Assert.IsNotNull(convertedServer);
+        Assert.IsFalse(convertedServer.HasRconCredentials);
+    }
+
     private sealed class ServerFactory : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
