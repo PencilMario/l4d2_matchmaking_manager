@@ -18,12 +18,15 @@ docker build -f deploy/steam-lobby-agent/Dockerfile -t l4d2-steam-lobby-agent:lo
 sudo install -d -o 1000 -g 1000 -m 0750 /mnt/storage/l4d2-steam-library
 openssl rand -hex 32 | sudo tee /etc/l4d2-matchmaking-core-token >/dev/null
 sudo chmod 0600 /etc/l4d2-matchmaking-core-token
+openssl rand -base64 32 | sudo tee /etc/l4d2-matchmaking-core-rcon-key >/dev/null
+sudo chmod 0600 /etc/l4d2-matchmaking-core-rcon-key
 ```
 
 进入 `deploy/matchmaking-core`，从 `.env.example` 创建 `.env`，至少填写：
 
 ```dotenv
 CORE_API_TOKEN_FILE_HOST=/etc/l4d2-matchmaking-core-token
+CORE_RCON_ENCRYPTION_KEY_FILE_HOST=/etc/l4d2-matchmaking-core-rcon-key
 POSTGRES_PASSWORD=<unique-postgresql-password>
 CORE_SHARED_LIBRARY_HOST_PATH=/mnt/storage/l4d2-steam-library
 CORE_AGENT_STEAM_API_LIBRARY_PATH=<container-visible-path-to-libsteam_api.so>
@@ -74,7 +77,8 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
   "maxConcurrentWarmups": 36,
   "attemptWindowSeconds": 720,
   "playerTarget": 6,
-  "enabled": true
+  "enabled": true,
+  "rconPassword": "<optional-server-rcon-password>"
 }
 ```
 
@@ -82,6 +86,13 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
 端口。可选数值传 `null` 时恢复缺省值：优先级 0、非预留并发 36、尝试窗口 720 秒、人数
 目标 6。预留目标的有效并发始终强制为 1。创建成功返回 `201`，读取/更新成功返回 `200`，
 删除成功返回 `204`，非法配置返回 `400`，未知 ID 返回 `404`。
+
+`rconPassword` 是仅写字段，用于对 reservation UDP 超时执行服务器 `status` 二次验证。Core
+使用 `CORE_RCON_ENCRYPTION_KEY_FILE_HOST` 指向的 32-byte Base64 密钥以 AES-GCM 加密保存它；
+读取响应只提供 `hasRconCredentials`，不会返回密码、密文或密钥。更新时传 `null` 可清除既有
+凭据。对于带凭据的预留服务器，Agent 仅在 reservation UDP 超时时以同一游戏端口连接 Source
+RCON，并且 `status` 含有精确的当前 lobby cookie 才保持大厅；明确拒绝、认证失败或不匹配
+仍按 reservation 失败处理。
 
 ## Agent API
 
@@ -144,7 +155,8 @@ Agent 身份，也不会创建、加入或离开目标 lobby。
 
 ## 调度可见性
 
-调度自动运行，当前管理 API 不提供手工创建 lobby、注入 metadata、传递 RCON 密码或覆盖
-实时 A2S 观察的接口。预留服务器的互斥和 120/30 秒规则见
+调度自动运行，当前管理 API 不提供手工创建 lobby、注入 metadata 或覆盖实时 A2S 观察的接口。
+目标服务器的写接口仅可配置其可选 RCON 密码，调度操作和公开响应均不回显该值。预留服务器的
+互斥和 120/30 秒规则见
 [steam-lobby-automation.md](steam-lobby-automation.md)。Agent API 仅位于 Docker 内网，见
 [steam-lobby-agent-api.md](steam-lobby-agent-api.md)。

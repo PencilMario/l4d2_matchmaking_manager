@@ -10,7 +10,8 @@ public sealed record AgentOperationRequest(
     Guid OperationId,
     AgentLobbyMode Mode,
     string Ipv4Address,
-    ushort Port);
+    ushort Port,
+    string? RconPassword = null);
 
 public sealed record LobbyMemberSnapshot(string SteamId, string? PersonaName);
 

@@ -4,6 +4,7 @@ using System.Net.Sockets;
 
 internal static class ReservationCommand
 {
+    internal const int ReservationTimeoutExitCode = 8;
     private const string SampleChallengeResponse =
         "FFFFFFFF41C40B09030300000000001730FEDE21C7400101726573657276653030303030303000";
     private const string SampleReservationResponse = "FFFFFFFF70C308000001";
@@ -191,7 +192,7 @@ internal static class ReservationCommand
             Console.WriteLine(
                 "ReservationResponse timeout=True request_sent=True " +
                 "verification=server_status_required");
-            return 8;
+            return ReservationTimeoutExitCode;
         }
 
         if (!ReservationProtocol.TryParseReservationResponse(responseBytes, out var response))

@@ -64,7 +64,8 @@ Guard 数据、库路径或原始 Steam 输出。
   "operationId": "2b5baaf4-d85d-4a7d-a515-3bf87ff32036",
   "mode": "reserved",
   "ipv4Address": "203.0.113.7",
-  "port": 27015
+  "port": 27015,
+  "rconPassword": "<private-core-to-agent-only>"
 }
 ```
 
@@ -112,4 +113,6 @@ Guard 数据、库路径或原始 Steam 输出。
   `-silent -no-browser` 启动；Core 管理的 Agent 可由
   `CORE_AGENT_STEAM_LOGIN_UI_MODE=always` 强制恢复可视 UI 后重建。
 - Agent 返回的 reservation 成功表示其 Steam reservation 操作和 lobby 观察成功，
-  不表示服务器 RCON `status` 已独立验证 reservation cookie。
+  或在 UDP 超时后由同一游戏端口的 Source RCON `status` 确认当前 reservation cookie。
+- `rconPassword` 只允许 Core 通过 Docker 内网在创建预留操作时发送；Agent 不将其写入
+  操作快照、日志或 HTTP 响应，也不对非超时结果执行 RCON。

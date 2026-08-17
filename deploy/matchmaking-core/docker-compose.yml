@@ -11,6 +11,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       CORE_API_TOKEN_FILE: /run/secrets/core_api_token
+      CORE_RCON_ENCRYPTION_KEY_FILE: /run/secrets/core_rcon_encryption_key
       CORE_DATABASE_CONNECTION_STRING: Host=postgres;Port=5432;Database=matchmaking;Username=matchmaking;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       CORE_SHARED_LIBRARY_HOST_PATH: ${CORE_SHARED_LIBRARY_HOST_PATH:?Set CORE_SHARED_LIBRARY_HOST_PATH to the shared steamapps host directory}
       CORE_AGENT_STEAM_API_LIBRARY_PATH: ${CORE_AGENT_STEAM_API_LIBRARY_PATH:?Set CORE_AGENT_STEAM_API_LIBRARY_PATH to libsteam_api.so inside the Agent container}
@@ -25,6 +26,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     secrets:
       - core_api_token
+      - core_rcon_encryption_key
     networks:
       - l4d2-matchmaking
 
@@ -48,6 +50,8 @@ services:
 secrets:
   core_api_token:
     file: ${CORE_API_TOKEN_FILE_HOST:?Set CORE_API_TOKEN_FILE_HOST to a token file}
+  core_rcon_encryption_key:
+    file: ${CORE_RCON_ENCRYPTION_KEY_FILE_HOST:?Set CORE_RCON_ENCRYPTION_KEY_FILE_HOST to a 32-byte Base64 key file}
 
 volumes:
   postgres-data:

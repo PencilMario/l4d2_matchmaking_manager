@@ -87,7 +87,13 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
                     RealSessionSettings.EncodeReservationSettings(profile),
                     5000,
                     ReservationProtocol.DefaultHostVersion);
-                if (reservationResult != 0)
+                if (!ReservationResultVerifier.IsAccepted(
+                        reservationResult,
+                        new IPEndPoint(address, request.Port),
+                        created.LobbyId,
+                        request.RconPassword,
+                        static (endpoint, password, lobbyId) =>
+                            SourceRconClient.VerifyReservation(endpoint, password, lobbyId, TimeSpan.FromSeconds(3))))
                     throw new SteamRuntimeException("reservation_failed");
             }
 

@@ -2,6 +2,7 @@ using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.A2s;
 using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Servers;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json;
@@ -14,7 +15,8 @@ public sealed class WarmupSchedulerService(
     SharedLibraryMaintenanceService maintenance,
     IHealthyAgentSelector? selector = null,
     ISourceA2sClient? a2s = null,
-    WarmupDecisionEngine? engine = null)
+    WarmupDecisionEngine? engine = null,
+    IRconCredentialProtector? rconCredentials = null)
 {
     public async Task RecoverAsync(CancellationToken cancellationToken)
     {
@@ -257,13 +259,18 @@ public sealed class WarmupSchedulerService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         AgentOperationStartResult start;
+        var rconPassword = server.RconPasswordCiphertext is null
+            ? null
+            : (rconCredentials ?? throw new InvalidOperationException("rcon_credential_protector_not_configured"))
+                .Unprotect(server.RconPasswordCiphertext);
         try
         {
             start = await agents.StartOperationAsync(agent, new AgentOperationRequest(
                 operationId,
                 server.RequiresReservation ? AgentLobbyMode.Reserved : AgentLobbyMode.Standard,
                 address.ToString(),
-                checked((ushort)server.Port)), cancellationToken);
+                checked((ushort)server.Port),
+                rconPassword), cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

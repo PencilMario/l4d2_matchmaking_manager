@@ -22,6 +22,10 @@ if ($compose -notmatch 'CORE_API_TOKEN_FILE') {
     throw 'Core must read the management token from a secret file.'
 }
 
+if ($compose -notmatch 'CORE_RCON_ENCRYPTION_KEY_FILE') {
+    throw 'Core must read the RCON encryption key from a secret file.'
+}
+
 if ($compose -notmatch 'CORE_SHARED_LIBRARY_HOST_PATH') {
     throw 'Core must receive the shared Steam library host path for managed Agents.'
 }
@@ -40,4 +44,8 @@ if ($compose -notmatch 'CORE_AGENT_IMAGE') {
 
 if ($compose -cmatch '(?m)^\s+CORE_API_TOKEN:\s*') {
     throw 'Core must not place the management token directly in Compose environment values.'
+}
+
+if ($compose -cmatch '(?m)^\s+CORE_RCON_ENCRYPTION_KEY:\s*') {
+    throw 'Core must not place the RCON encryption key directly in Compose environment values.'
 }

@@ -3,6 +3,7 @@ using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.A2s;
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Scheduling;
+using L4d2MatchmakingCore.Servers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -60,6 +61,36 @@ public sealed class WarmupSchedulerServiceTests
         Assert.AreEqual(1, agents.StartCalls);
         Assert.IsTrue(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id));
         Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.TargetServerId == server.Id && attempt.State == "active"));
+    }
+
+    [TestMethod]
+    public async Task TickPassesDecryptedRconPasswordOnlyInTheReservedAgentRequest()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var server = new TargetServer
+        {
+            Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27083, Enabled = true, RequiresReservation = true,
+            PlayerTarget = 6, AttemptWindowSeconds = 720, RconPasswordCiphertext = "encrypted-rcon-password",
+        };
+        db.AddRange(agent, server);
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var credentials = new FakeRconCredentialProtector("decrypted-rcon-password");
+        var scheduler = CreateSchedulerWithCredentials(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s(),
+            credentials);
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual("encrypted-rcon-password", credentials.LastCiphertext);
+        Assert.IsNotNull(agents.LastStartRequest);
+        Assert.AreEqual("decrypted-rcon-password", agents.LastStartRequest.RconPassword);
+        Assert.AreEqual(AgentLobbyMode.Reserved, agents.LastStartRequest.Mode);
     }
 
     [TestMethod]
@@ -329,6 +360,22 @@ public sealed class WarmupSchedulerServiceTests
         .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
         .Options);
 
+    private static WarmupSchedulerService CreateSchedulerWithCredentials(
+        MatchmakingDbContext db,
+        IAgentControlClient agents,
+        SharedLibraryMaintenanceService maintenance,
+        IHealthyAgentSelector selector,
+        ISourceA2sClient a2s,
+        IRconCredentialProtector credentials)
+    {
+        var constructor = typeof(WarmupSchedulerService)
+            .GetConstructors()
+            .SingleOrDefault(candidate => candidate.GetParameters()
+                .Any(parameter => parameter.ParameterType == typeof(IRconCredentialProtector)));
+        Assert.IsNotNull(constructor, "WarmupSchedulerService must receive the credential protector at the Agent request boundary.");
+        return (WarmupSchedulerService)constructor.Invoke([db, agents, maintenance, selector, a2s, null, credentials]);
+    }
+
     private sealed class FakeAgents(
         AgentOperationSnapshot? snapshot,
         bool throwOnGetOperation = false,
@@ -337,10 +384,12 @@ public sealed class WarmupSchedulerServiceTests
     {
         public int StartCalls { get; private set; }
         public int StopCalls { get; private set; }
+        public AgentOperationRequest? LastStartRequest { get; private set; }
         public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AgentOperationStartResult> StartOperationAsync(WarmupAgent agent, AgentOperationRequest request, CancellationToken cancellationToken)
         {
             StartCalls++;
+            LastStartRequest = request;
             return throwOnStart
                 ? Task.FromException<AgentOperationStartResult>(new HttpRequestException("agent_unavailable"))
                 : Task.FromResult(new AgentOperationStartResult(new AgentOperationSnapshot(request.OperationId, "active", null, null, DateTimeOffset.UtcNow), false));
@@ -357,6 +406,17 @@ public sealed class WarmupSchedulerServiceTests
                 : Task.CompletedTask;
         }
         public Task<LobbySnapshot> ReadLobbyAsync(WarmupAgent agent, string lobbyId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeRconCredentialProtector(string password) : IRconCredentialProtector
+    {
+        public string? LastCiphertext { get; private set; }
+        public string Protect(string password) => throw new NotSupportedException();
+        public string? Unprotect(string? ciphertext)
+        {
+            LastCiphertext = ciphertext;
+            return ciphertext is null ? null : password;
+        }
     }
 
     private sealed class FakeSelector(WarmupAgent agent) : IHealthyAgentSelector

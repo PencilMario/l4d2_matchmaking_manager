@@ -47,15 +47,41 @@ public sealed class AgentControlClientTests
         Assert.IsTrue(handler.Hosts.All(host => host == $"l4d2-agent-{agent.Id:N}:8080"));
     }
 
+    [TestMethod]
+    public async Task StartSendsRconPasswordOnlyInThePrivateOperationRequest()
+    {
+        var operationId = Guid.NewGuid();
+        var operation = new AgentOperationSnapshot(operationId, "active", null, null, DateTimeOffset.UnixEpoch);
+        var handler = new RecordingHandler(operation, new LobbySnapshot("109775242170052468", "owner", [], new Dictionary<string, string>(), DateTimeOffset.UnixEpoch));
+        using var httpClient = new HttpClient(handler);
+        var client = new AgentControlClient(httpClient);
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+        var constructor = typeof(AgentOperationRequest).GetConstructor(
+            [typeof(Guid), typeof(AgentLobbyMode), typeof(string), typeof(ushort), typeof(string)]);
+
+        Assert.IsNotNull(constructor, "The private operation contract must carry the optional RCON password.");
+        var request = (AgentOperationRequest)constructor.Invoke([operationId, AgentLobbyMode.Reserved, "203.0.113.7", (ushort)27083, "private-rcon-password"]);
+
+        await client.StartOperationAsync(agent, request, CancellationToken.None);
+
+        Assert.AreEqual("private-rcon-password", handler.RconPassword);
+    }
+
     private sealed class RecordingHandler(AgentOperationSnapshot operation, LobbySnapshot lobby) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
         public List<string> Hosts { get; } = [];
+        public string? RconPassword { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
             Hosts.Add($"{request.RequestUri.Host}:{request.RequestUri.Port}");
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath == "/v1/operations")
+            {
+                var body = await request.Content!.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken);
+                RconPassword = body.GetProperty("rconPassword").GetString();
+            }
             object payload = request.RequestUri.AbsolutePath switch
             {
                 "/v1/probe/status" => new AgentHealthSnapshot(true, null, DateTimeOffset.UnixEpoch),
@@ -65,10 +91,10 @@ public sealed class AgentControlClientTests
                 _ => new { },
             };
             var statusCode = request.Method == HttpMethod.Post ? HttpStatusCode.OK : HttpStatusCode.OK;
-            return Task.FromResult(new HttpResponseMessage(statusCode)
+            return new HttpResponseMessage(statusCode)
             {
                 Content = JsonContent.Create(payload),
-            });
+            };
         }
     }
 }
