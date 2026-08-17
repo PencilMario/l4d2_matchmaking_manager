@@ -1,0 +1,5 @@
+- [ ] Enforce reservation-only RCON credentials.
+- [ ] Add authenticated current warm-up status API.
+- [ ] Add bounded multi-Agent selector and scheduler batch planning.
+- [ ] Drain active operations before disabling or deleting a Target Server.
+- [ ] Update deployment/docs and verify locally and remotely.
