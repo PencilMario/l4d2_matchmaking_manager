@@ -298,10 +298,8 @@ The service loads Target Server IDs from `MatchmakingDbContext.AsNoTracking()`, 
 ### Task 9: Add desktop visual and journey verification
 
 **Files:**
-- Create: `frontend/e2e/resource-workspace.spec.ts`
-- Create: `frontend/e2e/fixtures/core-mock.ts`
+- Create: `frontend/e2e/management-workspace.spec.ts`
 - Modify: `frontend/playwright.config.ts`
-- Create: `frontend/e2e/screenshots/.gitkeep`
 
 **Why this task exists:** Heavy WebGL and pointer effects can render blank or cover the operational data even while unit tests pass. The main desktop journey must be verified against deterministic Core responses.
 
@@ -313,7 +311,7 @@ The service loads Target Server IDs from `MatchmakingDbContext.AsNoTracking()`, 
 
 - [ ] **Step 2: Write desktop journey assertions.** At `1280x720` and `1440x900`, open the workspace, assert the server name/endpoint/player count, click a topology unit to filter rows, open the edit drawer, trigger drain `409`, and confirm the form/row remain. Query a Lobby and assert metadata-only/member-complete states.
 
-- [ ] **Step 3: Add canvas and overlap checks.** Assert a non-zero canvas pixel sample for `Hyperspeed` or the deterministic visual fallback, inspect bounding boxes for server name/player/status/form controls, and fail if the visual stage intersects the data plane or if text overflows its row.
+- [ ] **Step 3: Add canvas and overlap checks.** Assert a visible, non-zero-size `Hyperspeed` canvas and a non-empty Playwright canvas screenshot, inspect the visual/data stacking boundary, and fail if text overflows its row. Use the generated desktop screenshot for pixel statistics because the vendored renderer intentionally does not preserve its WebGL drawing buffer.
 
 - [ ] **Step 4: Run Playwright.** Run `npm --prefix frontend run test:e2e`. Expected result: both desktop projects pass; screenshots are generated only when explicitly requested and are not committed as default output.
 
@@ -360,16 +358,16 @@ Expected result: all Core tests, frontend unit tests, desktop Playwright project
 
 ## TodoCheckpointDraft
 
-- Current todo: select execution mode, then begin Task 1 in an isolated implementation worktree.
-- Completed: API/design exploration, React Bits revision inspection, A2S/parser baseline read, user approval of visual design and desktop-only boundary, plan and atomic checklist authoring.
-- Active slice: no source implementation started; execution handoff is pending.
-- Evidence refs: `6a91a71` design commit, `f91f41e` plan commit, current `SourceA2sClient`/test files, Core route registration.
-- Blocked on: user selection of subagent-driven or inline execution.
-- Next: initialize the implementation worktree, reread this checkpoint and execute Task 1.
+- Current todo: none; implementation and final verification complete for the approved desktop scope.
+- Completed: API/design exploration, React Bits revision inspection, A2S parser and Observation contract, Core collector/endpoint, Vite/React shell, typed client/snapshot polling, Target Server PUT/RCON/drain behavior, Agent lifecycle boundary, Lobby diagnostics, deterministic desktop journey, documentation, and final regression.
+- Active slice: none. The implementation is on `feature/management-frontend` in the isolated worktree.
+- Evidence refs: full Core suite `79 passed / 3 skipped`, solution build `0 warnings / 0 errors`, frontend unit suite `12 files / 24 tests passed`, production build passed, Playwright Chromium `1280x720` and `1440x900` both passed, final desktop screenshot pixel stats `YMAX=217/SATMAX=73`, and `git diff --check` clean.
+- Blocked on: none. Real target-server/A2S acceptance still requires production credentials and a live server outside this repository.
+- Next: review or integrate the branch; no additional implementation slice is required by the approved scope.
 
 ## DriftCheckDraft
 
 - Scope: desktop frontend plus additive Core Observation contract; mobile explicitly excluded.
 - Compatibility: scheduler, existing API shapes, auth, secrets and Agent boundaries remain owners.
-- Retirement: duplicated DNS blocks and discarded parser fields have explicit removal points.
-- Decision: `pause-for-user` after plan handoff; no implementation claim is made by this plan.
+- Retirement: discarded parser fields and duplicated scheduler DNS blocks are retired; no display snapshot is used by scheduler. React Bits sources are vendored at one pinned revision rather than fetched at runtime.
+- Decision: `continue` to integration/review; no scope drift detected.

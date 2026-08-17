@@ -106,11 +106,10 @@ public sealed class WarmupSchedulerService(
             A2sServerInfo liveInfo;
             try
             {
-                var liveAddresses = await Dns.GetHostAddressesAsync(target.Host, cancellationToken);
-                var liveAddress = liveAddresses.FirstOrDefault(candidate => candidate.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-                if (liveAddress is null)
+                var liveEndpoint = await A2sEndpointResolver.ResolveIpv4Async(target.Host, target.Port, cancellationToken);
+                if (liveEndpoint is null)
                     continue;
-                liveInfo = await a2s.GetInfoAsync(new IPEndPoint(liveAddress, target.Port), cancellationToken);
+                liveInfo = await a2s.GetInfoAsync(liveEndpoint, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -309,15 +308,14 @@ public sealed class WarmupSchedulerService(
         {
             return null;
         }
-        IPAddress? address;
+        IPEndPoint? endpoint;
         A2sServerInfo info;
         try
         {
-            var addresses = await Dns.GetHostAddressesAsync(server.Host, cancellationToken);
-            address = addresses.FirstOrDefault(candidate => candidate.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-            if (address is null)
+            endpoint = await A2sEndpointResolver.ResolveIpv4Async(server.Host, server.Port, cancellationToken);
+            if (endpoint is null)
                 return null;
-            info = await a2s!.GetInfoAsync(new IPEndPoint(address, server.Port), cancellationToken);
+            info = await a2s!.GetInfoAsync(endpoint, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -358,7 +356,7 @@ public sealed class WarmupSchedulerService(
         }
         activeWarmups[server.Id] = activeWarmups.GetValueOrDefault(server.Id) + 1;
         plannedCursorTargets[server.Priority] = server.Id;
-        return new PlannedStart(agent, server, address, attempt);
+        return new PlannedStart(agent, server, endpoint.Address, attempt);
     }
 
     private async Task<StartResult> StartPlannedAsync(PlannedStart plan, CancellationToken cancellationToken)

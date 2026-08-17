@@ -178,6 +178,33 @@ Content-Type: application/json; charset=utf-8
 []
 ```
 
+### `GET /v1/servers/observations`
+
+返回每一台已配置 Target Server 的内存态 A2S 展示快照。它是认证的只读路由，服务端每五秒
+采样一次；浏览器只能读取该结果，不能因轮询而直接触发 UDP A2S 查询。该字面量路由在
+`GET /v1/servers/{serverId}` 之前匹配。
+
+```json
+[
+  {
+    "targetServerId": "c691ca6a-6c2a-4ece-b7bd-2e951eee7caa",
+    "status": "online",
+    "serverName": "L4D2 HK Versus #1",
+    "playerCount": 2,
+    "maxPlayers": 12,
+    "observedAt": "2026-08-18T12:00:05+00:00"
+  }
+]
+```
+
+| `status` | 实时字段与前端行为 |
+| --- | --- |
+| `online` | 使用 `serverName` 作为主名称，并显示 `playerCount / maxPlayers` 与观测时间。 |
+| `unavailable` | `serverName`、`playerCount`、`maxPlayers` 必为 `null`；显示 A2S 不可用与 `-- / --`，不能显示旧成功样本。 |
+| `pending` | 还未完成首轮采样；全部实时字段和 `observedAt` 为 `null`，显示等待首次观测。 |
+
+空数组表示尚未配置 Target Server。该响应不包含 RCON、Docker、Steam 凭据或 Agent 身份。
+
 ### `POST /v1/servers`
 
 请求：
@@ -626,9 +653,11 @@ Content-Type: application/json; charset=utf-8
 
 ## 前端状态处理
 
-- 首屏可并行读取 `/v1/servers`、`/v1/agents`、`/v1/warmups`；只在用户输入或点击
-  查询时调用 `/v1/lobbies/{lobbyId}`。
-- 服务器或 Agent 写操作返回成功后，立即刷新对应列表和 `/v1/warmups`。不要在 `409`、
+- 首屏可并行读取 `/v1/servers`、`/v1/servers/observations`、`/v1/agents`、`/v1/warmups`；
+  每五秒刷新 observations、agents 和 warmups。只在用户输入或点击查询时调用
+  `/v1/lobbies/{lobbyId}`。
+- 服务器或 Agent 写操作返回成功后，立即刷新对应列表、`/v1/servers/observations` 和
+  `/v1/warmups`。不要在 `409`、
   `500`、`503` 上做不可逆的乐观更新。
 - 对 `401` 清理管理会话并返回登录/令牌配置流程；对服务器 `409` 保留表单内容并刷新
   服务器和暖服状态；对 `500`/`503` 显示“操作未确认”。

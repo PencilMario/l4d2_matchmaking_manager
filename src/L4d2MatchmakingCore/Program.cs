@@ -22,6 +22,7 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IRconCredentialProtector, RconCredentialProtector>();
 builder.Services.AddScoped<TargetServerService>();
+builder.Services.AddScoped<TargetServerObservationService>();
 var agentContainerOptions = builder.Environment.IsEnvironment("Testing")
     ? new AgentContainerOptions("l4d2-steam-lobby-agent:local", "/mnt/steam-library", "l4d2-matchmaking", 18083, 18183, "/mnt/steam-library/libsteam_api.so")
     : AgentContainerOptions.FromConfiguration(builder.Configuration);
@@ -33,13 +34,17 @@ builder.Services.AddHttpClient<IAgentControlClient, AgentControlClient>();
 builder.Services.AddScoped<IHealthyAgentSelector, HealthyAgentSelector>();
 builder.Services.AddScoped<LobbyQueryService>();
 builder.Services.AddSingleton<ISourceA2sClient>(new SourceA2sClient(TimeSpan.FromSeconds(3)));
+builder.Services.AddSingleton<TargetServerObservationStore>();
 builder.Services.AddSingleton<WarmupDecisionEngine>();
 builder.Services.AddScoped<SharedLibraryMaintenanceService>();
 builder.Services.AddScoped<WarmupSchedulerService>();
 builder.Services.AddScoped<WarmupStatusService>();
 builder.Services.AddScoped<WarmupAttemptDrainService>();
 if (!builder.Environment.IsEnvironment("Testing"))
+{
     builder.Services.AddHostedService<WarmupSchedulerBackgroundService>();
+    builder.Services.AddHostedService<TargetServerObservationCollector>();
+}
 
 var app = builder.Build();
 if (!app.Environment.IsEnvironment("Testing"))
@@ -52,9 +57,9 @@ if (!app.Environment.IsEnvironment("Testing"))
 }
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "alive" }));
-app.MapGroup("/v1/servers")
-    .RequireAuthorization()
-    .MapTargetServerEndpoints();
+var targetServerGroup = app.MapGroup("/v1/servers").RequireAuthorization();
+targetServerGroup.MapTargetServerObservationEndpoints();
+targetServerGroup.MapTargetServerEndpoints();
 app.MapGroup("/v1/agents")
     .RequireAuthorization()
     .MapWarmupAgentEndpoints();

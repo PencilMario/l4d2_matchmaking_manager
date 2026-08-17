@@ -566,6 +566,6 @@ public sealed class WarmupSchedulerServiceTests
         public Task<A2sServerInfo> GetInfoAsync(System.Net.IPEndPoint endpoint, CancellationToken cancellationToken) =>
             failingPorts?.Contains(endpoint.Port) == true
                 ? Task.FromException<A2sServerInfo>(new TimeoutException("a2s_timeout"))
-                : Task.FromResult(new A2sServerInfo(playersByPort?.GetValueOrDefault(endpoint.Port) ?? 0, DateTimeOffset.UtcNow));
+                : Task.FromResult(new A2sServerInfo("test-server", playersByPort?.GetValueOrDefault(endpoint.Port) ?? 0, 8, DateTimeOffset.UtcNow));
     }
 }

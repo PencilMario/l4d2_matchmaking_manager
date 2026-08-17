@@ -86,6 +86,29 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
 }
 ```
 
+`GET /v1/servers/observations` 是认证的只读展示模型。它返回每一台已配置 Target Server
+的最新内存态 A2S 观察结果，不写 PostgreSQL，也不会在 HTTP 请求中直接发出 UDP 查询。实现时该
+字面量路由必须先于 `/{id}` 注册。响应的每一项为：
+
+```json
+{
+  "targetServerId": "c691ca6a-6c2a-4ece-b7bd-2e951eee7caa",
+  "status": "online",
+  "serverName": "L4D2 HK Versus #1",
+  "playerCount": 2,
+  "maxPlayers": 12,
+  "observedAt": "2026-08-18T12:00:05+00:00"
+}
+```
+
+- `online` 表示本轮 A2S_INFO 成功，服名、当前人数和最大人数可用。
+- `unavailable` 表示本轮 DNS/A2S 超时或包无效；`serverName`、`playerCount` 与
+  `maxPlayers` 都为 `null`，不回显先前成功值，`observedAt` 是本次失败时间。
+- `pending` 表示尚未完成第一轮采样；全部实时字段和 `observedAt` 都为 `null`。
+
+观察器每五秒更新一次且只服务 UI 读模型。调度器仍为独立的实时 A2S 决策 owner，不得使用此
+缓存替代调度事实。响应始终不包含 RCON、Docker、Steam 或 Agent 身份数据。
+
 `endpoint` 接受 hostname 或 IPv4，省略端口时为 `27015`；不接受 URL、IPv6、凭据或非法
 端口。可选数值传 `null` 时恢复缺省值：优先级 0、非预留并发 36、尝试窗口 720 秒、人数
 目标 6。预留目标的有效并发始终强制为 1。创建成功返回 `201`，读取/更新成功返回 `200`，
