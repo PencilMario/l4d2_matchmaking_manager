@@ -54,6 +54,12 @@ if (-not [regex]::IsMatch(
     throw 'The initializer must keep VNC for an unconfigured auto account and disable it after login or in never mode.'
 }
 
+if ($initializer -notmatch 'l4d2-agent-ready' -or
+    $initializer -notmatch 'login_ready_marker' -or
+    $initializer -notmatch '\[ -f "\$\{login_ready_marker\}" \]') {
+    throw 'The initializer must use the account-local Agent readiness marker when Steam does not write MostRecent.'
+}
+
 $compose = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'docker-compose.yml')
 if ($compose -match 'STEAM_ARGS:') {
     throw 'The compose file must not pin Steam to UI mode after login has completed.'

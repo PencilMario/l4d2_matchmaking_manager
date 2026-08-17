@@ -68,6 +68,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         esac
 
         loginusers_file="${steam_config_directory}/loginusers.vdf"
+        login_ready_marker="${steam_config_directory}/l4d2-agent-ready"
         enable_vnc=true
         case "${login_ui_mode}" in
             always)
@@ -78,7 +79,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
                 enable_vnc=false
                 ;;
             auto)
-                if [ -f "${loginusers_file}" ] && grep -Eq '"MostRecent"[[:space:]]*"1"' "${loginusers_file}"; then
+                if { [ -f "${loginusers_file}" ] && grep -Eq '"MostRecent"[[:space:]]*"1"' "${loginusers_file}"; } || [ -f "${login_ready_marker}" ]; then
                     steam_arguments='-silent -no-browser'
                     enable_vnc=false
                 else

@@ -7,6 +7,7 @@ builder.Services.AddSingleton<ISteamSessionActor>(services =>
     SteamSessionActor.Create(services.GetRequiredService<AgentSessionOptions>().SteamApiLibraryPath));
 builder.Services.AddSingleton<IAgentSteamSessionService, AgentSteamSessionService>();
 builder.Services.AddSingleton<ISteamDesktopDetector, SteamDesktopDetector>();
+builder.Services.AddSingleton<IAgentReadinessMarker>(_ => FileAgentReadinessMarker.FromEnvironment());
 builder.Services.AddSingleton<ProbeStatusService>();
 
 var app = builder.Build();

@@ -66,8 +66,10 @@ public sealed class ProbeStatusEndpointTests
             {
                 services.RemoveAll<IAgentSteamSessionService>();
                 services.RemoveAll<ISteamDesktopDetector>();
+                services.RemoveAll<IAgentReadinessMarker>();
                 services.AddSingleton(sessionService);
                 services.AddSingleton<ISteamDesktopDetector>(new FakeDesktopDetector(desktopRunning));
+                services.AddSingleton<IAgentReadinessMarker>(new FakeReadinessMarker());
             });
         }
     }
@@ -91,5 +93,10 @@ public sealed class ProbeStatusEndpointTests
     private sealed class FakeDesktopDetector(bool isRunning) : ISteamDesktopDetector
     {
         public bool IsRunning() => isRunning;
+    }
+
+    private sealed class FakeReadinessMarker : IAgentReadinessMarker
+    {
+        public Task MarkReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

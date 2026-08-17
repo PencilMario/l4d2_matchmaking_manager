@@ -2,7 +2,10 @@ using L4d2Matchmaking.Contracts;
 
 namespace L4d2LobbyAgent.Probe;
 
-public sealed class ProbeStatusService(IAgentSteamSessionService sessionService, ISteamDesktopDetector desktopDetector)
+public sealed class ProbeStatusService(
+    IAgentSteamSessionService sessionService,
+    ISteamDesktopDetector desktopDetector,
+    IAgentReadinessMarker? readinessMarker = null)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
 
@@ -15,6 +18,8 @@ public sealed class ProbeStatusService(IAgentSteamSessionService sessionService,
             var desktopRunning = desktopDetector.IsRunning();
             var failure = desktopRunning ? health.Failure : "steam_desktop_unavailable";
             var ready = desktopRunning && health.Ready;
+            if (ready && readinessMarker is not null)
+                await readinessMarker.MarkReadyAsync(cancellationToken);
 
             return new ProbeStatusResponse(
                 ready,

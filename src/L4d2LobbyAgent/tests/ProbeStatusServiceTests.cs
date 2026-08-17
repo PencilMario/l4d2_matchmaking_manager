@@ -62,6 +62,25 @@ public sealed class ProbeStatusServiceTests
         Assert.AreEqual("unknown", result.Checks.SteamApiInit);
     }
 
+    [TestMethod]
+    public async Task GetAsyncPersistsTheLoginMarkerOnlyAfterTheFullHealthCheckSucceeds()
+    {
+        var marker = new FakeReadinessMarker();
+        var readyService = new ProbeStatusService(
+            new FixedFakeSessionService(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow)),
+            new FakeDesktopDetector(true),
+            marker);
+        var desktopFailedService = new ProbeStatusService(
+            new FixedFakeSessionService(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow)),
+            new FakeDesktopDetector(false),
+            marker);
+
+        await readyService.GetAsync(CancellationToken.None);
+        await desktopFailedService.GetAsync(CancellationToken.None);
+
+        Assert.AreEqual(1, marker.MarkReadyCalls);
+    }
+
     private sealed class BlockingFakeSessionService : IAgentSteamSessionService
     {
         public int HealthCalls { get; private set; }
@@ -98,5 +117,16 @@ public sealed class ProbeStatusServiceTests
     private sealed class FakeDesktopDetector(bool isRunning) : ISteamDesktopDetector
     {
         public bool IsRunning() => isRunning;
+    }
+
+    private sealed class FakeReadinessMarker : IAgentReadinessMarker
+    {
+        public int MarkReadyCalls { get; private set; }
+
+        public Task MarkReadyAsync(CancellationToken cancellationToken)
+        {
+            MarkReadyCalls++;
+            return Task.CompletedTask;
+        }
     }
 }
