@@ -110,3 +110,27 @@
 ### Risk / Unknown
 
 - 当前轮转游标只在 Agent Start 返回时推进；若 HTTP 请求在 Agent 已创建大厅后超时，现有实现尚未持久化该未知操作和 reservation 排他性。这是下一切片的明确修复项。
+
+## 2026-08-17：不确定操作与 A2S 故障边界切片
+
+### TodoCheckpointDraft
+
+- 已完成：Agent Start/Stop 操作的不确定结果隔离，以及活动/候选 A2S 观测错误的无中断处理。
+- 当前工作项：提供 Core Compose、secret-file 配置、部署/API 文档，并在远程 Docker 主机执行完整容器验收。
+- 下一步：先为 Core Compose 建立静态部署契约，禁止 PostgreSQL 端口与 Agent HTTP 对外发布。
+
+### EvidenceBundleDraft
+
+- RED/GREEN：`StartFailureQuarantinesAgentAndPreservesReservationExclusion` 初始直接收到 Agent HTTP 异常。调度器现在于 Start 前以 `uncertain` 状态写入 operation ID 与 reservation lease，成功响应后才设置 active/推进 cursor；失败则隔离 Agent。第二个 Tick 读取仍失败时没有再次 Start，测试以 1/1 通过。
+- RED/GREEN：`StopFailureQuarantinesAgentAndKeepsReservationLease` 初始直接抛出。Stop 请求失败后 attempt 保持 active、lease 不释放、Agent 标为 `quarantined`，测试以 1/1 通过。
+- RED/GREEN：`ActiveA2sFailureKeepsReservationLease` 与 `TickSkipsA2sUnavailableHigherPriorityTargetAndStartsNextTarget` 初始均因 `TimeoutException` 冒泡失败。活动 attempt 的 DNS/A2S 观测失败现保持状态；候选预检查失败会继续尝试下一台，两个测试以 2/2 通过。
+
+### DriftCheckDraft
+
+- 范围：仅补足既有调度器对 Agent/A2S 运行时依赖的错误边界；`uncertain` 是已有 `WarmupAttempt.State` 的持久状态，不引入新的外部协议。
+- 兼容：取消请求仍终止后台服务；只有成功的 Agent operation snapshot 为 active 才会把 uncertain attempt 转为 active，确认缺失/停止才释放 reservation lease。
+- 决定：`continue`。未改变 HealthyAgentSelector 的单 Agent 选择接口；后续可按真实数百 Agent 负载决定是否引入有界多启动循环。
+
+### Risk / Unknown
+
+- Start 成功但返回非 active 状态的 Agent 失败码尚需在 Agent 真机契约中分类；当前 Agent actor 的已知成功/停止状态为 active/stopped。
