@@ -137,6 +137,43 @@ public sealed class TargetServerEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [TestMethod]
+    public async Task RconPasswordIsRedactedAndCanBeCleared()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new ServerFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+
+        var created = await client.PostAsJsonAsync("/v1/servers", new
+        {
+            endpoint = "203.0.113.7:27083",
+            requiresReservation = true,
+            rconPassword = "not-returned-to-clients",
+        });
+        var createdJson = await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var serverId = createdJson.GetProperty("id").GetGuid();
+
+        var updated = await client.PutAsJsonAsync($"/v1/servers/{serverId}", new
+        {
+            endpoint = "203.0.113.7:27083",
+            requiresReservation = true,
+            priority = 0,
+            maxConcurrentWarmups = 36,
+            attemptWindowSeconds = 720,
+            playerTarget = 6,
+            enabled = true,
+            rconPassword = (string?)null,
+        });
+        var updatedJson = await updated.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+
+        Assert.AreEqual(HttpStatusCode.Created, created.StatusCode);
+        Assert.IsTrue(createdJson.GetProperty("hasRconCredentials").GetBoolean());
+        Assert.IsFalse(createdJson.TryGetProperty("rconPassword", out _));
+        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
+        Assert.IsFalse(updatedJson.GetProperty("hasRconCredentials").GetBoolean());
+    }
+
     private sealed class ServerFactory : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
@@ -160,6 +197,7 @@ public sealed class TargetServerEndpointTests
         private readonly string? _environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         private readonly string? _token = Environment.GetEnvironmentVariable("CORE_API_TOKEN");
         private readonly string? _connection = Environment.GetEnvironmentVariable("CORE_DATABASE_CONNECTION_STRING");
+        private readonly string? _rconEncryptionKey = Environment.GetEnvironmentVariable("CORE_RCON_ENCRYPTION_KEY");
 
         public CoreTestEnvironment()
         {
@@ -168,6 +206,9 @@ public sealed class TargetServerEndpointTests
             Environment.SetEnvironmentVariable(
                 "CORE_DATABASE_CONNECTION_STRING",
                 "Host=127.0.0.1;Database=matchmaking_test;Username=matchmaking;Password=unused");
+            Environment.SetEnvironmentVariable(
+                "CORE_RCON_ENCRYPTION_KEY",
+                Convert.ToBase64String(Enumerable.Repeat((byte)7, 32).ToArray()));
         }
 
         public void Dispose()
@@ -175,6 +216,7 @@ public sealed class TargetServerEndpointTests
             Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", _environment);
             Environment.SetEnvironmentVariable("CORE_API_TOKEN", _token);
             Environment.SetEnvironmentVariable("CORE_DATABASE_CONNECTION_STRING", _connection);
+            Environment.SetEnvironmentVariable("CORE_RCON_ENCRYPTION_KEY", _rconEncryptionKey);
         }
     }
 }

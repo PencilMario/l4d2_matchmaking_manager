@@ -2,7 +2,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace L4d2MatchmakingCore.Configuration;
 
-public sealed record CoreOptions(string ApiToken, string DatabaseConnectionString)
+public sealed record CoreOptions(string ApiToken, string DatabaseConnectionString, string? RconEncryptionKey)
 {
     public static CoreOptions FromConfiguration(IConfiguration configuration)
     {
@@ -24,6 +24,34 @@ public sealed record CoreOptions(string ApiToken, string DatabaseConnectionStrin
         if (string.IsNullOrWhiteSpace(databaseConnectionString))
             throw new InvalidOperationException("core_database_connection_not_configured");
 
-        return new CoreOptions(token, databaseConnectionString);
+        var rconEncryptionKey = ReadOptionalSecret(
+            configuration,
+            "CORE_RCON_ENCRYPTION_KEY",
+            "CORE_RCON_ENCRYPTION_KEY_FILE",
+            "Core:RconEncryptionKey",
+            "Core:RconEncryptionKeyFile",
+            "core_rcon_encryption_key_file_not_found");
+
+        return new CoreOptions(token, databaseConnectionString, rconEncryptionKey);
+    }
+
+    private static string? ReadOptionalSecret(
+        IConfiguration configuration,
+        string valueKey,
+        string fileKey,
+        string alternateValueKey,
+        string alternateFileKey,
+        string missingFileError)
+    {
+        var value = configuration[valueKey] ?? configuration[alternateValueKey];
+        var file = configuration[fileKey] ?? configuration[alternateFileKey];
+        if (string.IsNullOrWhiteSpace(value) && !string.IsNullOrWhiteSpace(file))
+        {
+            if (!File.Exists(file))
+                throw new InvalidOperationException(missingFileError);
+            value = File.ReadAllText(file).Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 }

@@ -20,6 +20,7 @@ builder.Services
         StaticBearerAuthenticationHandler.SchemeName,
         static _ => { });
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IRconCredentialProtector, RconCredentialProtector>();
 builder.Services.AddScoped<TargetServerService>();
 var agentContainerOptions = builder.Environment.IsEnvironment("Testing")
     ? new AgentContainerOptions("l4d2-steam-lobby-agent:local", "/mnt/steam-library", "l4d2-matchmaking", 18083, 18183, "/mnt/steam-library/libsteam_api.so")

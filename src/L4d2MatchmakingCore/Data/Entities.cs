@@ -11,6 +11,7 @@ public sealed class TargetServer
     public int PlayerTarget { get; set; } = 6;
     public int Priority { get; set; }
     public bool Enabled { get; set; } = true;
+    public string? RconPasswordCiphertext { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

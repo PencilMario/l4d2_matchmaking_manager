@@ -12,7 +12,8 @@ public sealed record CreateTargetServerRequest(
     int? MaxConcurrentWarmups,
     int? AttemptWindowSeconds,
     int? PlayerTarget,
-    bool? Enabled);
+    bool? Enabled,
+    string? RconPassword = null);
 
 public sealed record UpdateTargetServerRequest(
     string Endpoint,
@@ -21,7 +22,8 @@ public sealed record UpdateTargetServerRequest(
     int? MaxConcurrentWarmups,
     int? AttemptWindowSeconds,
     int? PlayerTarget,
-    bool? Enabled);
+    bool? Enabled,
+    string? RconPassword = null);
 
 public sealed record TargetServerResponse(
     Guid Id,
@@ -32,5 +34,6 @@ public sealed record TargetServerResponse(
     int AttemptWindowSeconds,
     int PlayerTarget,
     bool Enabled,
+    bool HasRconCredentials,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

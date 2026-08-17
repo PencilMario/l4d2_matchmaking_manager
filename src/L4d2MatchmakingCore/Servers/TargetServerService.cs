@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace L4d2MatchmakingCore.Servers;
 
-public sealed class TargetServerService(MatchmakingDbContext dbContext)
+public sealed class TargetServerService(
+    MatchmakingDbContext dbContext,
+    IRconCredentialProtector credentials)
 {
     public async Task<TargetServerResponse> CreateAsync(
         CreateTargetServerRequest request,
@@ -17,7 +19,8 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
             request.MaxConcurrentWarmups,
             request.AttemptWindowSeconds,
             request.PlayerTarget,
-            request.Enabled);
+            request.Enabled,
+            request.RconPassword);
         var now = DateTimeOffset.UtcNow;
         var server = new TargetServer
         {
@@ -30,6 +33,7 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
             AttemptWindowSeconds = configuration.AttemptWindowSeconds,
             PlayerTarget = configuration.PlayerTarget,
             Enabled = configuration.Enabled,
+            RconPasswordCiphertext = ProtectRconPassword(configuration.RconPassword),
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -72,7 +76,8 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
             request.MaxConcurrentWarmups,
             request.AttemptWindowSeconds,
             request.PlayerTarget,
-            request.Enabled);
+            request.Enabled,
+            request.RconPassword);
         server.Host = configuration.Address.Host;
         server.Port = configuration.Address.Port;
         server.RequiresReservation = configuration.RequiresReservation;
@@ -81,6 +86,7 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
         server.AttemptWindowSeconds = configuration.AttemptWindowSeconds;
         server.PlayerTarget = configuration.PlayerTarget;
         server.Enabled = configuration.Enabled;
+        server.RconPasswordCiphertext = ProtectRconPassword(configuration.RconPassword);
         server.UpdatedAt = DateTimeOffset.UtcNow;
         AddAudit("target_server_updated", server.Id, server.UpdatedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -117,7 +123,8 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
         int? maxConcurrentWarmups,
         int? attemptWindowSeconds,
         int? playerTarget,
-        bool? enabled)
+        bool? enabled,
+        string? rconPassword)
     {
         var requestedConcurrency = maxConcurrentWarmups ?? 36;
         var effectiveConcurrency = requiresReservation ? 1 : requestedConcurrency;
@@ -125,6 +132,8 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
         var effectivePlayerTarget = playerTarget ?? 6;
         if (requestedConcurrency < 1 || effectiveAttemptWindow < 1 || effectivePlayerTarget < 1)
             throw new ArgumentException("invalid_target_server_configuration");
+        if (rconPassword is { Length: 0 })
+            throw new ArgumentException("invalid_rcon_password");
 
         return new TargetServerConfiguration(
             TargetServerEndpointParser.Parse(endpoint),
@@ -133,7 +142,8 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
             effectiveConcurrency,
             effectiveAttemptWindow,
             effectivePlayerTarget,
-            enabled ?? true);
+            enabled ?? true,
+            rconPassword);
     }
 
     private static TargetServerResponse ToResponse(TargetServer server) => new(
@@ -145,8 +155,25 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
         server.AttemptWindowSeconds,
         server.PlayerTarget,
         server.Enabled,
+        server.RconPasswordCiphertext is not null,
         server.CreatedAt,
         server.UpdatedAt);
+
+    private string? ProtectRconPassword(string? password)
+    {
+        if (password is null)
+            return null;
+
+        try
+        {
+            return credentials.Protect(password);
+        }
+        catch (InvalidOperationException exception) when (
+            exception.Message is "rcon_encryption_key_not_configured" or "core_rcon_encryption_key_invalid")
+        {
+            throw new ArgumentException(exception.Message, exception);
+        }
+    }
 
     private sealed record TargetServerConfiguration(
         TargetServerAddress Address,
@@ -155,5 +182,6 @@ public sealed class TargetServerService(MatchmakingDbContext dbContext)
         int MaxConcurrentWarmups,
         int AttemptWindowSeconds,
         int PlayerTarget,
-        bool Enabled);
+        bool Enabled,
+        string? RconPassword);
 }
