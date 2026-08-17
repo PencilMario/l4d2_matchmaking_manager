@@ -9,12 +9,29 @@ public sealed class WarmupDecisionEngine
 
     public TargetServer? SelectNextTarget(
         IEnumerable<TargetServer> servers,
-        IReadOnlyDictionary<Guid, int> activeWarmups) =>
-        servers
-            .Where(server => server.Enabled && activeWarmups.GetValueOrDefault(server.Id) < GetEffectiveConcurrency(server))
-            .OrderByDescending(server => server.Priority)
-            .ThenBy(server => server.Id)
-            .FirstOrDefault();
+        IReadOnlyDictionary<Guid, int> activeWarmups,
+        Guid? lastSelectedTargetId = null)
+    {
+        var enabled = servers.Where(server => server.Enabled).ToList();
+        var priority = enabled
+            .Where(server => activeWarmups.GetValueOrDefault(server.Id) < GetEffectiveConcurrency(server))
+            .Select(server => (int?)server.Priority)
+            .Max();
+        if (priority is null)
+            return null;
+
+        var samePriority = enabled
+            .Where(server => server.Priority == priority.Value)
+            .OrderBy(server => server.Id)
+            .ToList();
+        var lastIndex = lastSelectedTargetId is { } lastId
+            ? samePriority.FindIndex(server => server.Id == lastId)
+            : -1;
+        return samePriority
+            .Skip(lastIndex + 1)
+            .Concat(samePriority.Take(lastIndex + 1))
+            .FirstOrDefault(server => activeWarmups.GetValueOrDefault(server.Id) < GetEffectiveConcurrency(server));
+    }
 
     public WarmupAttemptSnapshot ObserveExternalMembers(
         WarmupAttemptSnapshot attempt,

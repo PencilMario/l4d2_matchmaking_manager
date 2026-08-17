@@ -26,7 +26,20 @@ public sealed class WarmupSchedulerService(
             var agent = await dbContext.WarmupAgents.FindAsync([attempt.WarmupAgentId], cancellationToken);
             if (agent is null)
                 continue;
-            var snapshot = await agents.GetOperationAsync(agent, attempt.OperationId, cancellationToken);
+            AgentOperationSnapshot? snapshot;
+            try
+            {
+                snapshot = await agents.GetOperationAsync(agent, attempt.OperationId, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                QuarantineAgent(agent, attempt.OperationId, "agent_operation_recovery_failed", DateTimeOffset.UtcNow);
+                continue;
+            }
             if (snapshot?.State == "active")
             {
                 attempt.ObservedAt = snapshot.ObservedAt;
@@ -52,13 +65,28 @@ public sealed class WarmupSchedulerService(
             .Where(attempt => attempt.State == "active")
             .ToListAsync(cancellationToken);
         var schedulingEngine = engine ?? new WarmupDecisionEngine();
+        var recreateTargetServerIds = new HashSet<Guid>();
+        var recreateAttemptStartedAt = new Dictionary<Guid, DateTimeOffset>();
         foreach (var attempt in activeAttempts)
         {
             var target = await dbContext.TargetServers.FindAsync([attempt.TargetServerId], cancellationToken);
             var activeAgent = await dbContext.WarmupAgents.FindAsync([attempt.WarmupAgentId], cancellationToken);
             if (target is null || activeAgent is null)
                 continue;
-            var snapshot = await agents.GetOperationAsync(activeAgent, attempt.OperationId, cancellationToken);
+            AgentOperationSnapshot? snapshot;
+            try
+            {
+                snapshot = await agents.GetOperationAsync(activeAgent, attempt.OperationId, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                QuarantineAgent(activeAgent, attempt.OperationId, "agent_operation_observation_failed", DateTimeOffset.UtcNow);
+                continue;
+            }
             if (snapshot?.Lobby is null)
                 continue;
             var liveAddresses = await Dns.GetHostAddressesAsync(target.Host, cancellationToken);
@@ -93,25 +121,62 @@ public sealed class WarmupSchedulerService(
                 var lease = await dbContext.ReservationLeases.FindAsync([attempt.TargetServerId], cancellationToken);
                 if (lease?.OperationId == attempt.OperationId)
                     dbContext.ReservationLeases.Remove(lease);
+                if (decision == WarmupDecision.RecreateSameTarget)
+                {
+                    recreateTargetServerIds.Add(target.Id);
+                    recreateAttemptStartedAt[target.Id] = attempt.StartedAt;
+                }
             }
         }
         await dbContext.SaveChangesAsync(cancellationToken);
         activeAttempts = activeAttempts.Where(attempt => attempt.State == "active").ToList();
-        var server = schedulingEngine.SelectNextTarget(
-            await dbContext.TargetServers.Where(candidate => candidate.Enabled).ToListAsync(cancellationToken),
-            activeAttempts.GroupBy(attempt => attempt.TargetServerId).ToDictionary(group => group.Key, group => group.Count()));
-        if (server is null)
-            return;
+        var targetServers = await dbContext.TargetServers.Where(candidate => candidate.Enabled).ToListAsync(cancellationToken);
+        var selectionPool = recreateTargetServerIds.Count == 0
+            ? targetServers
+            : targetServers.Where(candidate => recreateTargetServerIds.Contains(candidate.Id)).ToList();
+        var activeWarmups = activeAttempts
+            .GroupBy(attempt => attempt.TargetServerId)
+            .ToDictionary(group => group.Key, group => group.Count());
         var agent = await selector.SelectAsync(cancellationToken);
         if (agent is null || activeAttempts.Any(attempt => attempt.WarmupAgentId == agent.Id))
             return;
-        var addresses = await Dns.GetHostAddressesAsync(server.Host, cancellationToken);
-        var address = addresses.FirstOrDefault(candidate => candidate.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-        if (address is null)
-            return;
-        var info = await a2s.GetInfoAsync(new IPEndPoint(address, server.Port), cancellationToken);
-        if (info.PlayerCount >= server.PlayerTarget || (server.RequiresReservation && info.PlayerCount > 0))
-            return;
+
+        var candidatePool = selectionPool.ToList();
+        var attemptedTargetIds = new HashSet<Guid>();
+        var usedGlobalFallback = recreateTargetServerIds.Count == 0;
+        TargetServer? server = null;
+        TargetServerRotationCursor? cursor = null;
+        IPAddress? address = null;
+        while (true)
+        {
+            var candidatePriority = candidatePool
+                .Where(candidate => activeWarmups.GetValueOrDefault(candidate.Id) < schedulingEngine.GetEffectiveConcurrency(candidate))
+                .Select(candidate => (int?)candidate.Priority)
+                .Max();
+            cursor = candidatePriority is null
+                ? null
+                : await dbContext.TargetServerRotationCursors.FindAsync([candidatePriority.Value], cancellationToken);
+            server = schedulingEngine.SelectNextTarget(candidatePool, activeWarmups, cursor?.LastTargetServerId);
+            if (server is null)
+            {
+                if (usedGlobalFallback)
+                    return;
+                candidatePool = targetServers.Where(target => !attemptedTargetIds.Contains(target.Id)).ToList();
+                usedGlobalFallback = true;
+                continue;
+            }
+
+            attemptedTargetIds.Add(server.Id);
+            candidatePool.RemoveAll(candidate => candidate.Id == server.Id);
+            var addresses = await Dns.GetHostAddressesAsync(server.Host, cancellationToken);
+            address = addresses.FirstOrDefault(candidate => candidate.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            if (address is null)
+                continue;
+            var info = await a2s.GetInfoAsync(new IPEndPoint(address, server.Port), cancellationToken);
+            if (info.PlayerCount >= server.PlayerTarget || (server.RequiresReservation && info.PlayerCount > 0))
+                continue;
+            break;
+        }
 
         var operationId = Guid.NewGuid();
         var start = await agents.StartOperationAsync(agent, new AgentOperationRequest(
@@ -120,6 +185,16 @@ public sealed class WarmupSchedulerService(
             address.ToString(),
             checked((ushort)server.Port)), cancellationToken);
         var now = DateTimeOffset.UtcNow;
+        var attemptStartedAt = recreateAttemptStartedAt.TryGetValue(server.Id, out var parentStartedAt)
+            ? parentStartedAt
+            : now;
+        if (cursor is null)
+        {
+            cursor = new TargetServerRotationCursor { Priority = server.Priority };
+            dbContext.TargetServerRotationCursors.Add(cursor);
+        }
+        cursor.LastTargetServerId = server.Id;
+        cursor.UpdatedAt = now;
         dbContext.WarmupAttempts.Add(new WarmupAttempt
         {
             Id = Guid.NewGuid(),
@@ -132,7 +207,7 @@ public sealed class WarmupSchedulerService(
             Phase = WarmupPhase.AwaitingFirstMember.ToString(),
             LobbyReadyAt = now,
             ExternalMemberIdsJson = "[]",
-            StartedAt = now,
+            StartedAt = attemptStartedAt,
             ObservedAt = start.Operation.ObservedAt,
         });
         if (server.RequiresReservation)
@@ -145,5 +220,20 @@ public sealed class WarmupSchedulerService(
             });
         }
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private void QuarantineAgent(WarmupAgent agent, Guid operationId, string reason, DateTimeOffset now)
+    {
+        if (agent.Status == "quarantined")
+            return;
+        agent.Status = "quarantined";
+        agent.UpdatedAt = now;
+        dbContext.LobbyOperationAudits.Add(new LobbyOperationAudit
+        {
+            WarmupAgentId = agent.Id,
+            EventType = "warmup_agent_quarantined",
+            DetailsJson = JsonSerializer.Serialize(new { operationId, reason }),
+            ObservedAt = now,
+        });
     }
 }

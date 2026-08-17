@@ -9,6 +9,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
     public DbSet<WarmupAttempt> WarmupAttempts => Set<WarmupAttempt>();
     public DbSet<LobbyOperationAudit> LobbyOperationAudits => Set<LobbyOperationAudit>();
     public DbSet<ReservationLease> ReservationLeases => Set<ReservationLease>();
+    public DbSet<TargetServerRotationCursor> TargetServerRotationCursors => Set<TargetServerRotationCursor>();
     public DbSet<SharedLibraryMaintenanceLease> SharedLibraryMaintenanceLeases => Set<SharedLibraryMaintenanceLease>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -66,6 +67,12 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
         {
             entity.HasKey(lease => lease.TargetServerId);
             entity.HasIndex(lease => lease.ExpiresAt);
+        });
+
+        modelBuilder.Entity<TargetServerRotationCursor>(entity =>
+        {
+            entity.HasKey(cursor => cursor.Priority);
+            entity.Property(cursor => cursor.LastTargetServerId).IsRequired();
         });
 
         modelBuilder.Entity<SharedLibraryMaintenanceLease>(entity =>

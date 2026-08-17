@@ -66,6 +66,13 @@ public sealed class ReservationLease
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
+public sealed class TargetServerRotationCursor
+{
+    public int Priority { get; set; }
+    public Guid LastTargetServerId { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class SharedLibraryMaintenanceLease
 {
     public string Name { get; set; } = "shared-library";

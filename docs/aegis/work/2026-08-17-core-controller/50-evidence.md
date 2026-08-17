@@ -84,3 +84,29 @@
 ### Risk / Unknown
 
 - `loginusers.vdf` 的 `MostRecent=1` 仅表示账号曾成功登录，不证明当前 OAuth/Steam Guard 凭据没有过期。凭据过期时使用 `STEAM_LOGIN_UI_MODE=always` 重新登录；真机验收仍需证明 silent 会话可完成 Agent health 和 Steam actor 初始化。
+
+## 2026-08-17：调度公平性与重建语义切片
+
+### TodoCheckpointDraft
+
+- 已完成：Task 10 的同优先级持久轮询游标、预留/普通服务器容量选择和定时决策规则；Task 11 的 Agent operation 读取异常隔离，以及同目标重建与满服跳过逻辑。
+- 当前工作项：处理 Agent 创建/停止请求在网络失败时的不确定操作，并补齐 Core Compose 与运维文档。
+- 下一步：对 start/stop 的不确定性先写红灯测试，确保 reservation 目标在 Agent 回应缺失时仍不能被重复分配。
+
+### EvidenceBundleDraft
+
+- RED/GREEN：`TickPersistsRoundRobinCursorBetweenEqualPriorityTargets` 先因 `TargetServerRotationCursors` 缺失而无法编译；新增按 priority 键控的 cursor 实体、EF 映射和 `202608170004_TargetServerRotationCursor` 迁移后以 1/1 通过。游标在成功启动后更新，跨 DbContext change tracker 清除后仍使下一轮选择另一个同优先级 Target Server。
+- RED/GREEN：`AgentOperationReadFailureQuarantinesAgentAndKeepsReservationLease` 与 `RecoveryOperationReadFailureQuarantinesAgentAndKeepsReservationLease` 初始均因 `HttpRequestException` 直接冒泡失败；调度和恢复现在将 Agent 标为 `quarantined`、写入无敏感信息审计，并保持 attempt/预留 lease，两个测试以 2/2 通过。
+- RED/GREEN：`TickRecreatesQuietLobbyOnItsOriginalTargetBeforeHigherPriorityServers` 初始错误选择更高优先级服务器；recreate decision 现在优先使用本 tick 的原 Target Server 池。`TickRecreationPreservesTheParentAttemptWindow` 初始显示重建重置 StartedAt；替换操作现在保留父 attempt 的 StartedAt，因此 12 分钟 deadline 跨大厅重建连续生效。
+- RED/GREEN：`TickSkipsFullHigherPriorityTargetAndStartsNextTarget` 初始无 operation；调度器现在逐个执行 DNS/A2S admission，玩家数达 target 或预留服非空时跳过该候选并继续同优先级/低优先级候选。
+- 回归：`dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter "WarmupDecisionEngineTests|WarmupSchedulerServiceTests" --no-restore` 以 16/16 通过。
+
+### DriftCheckDraft
+
+- 范围：仅在 Scheduler、纯选择器、PostgreSQL 迁移和相关测试中补足已有设计；没有改变外部 Core/Agent API、metadata、凭据卷或 Docker 网络边界。
+- 兼容：高优先级仍优先，只有已触发 `RecreateSameTarget` 的服务器在该 tick 获得重建优先权；空服/满服判断仍以当前 A2S 结果为准。
+- 决定：`continue`。Agent Start/Stop HTTP 调用的未知结果仍需在下一切片持久化为不确定操作，防止请求超时后的重复 reservation。
+
+### Risk / Unknown
+
+- 当前轮转游标只在 Agent Start 返回时推进；若 HTTP 请求在 Agent 已创建大厅后超时，现有实现尚未持久化该未知操作和 reservation 排他性。这是下一切片的明确修复项。
