@@ -1,10 +1,13 @@
+using System.Collections.Concurrent;
 using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.A2s;
+using L4d2MatchmakingCore.Configuration;
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Scheduling;
 using L4d2MatchmakingCore.Servers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace L4d2MatchmakingCore.Tests;
@@ -61,6 +64,66 @@ public sealed class WarmupSchedulerServiceTests
         Assert.AreEqual(1, agents.StartCalls);
         Assert.IsTrue(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id));
         Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.TargetServerId == server.Id && attempt.State == "active"));
+    }
+
+    [TestMethod]
+    public async Task TickStartsABatchWithoutExceedingTargetConcurrency()
+    {
+        await using var db = CreateDb();
+        var firstAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "first-agent", Status = "running", SteamDataVolumeName = "first-steam", AccountConfigVolumeName = "first-config", NoVncPort = 18083 };
+        var secondAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "second-agent", Status = "running", SteamDataVolumeName = "second-steam", AccountConfigVolumeName = "second-config", NoVncPort = 18084 };
+        var preferredTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 10 };
+        var fallbackTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 2, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 0 };
+        db.AddRange(firstAgent, secondAgent, preferredTarget, fallbackTarget);
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new BatchSelector([firstAgent, secondAgent]),
+            new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(2, agents.StartCalls);
+        Assert.AreEqual(2, await db.WarmupAttempts.CountAsync(attempt => attempt.State == "active"));
+        Assert.AreEqual(1, await db.WarmupAttempts.CountAsync(attempt => attempt.TargetServerId == preferredTarget.Id && attempt.State == "active"));
+        CollectionAssert.AreEquivalent(new[] { preferredTarget.Port, fallbackTarget.Port }, agents.StartRequests.Select(request => (int)request.Port).ToArray());
+    }
+
+    [TestMethod]
+    public async Task TickDoesNotExceedConfiguredBatchStartLimit()
+    {
+        await using var db = CreateDb();
+        var firstAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "first-agent", Status = "running", SteamDataVolumeName = "first-steam", AccountConfigVolumeName = "first-config", NoVncPort = 18083 };
+        var secondAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "second-agent", Status = "running", SteamDataVolumeName = "second-steam", AccountConfigVolumeName = "second-config", NoVncPort = 18084 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 2, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        db.AddRange(firstAgent, secondAgent, target);
+        await db.SaveChangesAsync();
+        var options = CoreOptions.FromConfiguration(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["CORE_API_TOKEN"] = "test-token",
+                ["CORE_DATABASE_CONNECTION_STRING"] = "Host=127.0.0.1;Database=test",
+                ["CORE_SCHEDULER_MAX_STARTS_PER_TICK"] = "1",
+            })
+            .Build());
+        var startLimit = typeof(CoreOptions).GetProperty("SchedulerMaxStartsPerTick");
+        Assert.IsNotNull(startLimit, "CoreOptions must expose the configured batch start limit.");
+        Assert.AreEqual(1, (int)startLimit.GetValue(options)!);
+        var agents = new FakeAgents(null);
+        var scheduler = CreateSchedulerWithOptions(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new BatchSelector([firstAgent, secondAgent]),
+            new FakeA2s(),
+            options);
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(1, agents.StartCalls);
     }
 
     [TestMethod]
@@ -403,7 +466,35 @@ public sealed class WarmupSchedulerServiceTests
             .SingleOrDefault(candidate => candidate.GetParameters()
                 .Any(parameter => parameter.ParameterType == typeof(IRconCredentialProtector)));
         Assert.IsNotNull(constructor, "WarmupSchedulerService must receive the credential protector at the Agent request boundary.");
-        return (WarmupSchedulerService)constructor.Invoke([db, agents, maintenance, selector, a2s, null, credentials]);
+        return (WarmupSchedulerService)constructor.Invoke([db, agents, maintenance, selector, a2s, null, credentials, null]);
+    }
+
+    private static WarmupSchedulerService CreateSchedulerWithOptions(
+        MatchmakingDbContext db,
+        IAgentControlClient agents,
+        SharedLibraryMaintenanceService maintenance,
+        IHealthyAgentSelector selector,
+        ISourceA2sClient a2s,
+        CoreOptions options)
+    {
+        var constructor = typeof(WarmupSchedulerService).GetConstructors().Single();
+        var arguments = constructor.GetParameters().Select(parameter =>
+        {
+            if (parameter.ParameterType == typeof(MatchmakingDbContext))
+                return (object?)db;
+            if (parameter.ParameterType == typeof(IAgentControlClient))
+                return agents;
+            if (parameter.ParameterType == typeof(SharedLibraryMaintenanceService))
+                return maintenance;
+            if (parameter.ParameterType == typeof(IHealthyAgentSelector))
+                return selector;
+            if (parameter.ParameterType == typeof(ISourceA2sClient))
+                return a2s;
+            if (parameter.ParameterType == typeof(CoreOptions))
+                return options;
+            return null;
+        }).ToArray();
+        return (WarmupSchedulerService)constructor.Invoke(arguments);
     }
 
     private sealed class FakeAgents(
@@ -412,13 +503,17 @@ public sealed class WarmupSchedulerServiceTests
         bool throwOnStart = false,
         bool throwOnStop = false) : IAgentControlClient
     {
-        public int StartCalls { get; private set; }
-        public int StopCalls { get; private set; }
+        private int _startCalls;
+        private int _stopCalls;
+        public int StartCalls => _startCalls;
+        public int StopCalls => _stopCalls;
+        public ConcurrentQueue<AgentOperationRequest> StartRequests { get; } = new();
         public AgentOperationRequest? LastStartRequest { get; private set; }
         public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AgentOperationStartResult> StartOperationAsync(WarmupAgent agent, AgentOperationRequest request, CancellationToken cancellationToken)
         {
-            StartCalls++;
+            Interlocked.Increment(ref _startCalls);
+            StartRequests.Enqueue(request);
             LastStartRequest = request;
             return throwOnStart
                 ? Task.FromException<AgentOperationStartResult>(new HttpRequestException("agent_unavailable"))
@@ -430,7 +525,7 @@ public sealed class WarmupSchedulerServiceTests
                 : Task.FromResult(snapshot);
         public Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
         {
-            StopCalls++;
+            Interlocked.Increment(ref _stopCalls);
             return throwOnStop
                 ? Task.FromException(new HttpRequestException("agent_unavailable"))
                 : Task.CompletedTask;
@@ -452,6 +547,16 @@ public sealed class WarmupSchedulerServiceTests
     private sealed class FakeSelector(WarmupAgent agent) : IHealthyAgentSelector
     {
         public Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken) => Task.FromResult<WarmupAgent?>(agent);
+        public Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WarmupAgent>>([agent]);
+    }
+
+    private sealed class BatchSelector(IReadOnlyList<WarmupAgent> agents) : IHealthyAgentSelector
+    {
+        public Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(agents.FirstOrDefault());
+        public Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(agents);
     }
 
     private sealed class FakeA2s(

@@ -2,8 +2,14 @@ using Microsoft.Extensions.Configuration;
 
 namespace L4d2MatchmakingCore.Configuration;
 
-public sealed record CoreOptions(string ApiToken, string DatabaseConnectionString, string? RconEncryptionKey)
+public sealed record CoreOptions(
+    string ApiToken,
+    string DatabaseConnectionString,
+    string? RconEncryptionKey,
+    int SchedulerMaxStartsPerTick)
 {
+    public const int DefaultSchedulerMaxStartsPerTick = 16;
+
     public static CoreOptions FromConfiguration(IConfiguration configuration)
     {
         var token = configuration["CORE_API_TOKEN"] ?? configuration["Core:ApiToken"];
@@ -31,8 +37,14 @@ public sealed record CoreOptions(string ApiToken, string DatabaseConnectionStrin
             "Core:RconEncryptionKey",
             "Core:RconEncryptionKeyFile",
             "core_rcon_encryption_key_file_not_found");
+        var schedulerMaxStartsPerTick = ReadPositiveInt(
+            configuration,
+            "CORE_SCHEDULER_MAX_STARTS_PER_TICK",
+            "Core:SchedulerMaxStartsPerTick",
+            DefaultSchedulerMaxStartsPerTick,
+            "core_scheduler_max_starts_per_tick_invalid");
 
-        return new CoreOptions(token, databaseConnectionString, rconEncryptionKey);
+        return new CoreOptions(token, databaseConnectionString, rconEncryptionKey, schedulerMaxStartsPerTick);
     }
 
     private static string? ReadOptionalSecret(
@@ -53,5 +65,20 @@ public sealed record CoreOptions(string ApiToken, string DatabaseConnectionStrin
         }
 
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static int ReadPositiveInt(
+        IConfiguration configuration,
+        string environmentKey,
+        string configurationKey,
+        int defaultValue,
+        string invalidMessage)
+    {
+        var value = configuration[environmentKey] ?? configuration[configurationKey];
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultValue;
+        if (!int.TryParse(value, out var parsed) || parsed < 1)
+            throw new InvalidOperationException(invalidMessage);
+        return parsed;
     }
 }

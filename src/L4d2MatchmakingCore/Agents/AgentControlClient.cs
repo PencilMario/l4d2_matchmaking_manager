@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Collections.Concurrent;
 using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Data;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,7 @@ public interface IAgentControlClient
 public interface IHealthyAgentSelector
 {
     Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken);
 }
 
 public sealed class AgentControlClient(HttpClient httpClient) : IAgentControlClient
@@ -76,6 +78,8 @@ public sealed class HealthyAgentSelector(
     MatchmakingDbContext dbContext,
     IAgentControlClient client) : IHealthyAgentSelector
 {
+    private const int MaxConcurrentHealthProbes = 16;
+
     public async Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken)
     {
         var candidates = await dbContext.WarmupAgents
@@ -83,17 +87,41 @@ public sealed class HealthyAgentSelector(
             .Where(agent => agent.Status == "running")
             .OrderBy(agent => agent.UpdatedAt)
             .ToListAsync(cancellationToken);
-        foreach (var agent in candidates)
+        foreach (var agent in await ProbeHealthyAsync(candidates, cancellationToken))
+            return agent;
+        return null;
+    }
+
+    public async Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken)
+    {
+        var candidates = await dbContext.WarmupAgents
+            .AsNoTracking()
+            .Where(agent => agent.Status == "running")
+            .OrderBy(agent => agent.UpdatedAt)
+            .ToListAsync(cancellationToken);
+        return await ProbeHealthyAsync(candidates, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<WarmupAgent>> ProbeHealthyAsync(
+        IReadOnlyList<WarmupAgent> candidates,
+        CancellationToken cancellationToken)
+    {
+        var healthyIds = new ConcurrentDictionary<Guid, byte>();
+        await Parallel.ForEachAsync(candidates, new ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = MaxConcurrentHealthProbes,
+        }, async (agent, token) =>
         {
             try
             {
-                if ((await client.GetHealthAsync(agent, cancellationToken)).Ready)
-                    return agent;
+                if ((await client.GetHealthAsync(agent, token)).Ready)
+                    healthyIds.TryAdd(agent.Id, 0);
             }
             catch (HttpRequestException)
             {
             }
-        }
-        return null;
+        });
+        return candidates.Where(agent => healthyIds.ContainsKey(agent.Id)).ToList();
     }
 }

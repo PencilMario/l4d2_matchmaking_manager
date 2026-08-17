@@ -71,11 +71,15 @@ public sealed class LobbyQueryEndpointTests
     private sealed class FakeSelector(WarmupAgent agent) : IHealthyAgentSelector
     {
         public Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken) => Task.FromResult<WarmupAgent?>(agent);
+        public Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WarmupAgent>>([agent]);
     }
 
     private sealed class EmptySelector : IHealthyAgentSelector
     {
         public Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken) => Task.FromResult<WarmupAgent?>(null);
+        public Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WarmupAgent>>([]);
     }
 
     private sealed class FakeClient(LobbySnapshot lobby) : IAgentControlClient
