@@ -13,7 +13,7 @@ namespace L4d2LobbyAgent.Tests;
 public sealed class AgentLobbyEndpointTests
 {
     [TestMethod]
-    public async Task StartIsIdempotentAndReadLobbyWorksDuringAnActiveOperation()
+    public async Task StartIsIdempotentAndQueryLobbyWorksDuringAnActiveOperation()
     {
         var service = new FakeSessionService();
         await using var factory = new AgentFactory(service);
@@ -35,7 +35,23 @@ public sealed class AgentLobbyEndpointTests
         Assert.AreEqual(HttpStatusCode.OK, lobby.StatusCode);
         Assert.AreEqual(HttpStatusCode.BadRequest, malformed.StatusCode);
         Assert.AreEqual(1, service.StartCalls);
-        Assert.AreEqual(1, service.ReadLobbyCalls);
+        Assert.AreEqual(1, service.QueryLobbyCalls);
+    }
+
+    [TestMethod]
+    public async Task QueryReturnsExplicitServiceUnavailableWhenLobbyDataIsNotConfirmed()
+    {
+        var service = new FakeSessionService
+        {
+            QueryException = new SteamRuntimeException("lobby_data_unavailable"),
+        };
+        await using var factory = new AgentFactory(service);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/v1/lobbies/109775242170052468");
+
+        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.AreEqual("\"lobby_data_unavailable\"", await response.Content.ReadAsStringAsync());
     }
 
     [TestMethod]
@@ -79,8 +95,9 @@ public sealed class AgentLobbyEndpointTests
         private readonly Dictionary<Guid, AgentOperationSnapshot> _operations = [];
 
         public int StartCalls { get; private set; }
-        public int ReadLobbyCalls { get; private set; }
+        public int QueryLobbyCalls { get; private set; }
         public int StopCalls { get; private set; }
+        public Exception? QueryException { get; init; }
 
         public Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow));
@@ -114,9 +131,14 @@ public sealed class AgentLobbyEndpointTests
             return Task.FromResult(true);
         }
 
-        public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken)
+        public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken) =>
+            Task.FromResult(Snapshot(lobbyId.ToString()));
+
+        public Task<LobbySnapshot> QueryLobbyAsync(ulong lobbyId, bool includeMembers, CancellationToken cancellationToken)
         {
-            ReadLobbyCalls++;
+            QueryLobbyCalls++;
+            if (QueryException is not null)
+                return Task.FromException<LobbySnapshot>(QueryException);
             return Task.FromResult(Snapshot(lobbyId.ToString()));
         }
 

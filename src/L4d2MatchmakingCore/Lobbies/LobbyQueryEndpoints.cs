@@ -12,22 +12,26 @@ public static class LobbyQueryEndpoints
 
     private static async Task<IResult> QueryAsync(
         string lobbyId,
-        IHealthyAgentSelector selector,
-        IAgentControlClient agents,
+        LobbyQueryService queries,
         CancellationToken cancellationToken)
     {
         if (!ulong.TryParse(lobbyId, out var parsedLobbyId) || parsedLobbyId == 0)
             return Results.BadRequest("invalid_lobby_id");
-        var agent = await selector.SelectAsync(cancellationToken);
-        if (agent is null)
-            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         try
         {
-            return Results.Ok(await agents.ReadLobbyAsync(agent, lobbyId, cancellationToken));
+            return Results.Ok(await queries.QueryAsync(lobbyId, cancellationToken));
+        }
+        catch (AgentLobbyQueryException exception) when (exception.Code == "lobby_data_unavailable")
+        {
+            return Results.Json("lobby_data_unavailable", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (AgentLobbyQueryException exception) when (exception.Code == "lobby_operation_preservation_failed")
+        {
+            return Results.Json("lobby_operation_preservation_failed", statusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (HttpRequestException)
         {
-            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            return Results.Json("lobby_query_agent_unavailable", statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
 }

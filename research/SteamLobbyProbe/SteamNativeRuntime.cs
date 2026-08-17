@@ -6,6 +6,8 @@ using L4d2Matchmaking.Contracts;
 internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNativeRuntime
 {
     private const int LobbyTypePublic = 2;
+    private const int LobbyEnterCallback = 504;
+    private const int LobbyDataUpdateCallback = 505;
     private const int LobbyCreatedCallback = 513;
     private const int LobbyMatchListCallback = 510;
     private const int SteamApiCallCompletedCallback = 703;
@@ -112,12 +114,8 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         if (lobbyId == 0)
             throw new ArgumentOutOfRangeException(nameof(lobbyId));
 
-        _api!.RequestLobbyData(_matchmaking, lobbyId);
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            PumpCallbacks();
-            Thread.Sleep(25);
-        }
+        if (!_api!.RequestLobbyData(_matchmaking, lobbyId) || !WaitForLobbyDataUpdate(lobbyId))
+            throw new SteamRuntimeException("lobby_data_unavailable");
 
         var memberCount = Math.Max(0, _api.GetNumLobbyMembers(_matchmaking, lobbyId));
         var members = new List<LobbyMemberSnapshot>(memberCount);
@@ -145,6 +143,53 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
             members,
             metadata,
             DateTimeOffset.UtcNow);
+    }
+
+    public NativeLobbyJoinResult JoinLobby(ulong lobbyId)
+    {
+        EnsureInitialized();
+        if (lobbyId == 0)
+            throw new ArgumentOutOfRangeException(nameof(lobbyId));
+
+        var call = _api!.JoinLobby(_matchmaking, lobbyId);
+        if (call == 0)
+            return NativeLobbyJoinResult.Denied;
+
+        var result = WaitForCall(call, LobbyEnterCallback, 24);
+        if (!result.Ok)
+            return result.Failed ? NativeLobbyJoinResult.Denied : NativeLobbyJoinResult.Timeout;
+
+        var enteredLobbyId = result.Raw.Length >= sizeof(ulong)
+            ? BitConverter.ToUInt64(result.Raw, 0)
+            : 0;
+        var enterResponse = result.Raw.Length >= 20
+            ? BitConverter.ToUInt32(result.Raw, 16)
+            : 0;
+        return enteredLobbyId == lobbyId && enterResponse == 1
+            ? NativeLobbyJoinResult.Success
+            : NativeLobbyJoinResult.Denied;
+    }
+
+    public ulong GetCurrentSteamId()
+    {
+        EnsureInitialized();
+        return _api!.GetSteamId(_user);
+    }
+
+    public bool IsCurrentUserLobbyMember(ulong lobbyId, ulong steamId)
+    {
+        EnsureInitialized();
+        if (lobbyId == 0 || steamId == 0)
+            return false;
+
+        var memberCount = Math.Max(0, _api!.GetNumLobbyMembers(_matchmaking, lobbyId));
+        for (var index = 0; index < memberCount; index++)
+        {
+            if (_api.GetLobbyMemberByIndex(_matchmaking, lobbyId, index) == steamId)
+                return true;
+        }
+
+        return false;
     }
 
     public void LeaveLobby(ulong lobbyId)
@@ -272,6 +317,40 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         return completedResult ?? new SteamCallResult(false, false, Array.Empty<byte>());
     }
 
+    private bool WaitForLobbyDataUpdate(ulong lobbyId)
+    {
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            _api!.ManualDispatchRunFrame(_pipe);
+            var callback = new Program.CallbackMsg();
+            while (_api.ManualDispatchGetNextCallback(_pipe, ref callback))
+            {
+                try
+                {
+                    var size = Math.Clamp(callback.ParamSize, 0, 64);
+                    var raw = new byte[size];
+                    if (callback.Param != 0 && size > 0)
+                        Marshal.Copy(callback.Param, raw, 0, size);
+
+                    if (callback.Callback != LobbyDataUpdateCallback || raw.Length < 17)
+                        continue;
+
+                    var updatedLobbyId = BitConverter.ToUInt64(raw, 0);
+                    if (updatedLobbyId == lobbyId)
+                        return raw[16] != 0;
+                }
+                finally
+                {
+                    _api.ManualDispatchFreeLastCallback(_pipe);
+                }
+            }
+
+            Thread.Sleep(100);
+        }
+
+        return false;
+    }
+
     private static LobbyCreatedResult DecodeLobbyCreated(SteamCallResult result)
     {
         var code = result.Raw.Length >= sizeof(int) ? BitConverter.ToInt32(result.Raw, 0) : 0;
@@ -286,8 +365,8 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
     private readonly record struct LobbyCreatedResult(bool Ok, ulong LobbyId);
 }
 
-internal sealed class SteamRuntimeException(string code, Exception? innerException = null)
+public sealed class SteamRuntimeException(string code, Exception? innerException = null)
     : InvalidOperationException(code, innerException)
 {
-    internal string Code { get; } = code;
+    public string Code { get; } = code;
 }

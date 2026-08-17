@@ -60,6 +60,12 @@ public sealed class SteamSessionActorTests
             return Snapshot(lobbyId.ToString(), "L4D2C1");
         });
 
+        public NativeLobbyJoinResult JoinLobby(ulong lobbyId) => NativeLobbyJoinResult.Denied;
+
+        public ulong GetCurrentSteamId() => 76561198000000000UL;
+
+        public bool IsCurrentUserLobbyMember(ulong lobbyId, ulong steamId) => false;
+
         public void LeaveLobby(ulong lobbyId) => Track(static () => { });
 
         public void PumpCallbacks()

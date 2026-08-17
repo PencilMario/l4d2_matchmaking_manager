@@ -88,6 +88,7 @@ public sealed class ProbeStatusEndpointTests
         public Task<AgentOperationSnapshot?> GetAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> StopAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LobbySnapshot> QueryLobbyAsync(ulong lobbyId, bool includeMembers, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeDesktopDetector(bool isRunning) : ISteamDesktopDetector

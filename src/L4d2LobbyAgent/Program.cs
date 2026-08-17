@@ -44,12 +44,24 @@ app.MapDelete("/v1/operations/{operationId:guid}", async (
 app.MapGet("/v1/lobbies/{lobbyId}", async (
     string lobbyId,
     IAgentSteamSessionService service,
+    bool? includeMembers,
     CancellationToken cancellationToken) =>
 {
     if (!ulong.TryParse(lobbyId, out var parsedLobbyId) || parsedLobbyId == 0)
         return Results.BadRequest();
 
-    return Results.Ok(await service.ReadLobbyAsync(parsedLobbyId, cancellationToken));
+    try
+    {
+        return Results.Ok(await service.QueryLobbyAsync(parsedLobbyId, includeMembers ?? true, cancellationToken));
+    }
+    catch (SteamRuntimeException exception) when (exception.Code == "lobby_data_unavailable")
+    {
+        return Results.Json("lobby_data_unavailable", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (SteamRuntimeException exception) when (exception.Code == "lobby_operation_preservation_failed")
+    {
+        return Results.Json("lobby_operation_preservation_failed", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
 });
 
 app.Run();

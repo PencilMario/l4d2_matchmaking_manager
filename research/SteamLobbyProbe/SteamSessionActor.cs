@@ -11,6 +11,7 @@ public sealed class SteamSessionActor : ISteamSessionActor
     private readonly Thread _thread;
     private readonly Dictionary<Guid, AgentOperationSnapshot> _operations = [];
     private AgentOperationSnapshot? _activeOperation;
+    private AgentLobbyMode? _activeMode;
     private Exception? _callbackFailure;
     private int _disposed;
 
@@ -49,6 +50,12 @@ public sealed class SteamSessionActor : ISteamSessionActor
 
     public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken) =>
         Enqueue(actor => actor.ReadLobby(lobbyId), cancellationToken);
+
+    public Task<LobbySnapshot> QueryLobbyAsync(
+        ulong lobbyId,
+        bool includeMembers,
+        CancellationToken cancellationToken) =>
+        Enqueue(actor => actor.QueryLobby(lobbyId, includeMembers), cancellationToken);
 
     public async ValueTask DisposeAsync()
     {
@@ -100,6 +107,7 @@ public sealed class SteamSessionActor : ISteamSessionActor
             DateTimeOffset.UtcNow);
         _operations.Add(request.OperationId, snapshot);
         _activeOperation = snapshot;
+        _activeMode = request.Mode;
         return new AgentOperationStartResult(snapshot, false);
     }
 
@@ -128,6 +136,7 @@ public sealed class SteamSessionActor : ISteamSessionActor
         };
         _operations[operation.OperationId] = stopped;
         _activeOperation = null;
+        _activeMode = null;
     }
 
     private LobbySnapshot ReadLobby(ulong lobbyId)
@@ -136,6 +145,94 @@ public sealed class SteamSessionActor : ISteamSessionActor
         if (lobbyId == 0)
             throw new ArgumentOutOfRangeException(nameof(lobbyId));
         return _runtime.ReadLobby(lobbyId);
+    }
+
+    private LobbySnapshot QueryLobby(ulong lobbyId, bool includeMembers)
+    {
+        ThrowIfCallbackFailed();
+        if (lobbyId == 0)
+            throw new ArgumentOutOfRangeException(nameof(lobbyId));
+
+        var metadata = _runtime.ReadLobby(lobbyId);
+        if (!includeMembers)
+            return MetadataOnly(metadata, LobbyMemberDataStatus.MetadataOnlyNoQueryAgent);
+
+        if (_activeOperation is not null && _activeMode != AgentLobbyMode.Standard)
+            return MetadataOnly(metadata, LobbyMemberDataStatus.MetadataOnlyAgentStateChanged);
+
+        var currentSteamId = _runtime.GetCurrentSteamId();
+        if (currentSteamId == 0)
+            throw new SteamRuntimeException("steam_not_logged_on");
+
+        var heldLobbyId = 0UL;
+        if (_activeOperation?.Lobby is { } heldLobby)
+            ulong.TryParse(heldLobby.LobbyId, out heldLobbyId);
+
+        if (heldLobbyId == lobbyId)
+        {
+            return Complete(metadata, currentSteamId);
+        }
+
+        if (_activeOperation is not null && heldLobbyId == 0)
+        {
+            return MetadataOnly(metadata, LobbyMemberDataStatus.MetadataOnlyAgentStateChanged);
+        }
+
+        var joined = _runtime.JoinLobby(lobbyId);
+        if (joined == NativeLobbyJoinResult.Denied)
+            return MetadataOnly(metadata, LobbyMemberDataStatus.MetadataOnlyJoinDenied);
+        if (joined == NativeLobbyJoinResult.Timeout)
+            return MetadataOnly(metadata, LobbyMemberDataStatus.MetadataOnlyJoinTimeout);
+
+        try
+        {
+            return Complete(_runtime.ReadLobby(lobbyId), currentSteamId);
+        }
+        finally
+        {
+            try
+            {
+                _runtime.LeaveLobby(lobbyId);
+            }
+            catch (Exception exception) when (_activeOperation is not null && _activeMode == AgentLobbyMode.Standard)
+            {
+                FailActiveOperation("lobby_operation_preservation_failed");
+                throw new SteamRuntimeException("lobby_operation_preservation_failed", exception);
+            }
+
+            if (_activeOperation is not null && _activeMode == AgentLobbyMode.Standard &&
+                !_runtime.IsCurrentUserLobbyMember(heldLobbyId, currentSteamId))
+            {
+                FailActiveOperation("lobby_operation_preservation_failed");
+                throw new SteamRuntimeException("lobby_operation_preservation_failed");
+            }
+        }
+    }
+
+    private static LobbySnapshot MetadataOnly(LobbySnapshot snapshot, string status) =>
+        snapshot with { Members = [], MemberDataStatus = status };
+
+    private static LobbySnapshot Complete(LobbySnapshot snapshot, ulong currentSteamId) =>
+        snapshot with
+        {
+            Members = snapshot.Members.Where(member => member.SteamId != currentSteamId.ToString()).ToArray(),
+            MemberDataStatus = LobbyMemberDataStatus.Complete,
+        };
+
+    private void FailActiveOperation(string failure)
+    {
+        if (_activeOperation is not { } operation)
+            return;
+
+        var failed = operation with
+        {
+            State = "failed",
+            Failure = failure,
+            ObservedAt = DateTimeOffset.UtcNow,
+        };
+        _operations[operation.OperationId] = failed;
+        _activeOperation = null;
+        _activeMode = null;
     }
 
     private Task<T> Enqueue<T>(

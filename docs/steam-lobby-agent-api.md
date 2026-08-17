@@ -12,7 +12,9 @@ Agent 没有 HTTP token。Docker 网络隔离、Core 唯一的 Docker socket 挂
 
 一个 Agent 对应一个 Steam 账号，并由一个持久的 Steam session actor 独占 Steam API。
 健康检查、操作、已持有大厅的刷新和任意 lobby 查询都排入同一 Manual Dispatch 命令循环；
-活动操作期间不会启动第二个 Probe 进程。每个新操作由 Agent 随机挑选一份完整的官方
+活动操作期间不会启动第二个 Probe 进程。任意 lobby 查询先等待匹配的
+`LobbyDataUpdate_t` 成功回调，绝不把尚未确认的 Steam 缓存当作成功快照。每个新操作由
+Agent 随机挑选一份完整的官方
 C1-C14 campaign profile，Core 不传入或拼接 metadata。
 
 Steam API 标识符均作为十进制字符串传输，避免 JavaScript 数值精度丢失。
@@ -81,7 +83,8 @@ Guard 数据、库路径或原始 Steam 输出。
     "ownerSteamId": "76561198000000000",
     "members": [{"steamId":"76561198000000000","personaName":"Agent"}],
     "metadata": {"Game:campaign":"L4D2C2", "Game:state":"game"},
-    "observedAt": "2026-08-17T12:00:00+00:00"
+    "observedAt": "2026-08-17T12:00:00+00:00",
+    "memberDataStatus": "complete"
   },
   "failure": null,
   "observedAt": "2026-08-17T12:00:00+00:00"
@@ -100,8 +103,24 @@ Guard 数据、库路径或原始 Steam 输出。
 ### `GET /v1/lobbies/{lobbyId}`
 
 通过同一个 Steam actor 读取任意非零十进制 lobby ID 的 owner、成员、metadata 和
-观测时间。该 Agent 无需拥有或加入目标大厅，也可在自己正持有另一大厅时执行查询。
-非法或零 ID 返回 `400`。响应为上例的 `lobby` 对象。
+观测时间。`includeMembers` 是 Core 专用的可选查询参数，默认 `true`。允许读取成员时，
+空闲 Agent 或正在执行 `standard` 暖服的 Agent 会临时加入目标 lobby、读取成员并在
+`finally` 中离开；返回的 `members` 始终移除了该查询 Agent 自己。预留或不确定操作不
+会临时加入目标 lobby。非法或零 ID 返回 `400`。
+
+`memberDataStatus` 的值为：
+
+| 值 | 含义 |
+| --- | --- |
+| `complete` | 已确认 metadata，且已读取成员；`members` 不含查询 Agent。 |
+| `metadata_only_no_query_agent` | Core 请求 metadata-only 查询，未尝试加入。 |
+| `metadata_only_join_denied` | Steam 拒绝加入，例如目标大厅已满或不可加入。 |
+| `metadata_only_join_timeout` | Steam 未在截止时间内完成加入。 |
+| `metadata_only_agent_state_changed` | actor 执行时发现自身已处于不允许临时加入的操作状态。 |
+
+metadata 确认失败返回 `503 "lobby_data_unavailable"`。临时查询离开后未能保持原
+`standard` 暖服大厅返回 `503 "lobby_operation_preservation_failed"`；Core 必须隔离该
+Agent，不能继续使用该暖服操作。
 
 ## 运行约束
 

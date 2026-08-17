@@ -18,8 +18,9 @@
   字符串；时间为 ISO 8601 UTC。
 - Core 没有 `{ "data": ... }` 包装层：成功响应直接是对象或数组；由业务代码返回的
   错误 body 是 JSON 字符串，例如 `"invalid_lobby_id"`。
-- `401`、`404`、`503` 及 `204` 当前均没有可依赖的 body。不要根据空 body 区分
-  具体失败原因，应该以 HTTP 状态码处理。
+- 除 Lobby 查询外，`401`、`404`、`503` 及 `204` 均没有可依赖的 body。Lobby 查询的
+  `503` body 是 JSON 字符串：`"lobby_data_unavailable"`、
+  `"lobby_operation_preservation_failed"` 或 `"lobby_query_agent_unavailable"`。
 - 服务端会持续生成动态值，例如 `id`、`createdAt`、`updatedAt`、
   `observedAt`、`deadline` 和 `remainingSeconds`。前端不应回写响应中的这些值。
 
@@ -348,7 +349,7 @@ disabled，直到后续 drain 成功。
 
 返回按创建时间升序排列的数组。
 
-成功响应，部署实例实际采样：
+成功响应示例：
 
 ```http
 HTTP/1.1 200 OK
@@ -551,8 +552,10 @@ Content-Type: application/json; charset=utf-8
 
 ### `GET /v1/lobbies/{lobbyId}`
 
-`lobbyId` 必须为非零十进制 Steam lobby ID。Core 选择一个健康 Agent 并只读转发其
-实时 Steam snapshot；不会创建、加入或离开 lobby，也不会暴露查询所用 Agent 的身份。
+`lobbyId` 必须为非零十进制 Steam lobby ID。Core 优先选择空闲 Agent，其次选择仅执行
+`standard` 暖服的 Agent。后者会由 Agent 临时加入目标 lobby、读取成员并离开；原暖服
+大厅无法保持时会隔离该 Agent。没有可安全临时加入的 Agent 时，Core 仍使用健康 Agent
+获取已确认 metadata，并返回明确的 metadata-only 状态；不会暴露查询所用 Agent 的身份。
 
 成功响应，部署实例实际采样：
 
@@ -560,7 +563,7 @@ Content-Type: application/json; charset=utf-8
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 
-{"lobbyId":"109775242425650097","ownerSteamId":"76561199692804388","members":[],"metadata":{"Game:campaign":"L4D2C5","Game:chapter":"1","Game:difficulty":"normal","Game:dlcrequired":"0","Game:maxrounds":"3","Game:MissionInfo:addon":"0","Game:MissionInfo:Author":"Valve","Game:MissionInfo:builtin":"1","Game:MissionInfo:DisplayTitle":"#L4D360UI_CampaignName_C5","Game:MissionInfo:InfectedOnly":"0","Game:MissionInfo:MissionFile":"missions/campaign5.txt","Game:MissionInfo:SurvivorSet":"2","Game:MissionInfo:Version":"1","Game:MissionInfo:Website":"http://store.steampowered.com","Game:MissionInfo:workshopid":"0","Game:Mode":"versus","Game:ModeInfo:addon":"0","Game:ModeInfo:workshopid":"0","Game:sk_versus":"35","Game:state":"game","Game:vanilla":"1","Members:numMachines":"1","Members:numPlayers":"1","Members:numSlots":"8","Options:Server":"official","System:access":"public","System:network":"LIVE","__gameserverIP":"-899060648","__gameserverPort":"27083","__gameserverSteamID":"0"},"observedAt":"2026-08-17T12:57:39.27695+00:00"}
+{"lobbyId":"109775242425650097","ownerSteamId":"76561199692804388","members":[{"steamId":"76561198000000001","personaName":null}],"metadata":{"Game:campaign":"L4D2C5","Game:state":"game","Members:numPlayers":"1"},"observedAt":"2026-08-17T12:57:39.27695+00:00","memberDataStatus":"complete"}
 ```
 
 响应模型：
@@ -579,9 +582,16 @@ Content-Type: application/json; charset=utf-8
     "Game:campaign": "L4D2C5",
     "Game:state": "game"
   },
-  "observedAt": "2026-08-17T12:57:39.27695+00:00"
+  "observedAt": "2026-08-17T12:57:39.27695+00:00",
+  "memberDataStatus": "complete"
 }
 ```
+
+| 字段 | 说明 |
+| --- | --- |
+| `members` | 仅当 `memberDataStatus` 为 `complete` 时是已确认的目标大厅成员列表；查询 Agent 自己已经被移除，因此 `members.length` 就是本 API 返回的玩家人数。 |
+| `memberDataStatus` | `complete`、`metadata_only_no_query_agent`、`metadata_only_join_denied`、`metadata_only_join_timeout` 或 `metadata_only_agent_state_changed`。metadata-only 时 `members` 必为空数组。 |
+| `metadata["Members:numPlayers"]` | Steam lobby owner 写入的原始 metadata；前端不得用它计算本 API 的玩家人数，也不会被 Core 改写。 |
 
 `metadata` 是 Steam 返回的字符串字典。不要假定键集合固定：除 L4D2 游戏字段外，Steam
 也可能返回 `__gameserverIP`、`__gameserverPort`、`__gameserverSteamID` 等内部
@@ -596,10 +606,22 @@ Content-Type: application/json; charset=utf-8
 "invalid_lobby_id"
 ```
 
-没有健康 Agent，或者 Core 到被选 Agent 的 HTTP 调用失败时：
+metadata 确认失败时：
 
 ```http
 HTTP/1.1 503 Service Unavailable
+Content-Type: application/json; charset=utf-8
+
+"lobby_data_unavailable"
+```
+
+没有健康 Agent、所有 Agent 查询租约已被占用，或 Core 无法访问被选 Agent 时：
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json; charset=utf-8
+
+"lobby_query_agent_unavailable"
 ```
 
 ## 前端状态处理

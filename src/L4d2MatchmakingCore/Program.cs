@@ -31,6 +31,7 @@ builder.Services.AddScoped<WarmupAgentContainerService>();
 builder.Services.AddScoped<WarmupAgentService>();
 builder.Services.AddHttpClient<IAgentControlClient, AgentControlClient>();
 builder.Services.AddScoped<IHealthyAgentSelector, HealthyAgentSelector>();
+builder.Services.AddScoped<LobbyQueryService>();
 builder.Services.AddSingleton<ISourceA2sClient>(new SourceA2sClient(TimeSpan.FromSeconds(3)));
 builder.Services.AddSingleton<WarmupDecisionEngine>();
 builder.Services.AddScoped<SharedLibraryMaintenanceService>();

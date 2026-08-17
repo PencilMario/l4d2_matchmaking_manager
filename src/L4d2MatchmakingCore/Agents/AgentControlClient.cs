@@ -14,6 +14,11 @@ public interface IAgentControlClient
     Task<AgentOperationSnapshot?> GetOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken);
     Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken);
     Task<LobbySnapshot> ReadLobbyAsync(WarmupAgent agent, string lobbyId, CancellationToken cancellationToken);
+    Task<LobbySnapshot> QueryLobbyAsync(
+        WarmupAgent agent,
+        string lobbyId,
+        bool includeMembers,
+        CancellationToken cancellationToken) => ReadLobbyAsync(agent, lobbyId, cancellationToken);
 }
 
 public interface IHealthyAgentSelector
@@ -59,6 +64,25 @@ public sealed class AgentControlClient(HttpClient httpClient) : IAgentControlCli
     public Task<LobbySnapshot> ReadLobbyAsync(WarmupAgent agent, string lobbyId, CancellationToken cancellationToken) =>
         GetRequiredAsync<LobbySnapshot>(agent, $"/v1/lobbies/{Uri.EscapeDataString(lobbyId)}", cancellationToken);
 
+    public async Task<LobbySnapshot> QueryLobbyAsync(
+        WarmupAgent agent,
+        string lobbyId,
+        bool includeMembers,
+        CancellationToken cancellationToken)
+    {
+        var path = $"/v1/lobbies/{Uri.EscapeDataString(lobbyId)}?includeMembers={includeMembers.ToString().ToLowerInvariant()}";
+        using var response = await httpClient.GetAsync(UriFor(agent, path), cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var failure = await response.Content.ReadFromJsonAsync<string>(cancellationToken: cancellationToken);
+            if (failure is "lobby_data_unavailable" or "lobby_operation_preservation_failed")
+                throw new AgentLobbyQueryException(failure);
+            response.EnsureSuccessStatusCode();
+        }
+
+        return await ReadRequiredAsync<LobbySnapshot>(response, cancellationToken);
+    }
+
     private async Task<T> GetRequiredAsync<T>(WarmupAgent agent, string path, CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync(UriFor(agent, path), cancellationToken);
@@ -72,6 +96,11 @@ public sealed class AgentControlClient(HttpClient httpClient) : IAgentControlCli
 
     private static Uri UriFor(WarmupAgent agent, string path) =>
         new($"http://l4d2-agent-{agent.Id:N}:8080{path}", UriKind.Absolute);
+}
+
+public sealed class AgentLobbyQueryException(string code) : HttpRequestException(code)
+{
+    public string Code { get; } = code;
 }
 
 public sealed class HealthyAgentSelector(

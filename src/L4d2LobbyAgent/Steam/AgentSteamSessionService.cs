@@ -7,6 +7,7 @@ public interface IAgentSteamSessionService
     Task<AgentOperationSnapshot?> GetAsync(Guid operationId, CancellationToken cancellationToken);
     Task<bool> StopAsync(Guid operationId, CancellationToken cancellationToken);
     Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken);
+    Task<LobbySnapshot> QueryLobbyAsync(ulong lobbyId, bool includeMembers, CancellationToken cancellationToken);
 }
 
 public sealed class AgentSteamSessionService(ISteamSessionActor actor) : IAgentSteamSessionService
@@ -33,4 +34,7 @@ public sealed class AgentSteamSessionService(ISteamSessionActor actor) : IAgentS
 
     public Task<LobbySnapshot> ReadLobbyAsync(ulong lobbyId, CancellationToken cancellationToken) =>
         actor.ReadLobbyAsync(lobbyId, cancellationToken);
+
+    public Task<LobbySnapshot> QueryLobbyAsync(ulong lobbyId, bool includeMembers, CancellationToken cancellationToken) =>
+        actor.QueryLobbyAsync(lobbyId, includeMembers, cancellationToken);
 }

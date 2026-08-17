@@ -67,15 +67,36 @@ public sealed class AgentControlClientTests
         Assert.AreEqual("private-rcon-password", handler.RconPassword);
     }
 
-    private sealed class RecordingHandler(AgentOperationSnapshot operation, LobbySnapshot lobby) : HttpMessageHandler
+    [TestMethod]
+    public async Task QueryMapsAgentLobbyDataFailureAndSetsMembershipIntent()
+    {
+        var lobby = new LobbySnapshot("109775242170052468", "owner", [], new Dictionary<string, string>(), DateTimeOffset.UnixEpoch);
+        var handler = new RecordingHandler(
+            new AgentOperationSnapshot(Guid.NewGuid(), "active", null, null, DateTimeOffset.UnixEpoch),
+            lobby,
+            lobbyFailure: "lobby_data_unavailable");
+        using var httpClient = new HttpClient(handler);
+        var client = new AgentControlClient(httpClient);
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+
+        var exception = await Assert.ThrowsExceptionAsync<AgentLobbyQueryException>(
+            () => client.QueryLobbyAsync(agent, lobby.LobbyId, includeMembers: false, CancellationToken.None));
+
+        Assert.AreEqual("lobby_data_unavailable", exception.Code);
+        Assert.AreEqual($"/v1/lobbies/{lobby.LobbyId}?includeMembers=false", handler.RequestUris.Single());
+    }
+
+    private sealed class RecordingHandler(AgentOperationSnapshot operation, LobbySnapshot lobby, string? lobbyFailure = null) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
+        public List<string> RequestUris { get; } = [];
         public List<string> Hosts { get; } = [];
         public string? RconPassword { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
+            RequestUris.Add($"{request.RequestUri!.AbsolutePath}{request.RequestUri.Query}");
             Hosts.Add($"{request.RequestUri.Host}:{request.RequestUri.Port}");
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath == "/v1/operations")
             {
@@ -91,6 +112,11 @@ public sealed class AgentControlClientTests
                 _ => new { },
             };
             var statusCode = request.Method == HttpMethod.Post ? HttpStatusCode.OK : HttpStatusCode.OK;
+            if (request.RequestUri.AbsolutePath.StartsWith("/v1/lobbies/", StringComparison.Ordinal) && lobbyFailure is not null)
+            {
+                statusCode = HttpStatusCode.ServiceUnavailable;
+                payload = lobbyFailure;
+            }
             return new HttpResponseMessage(statusCode)
             {
                 Content = JsonContent.Create(payload),

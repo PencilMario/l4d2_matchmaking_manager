@@ -15,12 +15,22 @@ public sealed record AgentOperationRequest(
 
 public sealed record LobbyMemberSnapshot(string SteamId, string? PersonaName);
 
+public static class LobbyMemberDataStatus
+{
+    public const string Complete = "complete";
+    public const string MetadataOnlyNoQueryAgent = "metadata_only_no_query_agent";
+    public const string MetadataOnlyJoinDenied = "metadata_only_join_denied";
+    public const string MetadataOnlyJoinTimeout = "metadata_only_join_timeout";
+    public const string MetadataOnlyAgentStateChanged = "metadata_only_agent_state_changed";
+}
+
 public sealed record LobbySnapshot(
     string LobbyId,
     string OwnerSteamId,
     IReadOnlyList<LobbyMemberSnapshot> Members,
     IReadOnlyDictionary<string, string> Metadata,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt,
+    string MemberDataStatus = LobbyMemberDataStatus.Complete);
 
 public sealed record AgentOperationSnapshot(
     Guid OperationId,
