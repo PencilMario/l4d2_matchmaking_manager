@@ -36,6 +36,7 @@ builder.Services.AddSingleton<WarmupDecisionEngine>();
 builder.Services.AddScoped<SharedLibraryMaintenanceService>();
 builder.Services.AddScoped<WarmupSchedulerService>();
 builder.Services.AddScoped<WarmupStatusService>();
+builder.Services.AddScoped<WarmupAttemptDrainService>();
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService<WarmupSchedulerBackgroundService>();
 

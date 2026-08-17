@@ -2,12 +2,13 @@
 
 ## Checkpoint
 
-- **Current todo:** drain active operations before disabling or deleting a
-  Target Server.
+- **Current todo:** deployment/docs update and local/remote integration
+  verification.
 - **Completed todos:** reservation-only RCON credentials; authenticated current
-  warm-up status API; bounded multi-Agent scheduler batch planning.
-- **Next step:** add failing Target Server lifecycle tests, then extract the
-  confirmed-stop/quarantine drain owner.
+  warm-up status API; bounded multi-Agent scheduler batch planning; Target
+  Server drain lifecycle.
+- **Next step:** expose the scheduler limit in Compose/docs, run full solution
+  verification, then deploy to the existing Core host.
 
 ## Task 1
 
@@ -57,3 +58,19 @@
 - **Drift check:** Core remains the only scheduler/state owner. Agent requests
   are still private and independent; no new persistence model or Agent protocol
   was introduced. Decision: continue.
+
+## Task 4
+
+- **Behavior:** disabling persists `enabled=false` before a drain; deletion
+  follows the same drain and only removes the Target Server after every stop is
+  confirmed. Failed stops quarantine their Agent, preserve uncertain state and
+  reservation lease, and produce `409`.
+- **Red evidence:** disable/delete tests observed zero stop calls, and failed
+  stops previously returned `200`.
+- **Green evidence:** `dotnet test
+  src\\L4d2MatchmakingCore\\tests\\L4d2MatchmakingCore.tests.csproj
+  --no-restore --filter "FullyQualifiedName~TargetServerEndpointTests|FullyQualifiedName~WarmupSchedulerServiceTests|FullyQualifiedName~WarmupStatusEndpointTests|FullyQualifiedName~CoreAuthenticationTests|FullyQualifiedName~LobbyQueryEndpointTests"`
+  passed 31 tests.
+- **Drift check:** one drain service owns stop confirmation and failure
+  quarantine. Target Server endpoints only translate the ownership result to
+  HTTP, and no credentials are added to audits. Decision: continue.

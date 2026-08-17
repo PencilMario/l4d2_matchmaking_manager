@@ -1,12 +1,14 @@
 using System.Text.Json;
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Scheduling;
 using Microsoft.EntityFrameworkCore;
 
 namespace L4d2MatchmakingCore.Servers;
 
 public sealed class TargetServerService(
     MatchmakingDbContext dbContext,
-    IRconCredentialProtector credentials)
+    IRconCredentialProtector credentials,
+    WarmupAttemptDrainService drainService)
 {
     public async Task<TargetServerResponse> CreateAsync(
         CreateTargetServerRequest request,
@@ -90,6 +92,8 @@ public sealed class TargetServerService(
         server.UpdatedAt = DateTimeOffset.UtcNow;
         AddAudit("target_server_updated", server.Id, server.UpdatedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (!server.Enabled && !await drainService.DrainAsync(server.Id, cancellationToken))
+            throw new TargetServerDrainException();
         return ToResponse(server);
     }
 
@@ -101,6 +105,12 @@ public sealed class TargetServerService(
             return false;
 
         var now = DateTimeOffset.UtcNow;
+        server.Enabled = false;
+        server.UpdatedAt = now;
+        AddAudit("target_server_disabled", server.Id, now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (!await drainService.DrainAsync(server.Id, cancellationToken))
+            throw new TargetServerDrainException();
         dbContext.TargetServers.Remove(server);
         AddAudit("target_server_deleted", server.Id, now);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -186,4 +196,11 @@ public sealed class TargetServerService(
         int PlayerTarget,
         bool Enabled,
         string? RconPassword);
+}
+
+public sealed class TargetServerDrainException : Exception
+{
+    public TargetServerDrainException() : base("target_server_drain_failed")
+    {
+    }
 }

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using L4d2Matchmaking.Contracts;
+using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Servers;
 using Microsoft.AspNetCore.Hosting;
@@ -222,7 +224,116 @@ public sealed class TargetServerEndpointTests
         Assert.IsFalse(convertedServer.HasRconCredentials);
     }
 
-    private sealed class ServerFactory : WebApplicationFactory<global::Program>
+    [TestMethod]
+    public async Task DisableStopsCurrentAttemptAndReleasesItsReservationLease()
+    {
+        using var environment = new CoreTestEnvironment();
+        var agents = new FakeAgentClient();
+        await using var factory = new ServerFactory(agents);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+        var (server, agent, attempt) = await SeedReservedAttemptAsync(factory);
+
+        var response = await client.PutAsJsonAsync($"/v1/servers/{server.Id}", new UpdateTargetServerRequest(
+            "203.0.113.7:27015",
+            true,
+            0,
+            1,
+            720,
+            6,
+            false));
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.AreEqual(1, agents.StopCalls);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.IsFalse((await db.TargetServers.SingleAsync(candidate => candidate.Id == server.Id)).Enabled);
+        Assert.AreEqual("completed", (await db.WarmupAttempts.SingleAsync(candidate => candidate.Id == attempt.Id)).State);
+        Assert.IsFalse(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id));
+    }
+
+    [TestMethod]
+    public async Task DeleteStopsCurrentAttemptBeforeRemovingTargetServer()
+    {
+        using var environment = new CoreTestEnvironment();
+        var agents = new FakeAgentClient();
+        await using var factory = new ServerFactory(agents);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+        var (server, _, attempt) = await SeedReservedAttemptAsync(factory);
+
+        var response = await client.DeleteAsync($"/v1/servers/{server.Id}");
+
+        Assert.AreEqual(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.AreEqual(1, agents.StopCalls);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.IsFalse(await db.TargetServers.AnyAsync(candidate => candidate.Id == server.Id));
+        Assert.AreEqual("completed", (await db.WarmupAttempts.SingleAsync(candidate => candidate.Id == attempt.Id)).State);
+        Assert.IsFalse(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id));
+    }
+
+    [TestMethod]
+    public async Task FailedDisableDrainQuarantinesAgentAndKeepsTargetDisabled()
+    {
+        using var environment = new CoreTestEnvironment();
+        var agents = new FakeAgentClient(throwOnStop: true);
+        await using var factory = new ServerFactory(agents);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+        var (server, agent, attempt) = await SeedReservedAttemptAsync(factory);
+
+        var response = await client.PutAsJsonAsync($"/v1/servers/{server.Id}", new UpdateTargetServerRequest(
+            "203.0.113.7:27015",
+            true,
+            0,
+            1,
+            720,
+            6,
+            false));
+
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.AreEqual(1, agents.StopCalls);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.IsFalse((await db.TargetServers.SingleAsync(candidate => candidate.Id == server.Id)).Enabled);
+        Assert.AreEqual("quarantined", (await db.WarmupAgents.SingleAsync(candidate => candidate.Id == agent.Id)).Status);
+        Assert.AreEqual("active", (await db.WarmupAttempts.SingleAsync(candidate => candidate.Id == attempt.Id)).State);
+        Assert.IsTrue(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id && lease.OperationId == attempt.OperationId));
+    }
+
+    private static async Task<(TargetServer Server, WarmupAgent Agent, WarmupAttempt Attempt)> SeedReservedAttemptAsync(ServerFactory factory)
+    {
+        var server = new TargetServer
+        {
+            Id = Guid.NewGuid(), Host = "203.0.113.7", Port = 27015, RequiresReservation = true,
+            Enabled = true, MaxConcurrentWarmups = 1, AttemptWindowSeconds = 720, PlayerTarget = 6,
+        };
+        var agent = new WarmupAgent
+        {
+            Id = Guid.NewGuid(), Name = $"agent-{Guid.NewGuid():N}", Status = "running",
+            SteamDataVolumeName = $"steam-{Guid.NewGuid():N}", AccountConfigVolumeName = $"config-{Guid.NewGuid():N}",
+            NoVncPort = 18083,
+        };
+        var attempt = new WarmupAttempt
+        {
+            Id = Guid.NewGuid(), TargetServerId = server.Id, WarmupAgentId = agent.Id, OperationId = Guid.NewGuid(),
+            Mode = "reserved", State = "active", Phase = "awaiting_first_member", StartedAt = DateTimeOffset.UtcNow,
+            ObservedAt = DateTimeOffset.UtcNow,
+        };
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        db.AddRange(server, agent, attempt, new ReservationLease
+        {
+            TargetServerId = server.Id,
+            OperationId = attempt.OperationId,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10),
+        });
+        await db.SaveChangesAsync();
+        return (server, agent, attempt);
+    }
+
+    private sealed class ServerFactory(IAgentControlClient? agentClient = null) : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
 
@@ -235,8 +346,29 @@ public sealed class TargetServerEndpointTests
                 services.RemoveAll<IDbContextOptionsConfiguration<MatchmakingDbContext>>();
                 services.AddDbContext<MatchmakingDbContext>(options =>
                     options.UseInMemoryDatabase(_databaseName));
+                if (agentClient is not null)
+                {
+                    services.RemoveAll<IAgentControlClient>();
+                    services.AddSingleton(agentClient);
+                }
             });
         }
+    }
+
+    private sealed class FakeAgentClient(bool throwOnStop = false) : IAgentControlClient
+    {
+        public int StopCalls { get; private set; }
+        public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentOperationStartResult> StartOperationAsync(WarmupAgent agent, AgentOperationRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentOperationSnapshot?> GetOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
+        {
+            StopCalls++;
+            return throwOnStop
+                ? Task.FromException(new HttpRequestException("agent_unavailable"))
+                : Task.CompletedTask;
+        }
+        public Task<LobbySnapshot> ReadLobbyAsync(WarmupAgent agent, string lobbyId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class CoreTestEnvironment : IDisposable

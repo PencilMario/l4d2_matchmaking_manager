@@ -44,7 +44,7 @@ public static class TargetServerEndpoints
         return server is null ? TypedResults.NotFound() : TypedResults.Ok(server);
     }
 
-    private static async Task<Results<Ok<TargetServerResponse>, NotFound, BadRequest<string>>> UpdateAsync(
+    private static async Task<Results<Ok<TargetServerResponse>, NotFound, BadRequest<string>, Conflict<string>>> UpdateAsync(
         Guid serverId,
         UpdateTargetServerRequest request,
         TargetServerService service,
@@ -59,13 +59,26 @@ public static class TargetServerEndpoints
         {
             return TypedResults.BadRequest(exception.Message);
         }
+        catch (TargetServerDrainException exception)
+        {
+            return TypedResults.Conflict(exception.Message);
+        }
     }
 
-    private static async Task<Results<NoContent, NotFound>> DeleteAsync(
+    private static async Task<Results<NoContent, NotFound, Conflict<string>>> DeleteAsync(
         Guid serverId,
         TargetServerService service,
-        CancellationToken cancellationToken) =>
-        await service.DeleteAsync(serverId, cancellationToken)
-            ? TypedResults.NoContent()
-            : TypedResults.NotFound();
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await service.DeleteAsync(serverId, cancellationToken)
+                ? TypedResults.NoContent()
+                : TypedResults.NotFound();
+        }
+        catch (TargetServerDrainException exception)
+        {
+            return TypedResults.Conflict(exception.Message);
+        }
+    }
 }
