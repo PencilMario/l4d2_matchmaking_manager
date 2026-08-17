@@ -193,3 +193,42 @@ Agent 不接受 Docker 参数、Steam 凭据、服务器 RCON 凭据或外部指
 ### ImpactStatementDraft
 
 新增核心、数据库、部署与调度层，并扩展 Agent 的控制契约；不改变现有 health 路由语义。Steam 和服务器运行时状态维持实时读取的权威边界，公开 API 只读且不含凭据。
+
+## 2026-08-17：登录后 VNC 回收
+
+### 目标
+
+一个已配置 Steam 登录的受管 Agent 重建后，必须继续以 `-silent -no-browser`
+运行 Steam，同时不再启动基础镜像的 `x11vnc` 服务。首次登录和显式重新认证仍必须
+保留仅回环可达的 noVNC。
+
+### 设计
+
+容器初始化脚本 `deploy/steam-lobby-agent/91-enable-steam-supervisor.sh` 是 Steam
+登录状态到启动进程策略的唯一 owner。它读取账号私有
+`config/loginusers.vdf` 中的 `MostRecent=1`，并在 supervisor 启动前同时写入 Steam
+命令和 VNC 的 `autostart` 值：
+
+- `STEAM_LOGIN_UI_MODE=always`：`-vgui -no-browser`，启动 VNC，供人工登录使用。
+- `STEAM_LOGIN_UI_MODE=auto` 且没有最近登录：`-vgui -no-browser`，启动 VNC，维持首次
+  配置流程。
+- `STEAM_LOGIN_UI_MODE=auto` 且有最近登录，或 `never`：`-silent -no-browser`，禁用 VNC
+  supervisor，避免启动 `x11vnc`。
+
+基础镜像的 `90-configure_vnc.sh` 仍负责其通用 VNC 配置；本脚本仅在它之后覆盖
+`vnc.ini` 的最终自启动决定。Core 仍保留现有的 `WEB_UI_MODE=vnc`、8083 端口映射、
+Agent API、卷名、账号凭据隔离和 noVNC 端口分配契约。已登录的 Agent 因而不消耗 VNC
+进程内存，但其保留的回环端口在无 VNC 服务时不会响应；需要交互登录时，将 UI 模式设为
+`always` 后重建。
+
+### 边界与非目标
+
+本切片不修改 Steam actor、Core API、数据库、Docker 网络模型、共享游戏库或 Steam
+客户端 bootstrap 更新策略。Steam 自身可能保留的 `steamwebhelper` 子进程不属于 VNC
+服务，不能在不影响 Steam 会话的前提下于本切片中强行终止。
+
+### 验收
+
+自动化契约必须覆盖三种模式及其 VNC `autostart` 状态。远端验收使用已登录的账号在
+`auto` 模式重建 Agent，确认 actor 连续健康且容器进程列表不含 `x11vnc`；`always` 模式
+仍保留 VNC 登录恢复能力。现有 8080 内网与 8083 回环绑定必须不变。
