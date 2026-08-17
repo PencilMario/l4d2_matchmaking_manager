@@ -28,12 +28,15 @@ warm-up rules.
 1. Core validates the decimal non-zero lobby ID and obtains healthy Agents.
 2. It selects an Agent with no active or uncertain Warm-up Attempt first. If
    none exists, it selects an Agent whose only current attempt is active with
-   mode=standard. Reservation and uncertain attempts are excluded.
+   mode=standard. These are the only membership-query candidates. If neither
+   exists, Core may use another healthy Agent only to obtain confirmed
+   metadata; reservation and uncertain attempts are never temporary-join
+   candidates.
 3. The Agent calls RequestLobbyData and waits for the matching
    LobbyDataUpdate_t success callback, with a five-second deadline. A false
    request result, failed callback, or deadline expiry is a query failure,
    never an empty successful snapshot.
-4. For an eligible selected Agent, it calls JoinLobby and waits for the
+4. For a membership-query candidate, it calls JoinLobby and waits for the
    matching successful LobbyEnter_t. On success it reads the member list,
    removes the querying Agent's own Steam ID, and leaves the temporary lobby
    in a finally path.
@@ -68,7 +71,7 @@ Allowed memberDataStatus values are:
 | Value | Meaning |
 | --- | --- |
 | complete | Lobby data was confirmed, the Agent joined, and members excludes that Agent. |
-| metadata_only_no_query_agent | No idle or eligible standard Warm-up Agent was available. |
+| metadata_only_no_query_agent | No idle or eligible standard Warm-up Agent was available; metadata came from a healthy Agent that was not permitted to join. |
 | metadata_only_join_denied | Steam denied the temporary join, such as a full or non-joinable lobby. |
 | metadata_only_join_timeout | Steam did not complete the temporary join before its deadline. |
 | metadata_only_agent_state_changed | The selected Agent was no longer eligible when its actor processed the request. |
