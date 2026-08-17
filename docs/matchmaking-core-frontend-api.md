@@ -39,6 +39,66 @@
 
 `serverId` 与 `agentId` 都是 UUID。`lobbyId` 必须是非零十进制 Steam lobby ID。
 
+## HTTP 响应示例
+
+Core 没有统一的 `{ "data": ... }` 包装层。成功时直接返回对象或数组；错误 body 是 JSON
+字符串；`204` 完全没有 body。
+
+健康检查：
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+{"status":"alive"}
+```
+
+目标服务器列表为空时：
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+[]
+```
+
+创建目标服务器时，`201` 的 body 就是该服务器读取模型：
+
+```http
+HTTP/1.1 201 Created
+Location: /v1/servers/c691ca6a-6c2a-4ece-b7bd-2e951eee7caa
+Content-Type: application/json; charset=utf-8
+
+{
+  "id": "c691ca6a-6c2a-4ece-b7bd-2e951eee7caa",
+  "endpoint": "203.0.113.7:27015",
+  "requiresReservation": false,
+  "priority": 0,
+  "maxConcurrentWarmups": 36,
+  "attemptWindowSeconds": 720,
+  "playerTarget": 6,
+  "enabled": true,
+  "hasRconCredentials": false,
+  "createdAt": "2026-08-17T12:00:00+00:00",
+  "updatedAt": "2026-08-17T12:00:00+00:00"
+}
+```
+
+删除成功时：
+
+```http
+HTTP/1.1 204 No Content
+```
+
+未能确认目标服务器 drain 时：
+
+```http
+HTTP/1.1 409 Conflict
+Content-Type: application/json; charset=utf-8
+
+"target_server_drain_failed"
+```
+
 ## 目标服务器
 
 ### 写入模型
