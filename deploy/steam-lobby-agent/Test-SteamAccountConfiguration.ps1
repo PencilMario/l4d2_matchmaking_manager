@@ -42,6 +42,18 @@ if ($initializer -notmatch '-silent -no-browser') {
     throw 'The initializer must suppress the Steam UI after account login is complete.'
 }
 
+if ($initializer -notmatch 'set_vnc_autostart' -or
+    $initializer -notmatch '/etc/supervisor\.d/vnc\.ini' -or
+    $initializer -notmatch 'set_vnc_autostart "\$\{enable_vnc\}"') {
+    throw 'The initializer must explicitly set the final VNC autostart state after selecting the Steam UI mode.'
+}
+
+if (-not [regex]::IsMatch(
+        $initializer,
+        '(?s)enable_vnc=true.*?never\).*?enable_vnc=false.*?auto\).*?MostRecent.*?enable_vnc=false.*?else.*?-vgui -no-browser')) {
+    throw 'The initializer must keep VNC for an unconfigured auto account and disable it after login or in never mode.'
+}
+
 $compose = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'docker-compose.yml')
 if ($compose -match 'STEAM_ARGS:') {
     throw 'The compose file must not pin Steam to UI mode after login has completed.'

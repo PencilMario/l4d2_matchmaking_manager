@@ -45,6 +45,18 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         mv "${temporary_file}" "${steam_config_file}"
     }
 
+    set_vnc_autostart() {
+        case "$1" in
+            true|false) ;;
+            *)
+                echo 'VNC autostart must be true or false.' >&2
+                return 1
+                ;;
+        esac
+
+        sed -i "s|^autostart=.*$|autostart=$1|" /etc/supervisor.d/vnc.ini
+    }
+
     configure_steam_ui_mode() {
         login_ui_mode="${STEAM_LOGIN_UI_MODE:-auto}"
         case "${login_ui_mode}" in
@@ -56,16 +68,19 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         esac
 
         loginusers_file="${steam_config_directory}/loginusers.vdf"
+        enable_vnc=true
         case "${login_ui_mode}" in
             always)
                 steam_arguments='-vgui -no-browser'
                 ;;
             never)
                 steam_arguments='-silent -no-browser'
+                enable_vnc=false
                 ;;
             auto)
                 if [ -f "${loginusers_file}" ] && grep -Eq '"MostRecent"[[:space:]]*"1"' "${loginusers_file}"; then
                     steam_arguments='-silent -no-browser'
+                    enable_vnc=false
                 else
                     steam_arguments='-vgui -no-browser'
                 fi
@@ -73,6 +88,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         esac
 
         sed -i "s|^command=.*$|command=/usr/games/steam ${steam_arguments}|" /etc/supervisor.d/steam.ini
+        set_vnc_autostart "${enable_vnc}"
     }
 
     if [ -n "${STEAM_SHARED_LIBRARY_PATH:-}" ]; then
