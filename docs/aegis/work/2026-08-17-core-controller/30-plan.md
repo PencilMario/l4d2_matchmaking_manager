@@ -908,3 +908,25 @@ git commit -m "feat(deploy): 提供单主机暖服核心部署"
 - Compatibility: Tasks 3-4 preserve health routes and stable payloads. Task 11 retires only the Core docker-exec business path while retaining Probe CLI diagnostics.
 - Runtime authority: Tasks 9-11 require fresh A2S and Agent reads at every decision.
 - Residual risk: Steam native actor behavior, download region behavior and noVNC must be accepted on a real Ubuntu host. Without RCON, reservation success is Agent observation only.
+
+## 登录后 VNC 回收实现计划
+
+**Goal:** 已登录 Steam Agent 的 `auto`/`never` 启动路径不启动 `x11vnc`，同时保留首次登录和 `always` 的 VNC。
+
+**Architecture:** `91-enable-steam-supervisor.sh` 在同一函数中依据 Steam 的 `MostRecent=1` 或 Agent 在完整 health 成功时写入的账号私有标记产生 `enable_vnc`，并在 supervisor 启动前覆盖 `/etc/supervisor.d/vnc.ini`。Core 继续分配与回环发布 8083；不引入 Agent 数据库状态或新的 API。
+
+**Compatibility Boundary:** `always` 和既无 `MostRecent=1` 也无健康标记的 `auto` 必须仍启用 VNC；Steam 的 `-vgui/-silent` 选择、Core API、8080 内网边界、8083 回环绑定、凭据卷和共享库不改变。
+
+### Task 13: 根据登录状态关闭 VNC supervisor
+
+**Files:** `deploy/steam-lobby-agent/Test-SteamAccountConfiguration.ps1` 与 `deploy/steam-lobby-agent/91-enable-steam-supervisor.sh`。
+
+**Repair Track:** 根因是 Core 始终传递 `WEB_UI_MODE=vnc`，基础镜像据此启动 VNC，而已有脚本只隐藏 Steam 窗口。最小修复是在已有登录状态分支中明确写入最终 VNC 自启动值。
+
+**Retirement Track:** 不增加第二个 UI mode owner。现有 `WEB_UI_MODE=vnc` 保留，以免破坏首次登录；`91-enable-steam-supervisor.sh` 的最终 `vnc.ini` 写入成为覆盖 owner。
+
+1. 在 PowerShell 契约中断言初始化脚本包含 `set_vnc_autostart`，该 helper 写入 `/etc/supervisor.d/vnc.ini`，且 `always`、无最近登录 `auto`、有最近登录 `auto` 与 `never` 明确选择 VNC 状态。
+2. 运行 `pwsh -NoProfile -File deploy/steam-lobby-agent/Test-SteamAccountConfiguration.ps1 -SharedLibraryPath deploy/steam-lobby-agent/tests/fixtures/shared-library`，预期在当前实现以缺少 VNC 自启动管理失败。
+3. 在 `ProbeStatusService` 完整 health 成功后写入账号私有 `l4d2-agent-ready` 标记；`configure_steam_ui_mode` 以 `enable_vnc=true` 初始化，`always` 与无登录证据的 `auto` 保持 true，有 `MostRecent=1` 或就绪标记的 `auto` 与 `never` 设为 false。`set_vnc_autostart` 仅覆写 `/etc/supervisor.d/vnc.ini` 的 `autostart`。
+4. 再运行该 PowerShell 契约和 `bash -n deploy/steam-lobby-agent/91-enable-steam-supervisor.sh`，预期均 exit 0。
+5. 在 `100.72.137.92` 构建 `l4d2-steam-lobby-agent:local` 并重建已登录 Agent；三次 actor 探针必须为 `200/ready=true`，进程列表不得含 `x11vnc`，而 18080/18083 仍只绑定 `127.0.0.1`。

@@ -192,3 +192,31 @@
 - 真实 Steam 登录、AppID 550 下载与 API 库路径、下载地区、silent UI、shader/AppID 更新策略尚无客户端级证据。
 - Steam 客户端自身 bootstrap 更新未被本项目禁用；这不属于已实现的 AppID 550 游戏更新策略，若业务需要必须先在目标 Steam 版本上验证稳定运维方案。
 - reserved/standard lobby、A2S 阈值、120/30 秒计时、任意 lobby 查询及 Core 重启恢复仍需真实服务器验收。
+
+## 2026-08-17：真实 Steam 登录与 VNC 回收切片
+
+### TodoCheckpointDraft
+
+- 已完成：真实 Steam/Steam Guard noVNC 登录、silent Agent 重建、下载地区默认值修复和登录后 VNC 回收。
+- 当前工作项：等待真实目标 L4D2 服务器后执行 reserved/standard 暖服状态机验收。
+- 下一步：配置目标服务器并验证 A2S、120/30 秒计时、人数阈值、lobby 查询及重启恢复。
+
+### EvidenceBundleDraft
+
+- 远端实测发现受管 Agent 的 `loginusers.vdf` 没有 `MostRecent` 条目，不能用文件存在性或 Steam 旧标记判断当前登录。真实 actor 已能返回 `ready=true`，因此 Agent 现在只在 actor 与 Steam Desktop 同时健康时把无敏感 `l4d2-agent-ready` 写入账号私有 Steam 配置。
+- RED/GREEN：`GetAsyncPersistsTheLoginMarkerOnlyAfterTheFullHealthCheckSucceeds` 在缺少 marker 契约时以 `IAgentReadinessMarker` 未定义失败；实现后 `ProbeStatusServiceTests` 为 5/5，完整 `L4d2LobbyAgent` 测试为 15/15。账号配置契约和 Compose 契约均 exit 0。
+- RED/GREEN：无下载地区的 Docker 定义测试先以预期 16 项、实际 15 项失败；Core 现在始终发送 `STEAM_DOWNLOAD_REGION=`，`DockerAgentContainerRuntimeTests` 为 3/3。这个修复消除了 supervisor 对未定义 `ENV_STEAM_DOWNLOAD_REGION` 的启动失败。
+- 远端 Bash 与一次性容器覆盖 `always`、无登录的 `auto`、有 `MostRecent` 的 `auto` 与 `never`：前两种产生 VNC=true 和 `-vgui -no-browser`，后两种产生 VNC=false 和 `-silent -no-browser`。
+- 远端部署：Core 镜像与 Agent 镜像重建后，首次新 Agent 启动经三次 `200` probe 写入就绪标记且仍保持 VNC=true；第二次使用同一账号卷重建后，连续三次 `200/ready=true`，`vnc.ini` 两个 autostart 条目均为 false，`x11vnc` 进程数为 0，Steam 进程仍为 1。Core 18080 与 noVNC 18083 仍只监听 `127.0.0.1`，Agent 仅发布回环 8083，8080 未发布。
+
+### DriftCheckDraft
+
+- 范围：只补足已登录会话的 VNC 回收和无下载地区 Agent 的容器启动契约；没有变更 Steam API、Core API、账号卷/共享库边界或暖服调度。
+- 兼容：`always` 与没有登录证据的首次 `auto` 仍可 noVNC 登录；凭据失效时仍通过 `always` 重建恢复。保留回环 8083 映射，静默运行时其后端服务不启动。
+- 决定：`continue`。真实登录、silent actor 与 VNC 回收已有直接证据；真实服务器状态机仍未验收。
+
+### Risk / Unknown
+
+- Docker 根分区在 Agent/Core 镜像构建后约剩 `3.8 GB`；`/mnt/storage` 有充足空间，但批量扩容前必须迁移 Docker data-root 或释放经确认不用的镜像。
+- Steam 客户端 bootstrap 自更新仍没有已验证的跨版本禁用策略；AppID 550 的非启动时更新抑制不等同于 Steam 客户端更新禁用。
+- 没有配置真实目标服务器，因此 reserved/standard 暖服、A2S 阈值、120/30 秒计时、任意 lobby 查询与 Core 重启恢复仍未完成端到端验收。

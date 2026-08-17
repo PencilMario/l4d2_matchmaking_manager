@@ -24,9 +24,10 @@ Core 默认使用该 tag；通过 `CORE_AGENT_IMAGE` 可改用受控的私有镜
 `http://127.0.0.1:<noVncPort>/`，或从管理工作站通过 SSH 将该端口转发到本机，再完成
 Steam 登录和 Steam Guard。
 
-首次登录时 Steam 使用小屏幕 `-vgui -no-browser` UI。账号的 `loginusers.vdf` 出现
-`MostRecent=1` 后，后续启动使用 `-silent -no-browser`，移除常规 Steam 窗口和浏览器
-进程。需要重新登录时，将 Core `.env` 中的
+首次登录时 Steam 使用小屏幕 `-vgui -no-browser` UI。Agent 在 Steam actor 与 Desktop
+完整健康时会在账号私有 Steam 配置中写入无敏感内容的就绪标记；后续启动使用
+`-silent -no-browser` 并停用 `x11vnc`。Steam 的 `loginusers.vdf` 中存在
+`MostRecent=1` 时同样会进入该路径。需要重新登录时，将 Core `.env` 中的
 `CORE_AGENT_STEAM_LOGIN_UI_MODE=always`，重启 Core 后重建目标 Agent；完成后恢复为
 `auto`。独立诊断 Compose 则使用自身的 `STEAM_LOGIN_UI_MODE=always`。
 

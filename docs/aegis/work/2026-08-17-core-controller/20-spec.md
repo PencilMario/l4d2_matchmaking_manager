@@ -206,14 +206,15 @@ Agent 不接受 Docker 参数、Steam 凭据、服务器 RCON 凭据或外部指
 
 容器初始化脚本 `deploy/steam-lobby-agent/91-enable-steam-supervisor.sh` 是 Steam
 登录状态到启动进程策略的唯一 owner。它读取账号私有
-`config/loginusers.vdf` 中的 `MostRecent=1`，并在 supervisor 启动前同时写入 Steam
-命令和 VNC 的 `autostart` 值：
+`config/loginusers.vdf` 中的 `MostRecent=1` 或 `l4d2-agent-ready` 标记，并在
+supervisor 启动前同时写入 Steam 命令和 VNC 的 `autostart` 值。标记只由 Agent 在
+Steam actor 和 Steam Desktop 同时健康时写入，因此不会将未登录账号误判为已登录：
 
 - `STEAM_LOGIN_UI_MODE=always`：`-vgui -no-browser`，启动 VNC，供人工登录使用。
 - `STEAM_LOGIN_UI_MODE=auto` 且没有最近登录：`-vgui -no-browser`，启动 VNC，维持首次
   配置流程。
-- `STEAM_LOGIN_UI_MODE=auto` 且有最近登录，或 `never`：`-silent -no-browser`，禁用 VNC
-  supervisor，避免启动 `x11vnc`。
+- `STEAM_LOGIN_UI_MODE=auto` 且有最近登录或就绪标记，或 `never`：`-silent -no-browser`，
+  禁用 VNC supervisor，避免启动 `x11vnc`。
 
 基础镜像的 `90-configure_vnc.sh` 仍负责其通用 VNC 配置；本脚本仅在它之后覆盖
 `vnc.ini` 的最终自启动决定。Core 仍保留现有的 `WEB_UI_MODE=vnc`、8083 端口映射、
