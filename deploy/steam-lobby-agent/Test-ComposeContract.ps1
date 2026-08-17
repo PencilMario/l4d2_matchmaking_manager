@@ -66,8 +66,8 @@ if ($compose -notmatch 'seccomp=unconfined') {
     throw 'Steam Desktop requires a seccomp profile that permits user namespaces.'
 }
 
-if ($compose -notmatch 'STEAM_ARGS:\s*""') {
-    throw 'Steam Desktop must not be started in silent mode.'
+if ($compose -notmatch 'STEAM_ARGS:\s*"-vgui -no-browser"') {
+    throw 'Steam Desktop must start in small-screen mode without the browser UI.'
 }
 
 if ($compose -notmatch 'NVIDIA_VISIBLE_DEVICES:\s*""') {

@@ -25,3 +25,8 @@ if ($initializer -notmatch 'set_l4d2_update_policy' -or
 if ($initializer -notmatch '"DisableShaderCache" "1"') {
     throw 'The initializer must disable shader precaching in the account-local Steam configuration.'
 }
+
+$compose = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'docker-compose.yml')
+if ($compose -notmatch 'STEAM_ARGS:\s*"-vgui -no-browser"') {
+    throw 'The Agent must default Steam to the small-screen UI without the browser process.'
+}

@@ -15,7 +15,7 @@ services:
       PORT_NOVNC_WEB: "8083"
       ENABLE_VNC_AUDIO: "false"
       ENABLE_STEAM: "true"
-      STEAM_ARGS: ""
+      STEAM_ARGS: "-vgui -no-browser"
       ENABLE_SUNSHINE: "false"
       ENABLE_EVDEV_INPUTS: "false"
       FORCE_X11_DUMMY_CONFIG: "true"
