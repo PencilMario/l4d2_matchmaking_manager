@@ -8,3 +8,5 @@
 - [Lobby 查询可靠性与临时成员读取](work/2026-08-17-lobby-query-membership/20-spec.md)
 - [Lobby 查询可靠性与临时成员读取实施计划](work/2026-08-17-lobby-query-membership/30-plan.md)
 - [管理前端与 A2S 观测设计](specs/2026-08-18-management-frontend-design.md)
+- [管理前端与 A2S 观测实施计划](work/2026-08-18-management-frontend/30-plan.md)
+- [管理前端与 A2S 观测原子任务](work/2026-08-18-management-frontend/40-atomic-tasks.md)
