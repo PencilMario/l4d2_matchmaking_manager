@@ -82,6 +82,7 @@ public sealed class DockerAgentContainerRuntimeTests
                 "LIBGL_ALWAYS_SOFTWARE=1",
                 "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
                 "STEAM_API_LIBRARY_PATH=/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so",
+                "STEAM_DOWNLOAD_REGION=",
             },
             runtime.Definition.Environment.ToArray());
         Assert.AreEqual(2L * 1024 * 1024 * 1024, runtime.Definition.SharedMemoryBytes);

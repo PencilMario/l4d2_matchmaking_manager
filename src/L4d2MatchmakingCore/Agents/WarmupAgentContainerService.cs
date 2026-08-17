@@ -51,7 +51,7 @@ public sealed class WarmupAgentContainerService(
                 "LIBGL_ALWAYS_SOFTWARE=1",
                 "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
                 "STEAM_API_LIBRARY_PATH=" + options.SteamApiLibraryPath,
-                .. (agent.DownloadRegion is null ? [] : new[] { "STEAM_DOWNLOAD_REGION=" + agent.DownloadRegion }),
+                "STEAM_DOWNLOAD_REGION=" + (agent.DownloadRegion ?? string.Empty),
             ],
             2L * 1024 * 1024 * 1024,
             [new AgentDeviceMapping("/dev/fuse", "/dev/fuse", "rwm")],
