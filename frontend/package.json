@@ -11,13 +11,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "gsap": "3.13.0",
     "lucide-react": "0.542.0",
-    "motion": "12.23.12",
-    "postprocessing": "6.37.8",
     "react": "19.0.0",
-    "react-dom": "19.0.0",
-    "three": "0.180.0"
+    "react-dom": "19.0.0"
   },
   "devDependencies": {
     "@playwright/test": "1.55.0",
@@ -27,7 +23,6 @@
     "@types/node": "22.15.3",
     "@types/react": "19.0.10",
     "@types/react-dom": "19.0.4",
-    "@types/three": "0.180.0",
     "@vitejs/plugin-react": "4.3.4",
     "jsdom": "26.1.0",
     "typescript": "5.7.3",

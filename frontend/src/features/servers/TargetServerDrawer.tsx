@@ -1,107 +1,13 @@
-import { useState } from 'react';
-import { X } from 'lucide-react';
-import SpecularButton from '../../components/react-bits/SpecularButton/SpecularButton';
-import Stepper, { Step } from '../../components/react-bits/Stepper/Stepper';
-import type { TargetServer, TargetServerInput, TargetServerObservation, WarmupStatus } from '../../api/models';
-import { TargetServerForm } from './TargetServerForm';
-import { formatObservationAge } from './server-view-model';
-
-interface TargetServerDrawerProps {
-  observation: TargetServerObservation | undefined;
-  onClose: () => void;
-  onDelete?: () => Promise<void>;
-  onRefresh?: () => void | Promise<void>;
-  onUpdate?: (input: TargetServerInput) => Promise<void>;
-  server: TargetServer;
-  warmups: WarmupStatus[];
+import { useEffect, useRef, useState } from 'react'; import { Pencil, Trash2, X } from 'lucide-react';
+import type { TargetServer, TargetServerInput, TargetServerObservation, WarmupStatus } from '../../api/models'; import { ConfirmDialog } from '../../components/ui/ConfirmDialog'; import { describeError, formatRemaining, formatTime, labelWarmupPhase, labelWarmupState, observationLabels } from '../../state/display'; import { TargetServerForm } from './TargetServerForm';
+type Action = 'disable' | 'delete' | null;
+export function TargetServerDrawer({ observation, onClose, onDelete, onRefresh, onUpdate, server, warmups }: { observation?: TargetServerObservation; onClose: () => void; onDelete?: () => Promise<void>; onRefresh?: () => void | Promise<void>; onUpdate?: (input: TargetServerInput) => Promise<void>; server: TargetServer; warmups: WarmupStatus[] }) {
+ const [editing, setEditing] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [pending, setPending] = useState<Action>(null), [disableInput, setDisableInput] = useState<TargetServerInput | null>(null); const closeRef = useRef<HTMLButtonElement>(null);
+ useEffect(() => { closeRef.current?.focus(); const listener = (event: KeyboardEvent) => { if (event.key === 'Escape' && !pending) onClose(); }; window.addEventListener('keydown', listener); return () => window.removeEventListener('keydown', listener); }, [onClose, pending]);
+ const current = observation ?? { targetServerId: server.id, status: 'pending' as const, serverName: null, playerCount: null, maxPlayers: null, observedAt: null }; const title = current.serverName ?? server.endpoint; const related = warmups.filter(item => item.targetServerId === server.id);
+ const refresh = async () => { await onRefresh?.(); };
+ const save = async (input: TargetServerInput) => { if (server.enabled && !input.enabled) { setDisableInput(input); setPending('disable'); return; } if (!onUpdate) return; setBusy(true); setError(null); try { await onUpdate(input); await refresh(); setEditing(false); } catch (caught) { const detail = describeError(caught); setError(detail.message); if (detail.code === 'target_server_drain_failed') await refresh(); } finally { setBusy(false); } };
+ const confirm = async () => { setBusy(true); setError(null); try { if (pending === 'delete') { await onDelete?.(); await refresh(); onClose(); } else if (disableInput) { await onUpdate?.(disableInput); await refresh(); setPending(null); setEditing(false); } } catch (caught) { const detail = describeError(caught); setError(detail.message); if (detail.code === 'target_server_drain_failed') await refresh(); setPending(null); } finally { setBusy(false); } };
+ return <div className="drawer-backdrop" role="presentation"><aside aria-label={`${title} 详情`} aria-modal="true" className="drawer" role="dialog"><header className="drawer__header"><div><h2>{title}</h2><code title={server.endpoint}>{server.endpoint}</code></div><button aria-label="关闭详情抽屉" className="icon-button" onClick={onClose} ref={closeRef} title="关闭详情抽屉" type="button"><X size={18} /></button></header><section className="drawer__section"><h3>实时状态</h3><dl className="detail-grid"><Item label="服名" value={current.serverName ?? '未返回'} /><Item label="玩家数" value={current.status === 'online' ? `${current.playerCount} / ${current.maxPlayers}` : '-- / --'} /><Item label="A2S 状态" value={observationLabels[current.status]} /><Item label="最后观测时间" value={formatTime(current.observedAt)} /></dl></section><section className="drawer__section"><div className="section-heading"><h3>调度设置</h3>{onUpdate && !editing && <button className="button button--quiet" onClick={() => setEditing(true)} type="button"><Pencil size={15} />编辑</button>}</div>{editing ? <TargetServerForm busy={busy} error={error} onCancel={() => { setEditing(false); setError(null); }} onSubmit={input => void save(input)} server={server} /> : <dl className="detail-grid"><Item label="启用状态" value={server.enabled ? '已启用' : '已禁用'} /><Item label="预留模式" value={server.requiresReservation ? '需要大厅预留' : '不需要大厅预留'} /><Item label="调度优先级" value={String(server.priority)} /><Item label="最大并发暖服数" value={String(server.maxConcurrentWarmups)} /><Item label="暖服时限" value={`${server.attemptWindowSeconds} 秒`} /><Item label="人数目标" value={`${server.playerTarget} 人`} /><Item label="RCON 凭据状态" value={server.hasRconCredentials ? '已配置' : '未配置'} /></dl>}</section><section className="drawer__section"><h3>关联暖服任务</h3>{related.length ? <div className="related-list">{related.map(item => <div key={item.operationId}><strong>{item.warmupAgentName}</strong><span title={item.state}>{labelWarmupState(item.state)}</span><span title={item.phase}>{labelWarmupPhase(item.phase)}</span><span>{formatRemaining(item.remainingSeconds)}</span></div>)}</div> : <p className="muted">当前没有关联暖服任务。</p>}</section>{error && !editing && <p className="inline-error">{error}</p>}<section className="drawer__actions"><h3>操作区域</h3>{server.enabled && onUpdate && <button className="button button--warning" onClick={() => { setDisableInput({ endpoint: server.endpoint, requiresReservation: server.requiresReservation, priority: server.priority, maxConcurrentWarmups: server.maxConcurrentWarmups, attemptWindowSeconds: server.attemptWindowSeconds, playerTarget: server.playerTarget, enabled: false, rconPassword: null }); setPending('disable'); }} type="button">禁用</button>}{onDelete && <button className="button button--danger" onClick={() => setPending('delete')} type="button"><Trash2 size={16} />删除</button>}</section></aside>{pending && <ConfirmDialog busy={busy} confirmLabel={pending === 'delete' ? '确认删除服务器' : '确认禁用服务器'} danger={pending === 'delete'} onCancel={() => setPending(null)} onConfirm={() => void confirm()} title={pending === 'delete' ? '删除服务器' : '禁用服务器'}><p><strong>{title}</strong></p><p>{pending === 'delete' ? '控制服务会先停止相关暖服任务，确认停止后再删除服务器配置。' : '控制服务会先停止该服务器上进行中或结果未确认的暖服任务，再保存禁用状态。'}</p></ConfirmDialog>}</div>;
 }
-
-type PendingAction =
-  | { kind: 'disable'; input: TargetServerInput }
-  | { kind: 'delete' }
-  | null;
-
-export function TargetServerDrawer({ observation, onClose, onDelete, onRefresh, onUpdate, server, warmups }: TargetServerDrawerProps) {
-  const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const currentObservation = observation ?? { targetServerId: server.id, status: 'pending' as const, serverName: null, playerCount: null, maxPlayers: null, observedAt: null };
-  const isOnline = currentObservation.status === 'online' && currentObservation.playerCount !== null && currentObservation.maxPlayers !== null;
-  const title = isOnline && currentObservation.serverName ? currentObservation.serverName : server.endpoint;
-  const relatedWarmups = warmups.filter(warmup => warmup.targetServerId === server.id);
-
-  const runUpdate = async (input: TargetServerInput) => {
-    if (!onUpdate) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await onUpdate(input);
-      await onRefresh?.();
-      setEditing(false);
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'target_server_update_failed';
-      if (message === 'target_server_drain_failed') {
-        await onRefresh?.();
-      }
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const runDelete = async () => {
-    if (!onDelete) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await onDelete();
-      await onRefresh?.();
-      onClose();
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'target_server_delete_failed';
-      if (message === 'target_server_drain_failed') {
-        await onRefresh?.();
-      }
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const requestUpdate = (input: TargetServerInput) => {
-    if (server.enabled && !input.enabled) {
-      setPendingAction({ kind: 'disable', input });
-      return;
-    }
-    void runUpdate(input);
-  };
-
-  const confirmPendingAction = async () => {
-    const action = pendingAction;
-    if (!action) return;
-    setPendingAction(null);
-    if (action.kind === 'disable') {
-      await runUpdate(action.input);
-      return;
-    }
-    await runDelete();
-  };
-
-  return <div className="target-server-drawer__backdrop" role="presentation"><aside aria-label={`${title} 配置`} aria-modal="true" className="target-server-drawer" role="dialog">
-    <header className="target-server-drawer__header"><div><span>TARGET SERVER</span><h2>{title}</h2></div><button aria-label="关闭配置抽屉" className="icon-button" onClick={onClose} title="关闭配置抽屉" type="button"><X aria-hidden="true" size={17} /></button></header>
-    <section className="target-server-drawer__live"><span>LIVE A2S SAMPLE</span><strong>{isOnline ? `${currentObservation.playerCount} / ${currentObservation.maxPlayers}` : '-- / --'}</strong><code>{server.endpoint}</code><small>{currentObservation.status === 'online' ? `A2S 在线 · ${formatObservationAge(currentObservation.observedAt)}` : currentObservation.status === 'unavailable' ? 'A2S 不可用' : '等待首次观测'}</small></section>
-    <section className="target-server-drawer__configuration"><div className="target-server-drawer__section-title"><span>调度配置</span>{onUpdate && !editing ? <SpecularButton size="sm" onClick={() => { setEditing(true); setError(null); }}>编辑配置</SpecularButton> : null}</div><dl><div><dt>状态</dt><dd>{server.enabled ? '已启用' : '已禁用'}</dd></div><div><dt>模式</dt><dd>{server.requiresReservation ? '预留大厅' : '公共匹配'}</dd></div><div><dt>优先级</dt><dd>{server.priority}</dd></div><div><dt>并发上限</dt><dd>{server.maxConcurrentWarmups}</dd></div><div><dt>尝试窗口</dt><dd>{server.attemptWindowSeconds} 秒</dd></div><div><dt>人数目标</dt><dd>{server.playerTarget}</dd></div></dl>{editing ? <TargetServerForm busy={busy} error={error} onCancel={() => { setEditing(false); setError(null); }} onSubmit={requestUpdate} server={server} /> : null}</section>
-    <section className="target-server-drawer__warmups"><span>关联暖服 {relatedWarmups.length}</span>{relatedWarmups.length === 0 ? <small>当前无关联暖服。</small> : relatedWarmups.map(warmup => <div key={warmup.operationId}><strong>{warmup.warmupAgentName}</strong><small>{warmup.state} · {warmup.phase}</small></div>)}</section>
-    {pendingAction ? <ConfirmationFlow action={pendingAction} busy={busy} onCancel={() => setPendingAction(null)} onConfirm={() => void confirmPendingAction()} /> : null}
-    {!editing && !pendingAction && onDelete ? <SpecularButton className="target-server-drawer__delete" baseColor="#241512" lineColor="var(--red)" onClick={() => setPendingAction({ kind: 'delete' })} tint="var(--red)">删除服务器</SpecularButton> : null}
-    {!editing && !pendingAction && onUpdate && server.enabled ? <SpecularButton className="target-server-drawer__disable" baseColor="#251f12" lineColor="var(--amber)" onClick={() => setEditing(true)} tint="var(--amber)">禁用并编辑配置</SpecularButton> : null}
-    {error && !editing ? <p className="target-server-form__error">{error}</p> : null}
-  </aside></div>;
-}
-
-function ConfirmationFlow({ action, busy, onCancel, onConfirm }: { action: Exclude<PendingAction, null>; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  const isDelete = action.kind === 'delete';
-  const subject = isDelete ? '删除服务器' : '禁用服务器';
-  return <section className="target-server-confirmation" aria-label={`${subject}确认`}><Stepper backButtonText="返回" completeButtonText={isDelete ? '确认删除' : '确认禁用'} nextButtonProps={{ disabled: busy }} nextButtonText="继续" onFinalStepCompleted={onConfirm}><Step><p>{isDelete ? 'Core 将先停止该服务器的 active/uncertain 暖服，然后删除配置。' : 'Core 将先停止该服务器的 active/uncertain 暖服，然后保存禁用状态。'}</p></Step><Step><p>此操作不会在浏览器端乐观移除服务器。确认后将读取 Core 最新状态。</p></Step></Stepper><SpecularButton className="target-server-confirmation__cancel" onClick={onCancel}>取消操作</SpecularButton></section>;
-}
+function Item({ label, value }: { label: string; value: string }) { return <div><dt>{label}</dt><dd>{value}</dd></div>; }

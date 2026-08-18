@@ -1,22 +1,3 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import type { WarmupAgent, WarmupStatus } from '../../api/models';
-import { AgentWorkspace } from './AgentWorkspace';
-
-const agent: WarmupAgent = { id: 'running', name: 'hk-running', status: 'running', downloadRegion: null, noVncPort: 18083, createdAt: '2026-08-18T12:00:00Z', updatedAt: '2026-08-18T12:00:00Z' };
-
-describe('AgentWorkspace', () => {
-  it('requires a Stepper confirmation before recreating an Agent and refreshes the list afterwards', async () => {
-    const onAction = vi.fn().mockResolvedValue(undefined);
-    const onRefresh = vi.fn().mockResolvedValue(undefined);
-    render(<AgentWorkspace agents={[agent]} onAction={onAction} onRefresh={onRefresh} warmups={[] as WarmupStatus[]} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '重建 hk-running' }));
-    expect(screen.getByText(/保留 Steam 登录与账号配置卷/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '继续' }));
-    fireEvent.click(screen.getByRole('button', { name: '确认重建' }));
-
-    await waitFor(() => expect(onAction).toHaveBeenCalledWith('recreate', agent));
-    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
-  });
-});
+import { act, fireEvent, render, screen } from '@testing-library/react'; import { describe, expect, it, vi } from 'vitest'; import { AgentWorkspace } from './AgentWorkspace';
+const agent = { id:'a', name:'节点一', status:'running', downloadRegion:null, noVncPort:18083, createdAt:'2026-08-18T12:00:00Z', updatedAt:'2026-08-18T12:00:00Z' };
+describe('暖服节点操作', () => { it('重建确认后在该行显示等待并禁用操作', async () => { let resolve!: () => void; const onAction = vi.fn().mockReturnValue(new Promise<void>(done => { resolve = done; })); render(<AgentWorkspace agents={[agent]} onAction={onAction} onRefresh={vi.fn()} warmups={[]} />); fireEvent.click(screen.getByRole('button',{name:'重建'})); fireEvent.click(screen.getByRole('button',{name:'确认重建节点'})); expect(screen.getByText('正在重建节点')).toBeInTheDocument(); expect(screen.getByRole('button',{name:'删除'})).toBeDisabled(); await act(async () => resolve()); }); });

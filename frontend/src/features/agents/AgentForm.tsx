@@ -1,21 +1,2 @@
-import { useState, type FormEvent } from 'react';
-import type { WarmupAgent, WarmupAgentInput } from '../../api/models';
-import SpecularButton from '../../components/react-bits/SpecularButton/SpecularButton';
-
-interface AgentFormProps {
-  busy?: boolean;
-  error?: string | null;
-  onCancel?: () => void;
-  onSubmit: (input: WarmupAgentInput) => void;
-  agent?: WarmupAgent;
-}
-
-export function AgentForm({ agent, busy = false, error, onCancel, onSubmit }: AgentFormProps) {
-  const [name, setName] = useState(agent?.name ?? '');
-  const [downloadRegion, setDownloadRegion] = useState(agent?.downloadRegion ?? '');
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onSubmit({ name: name.trim(), downloadRegion: downloadRegion.trim() || null });
-  };
-  return <form aria-label="Warm-up Agent 表单" className="agent-form" onSubmit={submit}><label>Agent 名称<input aria-label="Agent 名称" onChange={event => setName(event.target.value)} required value={name} /></label><label>下载区域<input aria-label="下载区域" onChange={event => setDownloadRegion(event.target.value)} value={downloadRegion} /></label>{error ? <p className="target-server-form__error">{error}</p> : null}<div>{onCancel ? <SpecularButton className="agent-form__cancel" onClick={onCancel}>取消</SpecularButton> : null}<SpecularButton disabled={busy} type="submit">{busy ? '保存中...' : agent ? '保存 Agent' : '创建 Agent'}</SpecularButton></div></form>;
-}
+import { useState, type FormEvent } from 'react'; import type { WarmupAgent, WarmupAgentInput } from '../../api/models';
+export function AgentForm({ agent, busy = false, error, onCancel, onSubmit }: { agent?: WarmupAgent; busy?: boolean; error?: string | null; onCancel?: () => void; onSubmit: (input: WarmupAgentInput) => void }) { const [name, setName] = useState(agent?.name ?? ''); const [region, setRegion] = useState(agent?.downloadRegion ?? ''); const [localError, setLocalError] = useState(''); const submit = (event: FormEvent) => { event.preventDefault(); if (!name.trim()) { setLocalError('请输入节点名称。'); return; } onSubmit({ name: name.trim(), downloadRegion: region.trim() || null }); }; return <form aria-label="暖服节点表单" className="form-grid agent-form" onSubmit={submit}><label className="form-field">节点名称<input aria-label="节点名称" aria-invalid={Boolean(localError)} onChange={event => setName(event.target.value)} value={name} />{localError && <em>{localError}</em>}</label><label className="form-field">Steam 下载区域<input aria-label="Steam 下载区域" onChange={event => setRegion(event.target.value)} placeholder="留空使用默认区域" value={region} /><small>下载区域为空时使用 Steam 默认区域</small></label>{error && <p className="inline-error form-field--wide">{error}</p>}<div className="form-actions form-field--wide">{onCancel && <button className="button button--quiet" disabled={busy} onClick={onCancel} type="button">取消</button>}<button className="button button--primary" disabled={busy} type="submit">{busy ? '正在保存' : agent ? '保存节点' : '创建节点'}</button></div></form>; }

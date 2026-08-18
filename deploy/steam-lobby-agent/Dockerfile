@@ -24,7 +24,7 @@ COPY deploy/steam-lobby-agent/l4d2-lobby-agent.ini /etc/supervisor.d/l4d2-lobby-
 COPY deploy/steam-lobby-agent/91-enable-steam-supervisor.sh /etc/cont-init.d/91-enable-steam-supervisor.sh
 RUN rm -f /etc/cont-init.d/60-configure_gpu_driver.sh \
     && sed -i 's|if \[\[ ! -f /tmp/\.desktop-apps-updated \]\]; then|if false; then # skip desktop-apps-updated bootstrap|' /usr/bin/start-desktop.sh \
-    && sed -i '/We rely on modern APIs which might not be available in an/,/noVNC requires a secure context (TLS). Expect crashes!/d' /opt/frontend/noVNC/core/rfb.js \
+    && sed -i 's/if (!window\.isSecureContext) {/if (false) {/' /opt/frontend/noVNC/core/rfb.js \
     && chmod +x /etc/cont-init.d/91-enable-steam-supervisor.sh /opt/l4d2-agent/L4d2LobbyAgent /opt/steam-lobby-probe/SteamLobbyProbe \
     && mkdir -p /var/lib/l4d2-agent \
     && chmod 0750 /var/lib/l4d2-agent

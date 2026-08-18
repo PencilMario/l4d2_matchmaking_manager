@@ -1,28 +1,8 @@
+import { Settings2 } from 'lucide-react';
 import type { TargetServer, TargetServerObservation, WarmupStatus } from '../../api/models';
-import { TargetServerRow } from './TargetServerRow';
-import { buildTargetServerRows } from './server-view-model';
-
-interface TargetServerTableProps {
-  observations: TargetServerObservation[];
-  onOpenServer?: (server: TargetServer) => void;
-  servers: TargetServer[];
-  warmups: WarmupStatus[];
-}
-
-export function TargetServerTable({ observations, onOpenServer, servers, warmups }: TargetServerTableProps) {
-  const rows = buildTargetServerRows(servers, observations, warmups);
-  if (rows.length === 0) {
-    return <p className="workspace-empty">尚未配置 Target Server。</p>;
-  }
-
-  return (
-    <section aria-label="Target Server 资源表" className="target-server-table">
-      <div aria-hidden="true" className="target-server-table__header">
-        <span>服务器 / A2S</span><span>人数</span><span>观测</span><span>调度</span><span />
-      </div>
-      <div className="target-server-table__rows">
-        {rows.map(row => <TargetServerRow key={row.server.id} onOpen={() => onOpenServer?.(row.server)} row={row} />)}
-      </div>
-    </section>
-  );
+import { observationLabels } from '../../state/display';
+import { buildTargetServerRows, formatObservationAge } from './server-view-model';
+export function TargetServerTable({ observations, onOpenServer, servers, warmups }: { observations: TargetServerObservation[]; onOpenServer?: (server: TargetServer) => void; servers: TargetServer[]; warmups: WarmupStatus[] }) {
+ const rows = buildTargetServerRows(servers, observations, warmups); if (!rows.length) return <p className="empty-state">暂无目标服务器。使用“新增服务器”开始配置。</p>;
+ return <div className="table-scroll"><section aria-label="目标服务器列表" className="data-table server-table"><div className="data-table__head server-grid"><span>服务器名称</span><span>服务器地址</span><span>当前玩家数/最大人数</span><span>A2S 状态</span><span>最后观测时间</span><span>调度状态</span><span>调度优先级</span><span>最大并发暖服数</span><span>正在进行的暖服数</span><span>操作</span></div>{rows.map(({ server, observation, activeWarmupCount }) => { const name = observation.status === 'online' && observation.serverName ? observation.serverName : server.endpoint; const population = observation.status === 'online' ? `${observation.playerCount} / ${observation.maxPlayers}` : '-- / --'; return <div aria-label={`查看 ${name} 详情`} className="data-table__row server-grid" data-server-row={server.id} key={server.id} onClick={() => onOpenServer?.(server)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') onOpenServer?.(server); }} role="button" tabIndex={0}><strong className="truncate" title={name}>{name}</strong><code className="truncate" title={server.endpoint}>{server.endpoint}</code><span>{population}</span><span className={`status status--${observation.status === 'online' ? 'success' : observation.status === 'unavailable' ? 'danger' : 'warning'}`}>{observationLabels[observation.status]}</span><span>{formatObservationAge(observation.observedAt)}</span><span className={`status status--${server.enabled ? 'success' : 'muted'}`}>{server.enabled ? '已启用' : '已禁用'}</span><span>{server.priority}</span><span>{server.maxConcurrentWarmups}</span><span>{activeWarmupCount}</span><button aria-label={`打开 ${server.endpoint} 设置`} className="icon-button" onClick={event => { event.stopPropagation(); onOpenServer?.(server); }} title="打开服务器设置" type="button"><Settings2 size={16} /></button></div>; })}</section></div>;
 }

@@ -20,6 +20,4 @@ npm run build
 npm run test:e2e
 ```
 
-## React Bits provenance
-
-The visual components under `src/components/react-bits/` are copied from [DavidHDev/react-bits](https://github.com/DavidHDev/react-bits) at revision `4e0e030193b563be6be33d928f77d0d01cefe237`. The upstream project is MIT licensed with a Commons Clause notice; the copied component README records the source paths and notice. Components are bundled in this project rather than fetched at runtime.
+界面不使用 Three.js、Canvas、WebGL 或持续运行的装饰动画。所有管理页面以表格、抽屉、确认对话框和行级状态反馈为主。

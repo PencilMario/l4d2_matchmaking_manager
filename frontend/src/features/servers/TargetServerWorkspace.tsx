@@ -1,38 +1,8 @@
-import { useState } from 'react';
-import type { TargetServer, TargetServerInput, TargetServerObservation, WarmupStatus } from '../../api/models';
-import SpecularButton from '../../components/react-bits/SpecularButton/SpecularButton';
-import { TargetServerForm } from './TargetServerForm';
-import { TargetServerTable } from './TargetServerTable';
-
-interface TargetServerWorkspaceProps {
-  observations: TargetServerObservation[];
-  onCreate?: (input: TargetServerInput) => Promise<void>;
-  onOpenServer?: (server: TargetServer) => void;
-  onRefresh?: () => Promise<void> | void;
-  servers: TargetServer[];
-  warmups: WarmupStatus[];
-}
-
-export function TargetServerWorkspace({ observations, onCreate, onOpenServer, onRefresh, servers, warmups }: TargetServerWorkspaceProps) {
-  const [creating, setCreating] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const createServer = async (input: TargetServerInput) => {
-    if (!onCreate) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await onCreate(input);
-      setCreating(false);
-      await onRefresh?.();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'target_server_operation_failed');
-      await onRefresh?.();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return <div className="target-server-workspace"><div className="target-server-workspace__heading"><span>TARGET SERVER REGISTRY</span>{onCreate ? <SpecularButton size="sm" onClick={() => { setCreating(true); setError(null); }}>新增服务器</SpecularButton> : null}</div>{creating ? <TargetServerForm busy={busy} error={error} onCancel={() => { setCreating(false); setError(null); }} onSubmit={input => void createServer(input)} /> : null}<TargetServerTable observations={observations} onOpenServer={onOpenServer} servers={servers} warmups={warmups} /></div>;
+import { Plus, RefreshCw, Search } from 'lucide-react'; import { useMemo, useState } from 'react';
+import type { TargetServer, TargetServerInput, TargetServerObservation, WarmupStatus } from '../../api/models'; import { describeError } from '../../state/display'; import { TargetServerForm } from './TargetServerForm'; import { TargetServerTable } from './TargetServerTable';
+export function TargetServerWorkspace({ observations, onCreate, onOpenServer, onRefresh, servers, warmups }: { observations: TargetServerObservation[]; onCreate?: (input: TargetServerInput) => Promise<void>; onOpenServer?: (server: TargetServer) => void; onRefresh?: () => Promise<void> | void; servers: TargetServer[]; warmups: WarmupStatus[] }) {
+ const [creating, setCreating] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [schedule, setSchedule] = useState('all');
+ const filtered = useMemo(() => servers.filter(server => { const observation = observations.find(item => item.targetServerId === server.id); const term = query.trim().toLowerCase(); return (!term || server.endpoint.toLowerCase().includes(term) || observation?.serverName?.toLowerCase().includes(term)) && (status === 'all' || observation?.status === status) && (schedule === 'all' || (schedule === 'enabled') === server.enabled); }), [servers, observations, query, status, schedule]);
+ const create = async (input: TargetServerInput) => { if (!onCreate) return; setBusy(true); setError(null); try { await onCreate(input); setCreating(false); await onRefresh?.(); } catch (caught) { setError(describeError(caught).message); await onRefresh?.(); } finally { setBusy(false); } };
+ return <div className="workspace-page"><div className="toolbar"><button className="button button--primary" onClick={() => { setCreating(true); setError(null); }} type="button"><Plus size={16} />新增服务器</button><label className="search-input"><Search size={16} /><span className="sr-only">搜索服务器名称或地址</span><input onChange={event => setQuery(event.target.value)} placeholder="搜索服务器名称或地址" value={query} /></label><label className="select-field">状态筛选<select onChange={event => setStatus(event.target.value)} value={status}><option value="all">全部</option><option value="online">在线</option><option value="unavailable">不可用</option><option value="pending">等待观测</option></select></label><label className="select-field">调度筛选<select onChange={event => setSchedule(event.target.value)} value={schedule}><option value="all">全部</option><option value="enabled">已启用</option><option value="disabled">已禁用</option></select></label><button aria-label="手动刷新服务器" className="icon-button" onClick={() => void onRefresh?.()} title="手动刷新" type="button"><RefreshCw size={16} /></button></div>{creating && <section className="editor-panel"><h2>新增服务器</h2><TargetServerForm busy={busy} error={error} onCancel={() => setCreating(false)} onSubmit={input => void create(input)} /></section>}<TargetServerTable observations={observations} onOpenServer={onOpenServer} servers={filtered} warmups={warmups} /></div>;
 }
