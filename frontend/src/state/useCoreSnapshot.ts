@@ -7,6 +7,7 @@ export interface CoreSnapshotClient {
   listAgents(signal?: AbortSignal): Promise<WarmupAgent[]>;
   listWarmups(signal?: AbortSignal): Promise<WarmupStatus[]>;
   listServerObservations(signal?: AbortSignal): Promise<TargetServerObservation[]>;
+  createServer?(input: TargetServerInput): Promise<TargetServer>;
   updateServer?(serverId: string, input: TargetServerInput): Promise<TargetServer>;
   deleteServer?(serverId: string): Promise<void>;
   createAgent?(input: WarmupAgentInput): Promise<WarmupAgent>;

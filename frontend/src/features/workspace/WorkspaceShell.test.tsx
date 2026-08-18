@@ -48,4 +48,23 @@ describe('WorkspaceShell', () => {
     fireEvent.click(screen.getByRole('button', { name: '配置 198.51.100.10:27015' }));
     expect(screen.getByRole('dialog', { name: 'L4D2 HK Versus #1 配置' })).toBeInTheDocument();
   });
+
+  it('creates a Target Server from the resource workspace', async () => {
+    const createServer = vi.fn().mockResolvedValue({
+      id: 'target-created', endpoint: '203.0.113.60:27015', requiresReservation: false, priority: 0,
+      maxConcurrentWarmups: 36, attemptWindowSeconds: 720, playerTarget: 6, enabled: true,
+      hasRconCredentials: false, createdAt: '2026-08-18T12:00:00Z', updatedAt: '2026-08-18T12:00:00Z',
+    });
+    render(<WorkspaceShell client={{ ...client, createServer }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Target Server' }));
+    fireEvent.click(screen.getByRole('button', { name: '新增服务器' }));
+    fireEvent.change(screen.getByLabelText('endpoint'), { target: { value: '203.0.113.60:27015' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建服务器' }));
+
+    await waitFor(() => expect(createServer).toHaveBeenCalledWith({
+      endpoint: '203.0.113.60:27015', requiresReservation: false, priority: null,
+      maxConcurrentWarmups: null, attemptWindowSeconds: null, playerTarget: null, enabled: true, rconPassword: null,
+    }));
+  });
 });

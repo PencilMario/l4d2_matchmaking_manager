@@ -13,8 +13,10 @@ const observations = [
 ];
 
 const completeLobby = { lobbyId: '109775242425650097', ownerSteamId: '76561198000000001', members: [{ steamId: '76561198000000002', personaName: 'Player One' }], metadata: { 'Game:state': 'game' }, observedAt: '2026-08-18T12:00:00Z', memberDataStatus: 'complete' };
+let createdServerInput: unknown;
 
 test.beforeEach(async ({ page }) => {
+  createdServerInput = undefined;
   await page.route('**/healthz', route => route.fulfill({ json: { status: 'alive' } }));
   await page.route(/\/v1\/servers(?:\/.*)?$/, async route => {
     const request = route.request();
@@ -25,6 +27,11 @@ test.beforeEach(async ({ page }) => {
     }
     if (pathname === '/v1/servers' && request.method() === 'GET') {
       await route.fulfill({ json: servers });
+      return;
+    }
+    if (pathname === '/v1/servers' && request.method() === 'POST') {
+      createdServerInput = request.postDataJSON();
+      await route.fulfill({ status: 201, json: { id: 'created', endpoint: '203.0.113.60:27015', requiresReservation: false, priority: 0, maxConcurrentWarmups: 36, attemptWindowSeconds: 720, playerTarget: 6, enabled: true, hasRconCredentials: false, createdAt: '2026-08-18T12:00:00Z', updatedAt: '2026-08-18T12:00:00Z' } });
       return;
     }
     if (pathname === '/v1/servers/online' && request.method() === 'PUT') {
@@ -67,6 +74,12 @@ test('runs the desktop A2S management journey without visual-plane interference'
   await expect(page.getByRole('form', { name: 'Target Server 配置表单' })).toBeVisible();
 
   await page.getByRole('button', { name: '关闭配置抽屉' }).click();
+  await page.getByRole('button', { name: '新增服务器' }).click();
+  await page.getByLabel('endpoint').fill('203.0.113.60:27015');
+  await page.getByRole('button', { name: '创建服务器' }).click();
+  await expect.poll(() => createdServerInput).toEqual({ endpoint: '203.0.113.60:27015', requiresReservation: false, priority: null, maxConcurrentWarmups: null, attemptWindowSeconds: null, playerTarget: null, enabled: true, rconPassword: null });
+  await expect(page.getByRole('form', { name: 'Target Server 配置表单' })).not.toBeVisible();
+
   await page.getByRole('button', { name: 'Lobby 查询' }).click();
   await page.getByLabel('Lobby ID').fill('109775242425650097');
   await page.getByRole('button', { name: '查询 Lobby' }).click();
