@@ -1,9 +1,17 @@
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Servers;
 using Microsoft.EntityFrameworkCore;
 
 namespace L4d2MatchmakingCore.Settings;
 
-public sealed class GlobalSettingsService(MatchmakingDbContext dbContext)
+public interface ISteamWebApiKeyProvider
+{
+    Task<string?> GetSteamWebApiKeyAsync(CancellationToken cancellationToken);
+}
+
+public sealed class GlobalSettingsService(
+    MatchmakingDbContext dbContext,
+    ISecretProtector secretProtector) : ISteamWebApiKeyProvider
 {
     public async Task<GlobalSettingsResponse> GetAsync(CancellationToken cancellationToken)
     {
@@ -16,7 +24,13 @@ public sealed class GlobalSettingsService(MatchmakingDbContext dbContext)
         CancellationToken cancellationToken)
     {
         var settings = await GetOrCreateAsync(cancellationToken);
+        if (request.ClearSteamWebApiKey && !string.IsNullOrWhiteSpace(request.SteamWebApiKey))
+            throw new ArgumentException("steam_web_api_key_update_conflict");
         settings.SteamProxyUrl = NormalizeProxyUrl(request.SteamProxyUrl);
+        if (request.ClearSteamWebApiKey)
+            settings.SteamWebApiKeyCiphertext = null;
+        else if (!string.IsNullOrWhiteSpace(request.SteamWebApiKey))
+            settings.SteamWebApiKeyCiphertext = secretProtector.Protect(request.SteamWebApiKey.Trim());
         settings.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToResponse(settings);
@@ -27,6 +41,13 @@ public sealed class GlobalSettingsService(MatchmakingDbContext dbContext)
         var settings = await dbContext.CoreSettings.AsNoTracking().SingleOrDefaultAsync(
             item => item.Name == "global", cancellationToken);
         return settings?.SteamProxyUrl;
+    }
+
+    public async Task<string?> GetSteamWebApiKeyAsync(CancellationToken cancellationToken)
+    {
+        var settings = await dbContext.CoreSettings.AsNoTracking().SingleOrDefaultAsync(
+            item => item.Name == "global", cancellationToken);
+        return secretProtector.Unprotect(settings?.SteamWebApiKeyCiphertext);
     }
 
     public static string? NormalizeProxyUrl(string? value)
@@ -55,5 +76,5 @@ public sealed class GlobalSettingsService(MatchmakingDbContext dbContext)
     }
 
     private static GlobalSettingsResponse ToResponse(CoreSettings settings) =>
-        new(settings.SteamProxyUrl, settings.UpdatedAt);
+        new(settings.SteamProxyUrl, settings.SteamWebApiKeyCiphertext is not null, settings.UpdatedAt);
 }

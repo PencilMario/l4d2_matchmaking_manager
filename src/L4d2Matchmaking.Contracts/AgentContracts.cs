@@ -13,7 +13,7 @@ public sealed record AgentOperationRequest(
     ushort Port,
     string? RconPassword = null);
 
-public sealed record LobbyMemberSnapshot(string SteamId, string? PersonaName);
+public sealed record LobbyMemberSnapshot(string SteamId, string? PersonaName, string? AvatarUrl = null);
 
 public static class LobbyMemberDataStatus
 {

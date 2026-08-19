@@ -34,4 +34,18 @@ describe('大厅查询加入 URI', () => {
     expect(uri).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制加入 URI' })).toBeInTheDocument();
   });
+
+  it('显示 Steam Web API 返回的头像并为缺失头像保留默认图标', async () => {
+    vi.spyOn(ApiService, 'lookupLobby').mockResolvedValue({
+      data: { lobbyId: '109775242226986793', ownerSteamId: '76561199012457364', memberStatus: 'complete', confirmedMemberCount: 2, observedAt: '2026-08-19T00:00:00Z', members: [{ steamId: '76561199012457364', personaName: 'Player One', avatarUrl: 'https://cdn.example/player.jpg', isReady: false, joinedAt: '2026-08-19T00:00:00Z' }, { steamId: '76561199012457365', personaName: '', avatarUrl: null, isReady: false, joinedAt: '2026-08-19T00:00:00Z' }], metadata: {} },
+      error: null,
+      status: 200,
+    });
+
+    render(<LobbyLookupView />);
+    fireEvent.click(screen.getByRole('button', { name: '查询大厅' }));
+
+    expect(await screen.findByAltText('Player One 头像')).toHaveAttribute('src', 'https://cdn.example/player.jpg');
+    expect(screen.getByLabelText('未知玩家头像')).toBeInTheDocument();
+  });
 });

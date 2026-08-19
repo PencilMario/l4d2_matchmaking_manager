@@ -49,6 +49,39 @@ public sealed class GlobalSettingsEndpointTests
         Assert.AreEqual(HttpStatusCode.BadRequest, withInvalidScheme.StatusCode);
     }
 
+    [TestMethod]
+    public async Task SteamWebApiKeyIsStoredEncryptedAndNeverReturned()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new SettingsFactory();
+        using var client = CreateAuthorizedClient(factory);
+
+        var update = await client.PutAsJsonAsync("/v1/settings", new { steamWebApiKey = "steam-test-key" });
+        var current = await update.Content.ReadAsStringAsync();
+        var get = await client.GetStringAsync("/v1/settings");
+
+        Assert.AreEqual(HttpStatusCode.OK, update.StatusCode);
+        Assert.IsFalse(current.Contains("steam-test-key", StringComparison.Ordinal));
+        Assert.IsFalse(get.Contains("steam-test-key", StringComparison.Ordinal));
+        StringAssert.Contains(current, "\"steamWebApiKeyConfigured\":true");
+        StringAssert.Contains(get, "steamWebApiKeyConfigured");
+        StringAssert.Contains(get, "true");
+    }
+
+    [TestMethod]
+    public async Task SteamWebApiKeyCanBeCleared()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new SettingsFactory();
+        using var client = CreateAuthorizedClient(factory);
+
+        await client.PutAsJsonAsync("/v1/settings", new { steamWebApiKey = "steam-test-key" });
+        var clear = await client.PutAsJsonAsync("/v1/settings", new { clearSteamWebApiKey = true });
+
+        Assert.AreEqual(HttpStatusCode.OK, clear.StatusCode);
+        StringAssert.Contains(await clear.Content.ReadAsStringAsync(), "\"steamWebApiKeyConfigured\":false");
+    }
+
     private static HttpClient CreateAuthorizedClient(WebApplicationFactory<global::Program> factory)
     {
         var client = factory.CreateClient();
@@ -58,6 +91,8 @@ public sealed class GlobalSettingsEndpointTests
 
     private sealed class SettingsFactory : WebApplicationFactory<global::Program>
     {
+        private readonly string databaseName = Guid.NewGuid().ToString("N");
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
@@ -65,7 +100,7 @@ public sealed class GlobalSettingsEndpointTests
             {
                 services.RemoveAll<DbContextOptions<MatchmakingDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<MatchmakingDbContext>>();
-                services.AddDbContext<MatchmakingDbContext>(options => options.UseInMemoryDatabase(Guid.NewGuid().ToString("N")));
+                services.AddDbContext<MatchmakingDbContext>(options => options.UseInMemoryDatabase(databaseName));
             });
         }
     }
@@ -76,12 +111,14 @@ public sealed class GlobalSettingsEndpointTests
         private readonly string? environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         private readonly string? token = Environment.GetEnvironmentVariable("CORE_API_TOKEN");
         private readonly string? connection = Environment.GetEnvironmentVariable("CORE_DATABASE_CONNECTION_STRING");
+        private readonly string? encryptionKey = Environment.GetEnvironmentVariable("CORE_RCON_ENCRYPTION_KEY");
 
         public CoreTestEnvironment()
         {
             Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
             Environment.SetEnvironmentVariable("CORE_API_TOKEN", ApiToken);
             Environment.SetEnvironmentVariable("CORE_DATABASE_CONNECTION_STRING", "Host=127.0.0.1;Database=matchmaking_test;Username=matchmaking;Password=unused");
+            Environment.SetEnvironmentVariable("CORE_RCON_ENCRYPTION_KEY", Convert.ToBase64String(new byte[32]));
         }
 
         public void Dispose()
@@ -89,6 +126,7 @@ public sealed class GlobalSettingsEndpointTests
             Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", environment);
             Environment.SetEnvironmentVariable("CORE_API_TOKEN", token);
             Environment.SetEnvironmentVariable("CORE_DATABASE_CONNECTION_STRING", connection);
+            Environment.SetEnvironmentVariable("CORE_RCON_ENCRYPTION_KEY", encryptionKey);
         }
     }
 }

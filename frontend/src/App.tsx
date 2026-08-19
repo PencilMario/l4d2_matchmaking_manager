@@ -364,7 +364,7 @@ export default function App() {
             )}
 
             {activeTab === 'lobby' && <LobbyLookupView />}
-            {activeTab === 'settings' && <GlobalSettingsView load={async () => { const result = await ApiService.getGlobalSettings(); if (!result.data) throw new Error(result.error || '读取全局设置失败'); return result.data; }} save={async proxy => { const result = await ApiService.updateGlobalSettings(proxy); if (!result.data) throw new Error(result.error || '保存全局设置失败'); return result.data; }} />}
+            {activeTab === 'settings' && <GlobalSettingsView load={async () => { const result = await ApiService.getGlobalSettings(); if (!result.data) throw new Error(result.error || '读取全局设置失败'); return result.data; }} save={async input => { const result = await ApiService.updateGlobalSettings(input); if (!result.data) throw new Error(result.error || '保存全局设置失败'); return result.data; }} />}
           </div>
         </main>
       </div>

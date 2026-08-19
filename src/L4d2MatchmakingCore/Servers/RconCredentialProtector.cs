@@ -4,11 +4,13 @@ using L4d2MatchmakingCore.Configuration;
 
 namespace L4d2MatchmakingCore.Servers;
 
-public interface IRconCredentialProtector
+public interface ISecretProtector
 {
     string Protect(string password);
     string? Unprotect(string? ciphertext);
 }
+
+public interface IRconCredentialProtector : ISecretProtector;
 
 public sealed class RconCredentialProtector : IRconCredentialProtector
 {

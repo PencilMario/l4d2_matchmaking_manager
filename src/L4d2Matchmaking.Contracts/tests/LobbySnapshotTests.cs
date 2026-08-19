@@ -27,4 +27,15 @@ public sealed class LobbySnapshotTests
         CollectionAssert.AreEquivalent(snapshot.Metadata.ToArray(), restored.Metadata.ToArray());
         Assert.AreEqual(snapshot.ObservedAt, restored.ObservedAt);
     }
+
+    [TestMethod]
+    public void LobbyMemberAvatarUrlIsOptionalAndSerializable()
+    {
+        var member = new LobbyMemberSnapshot("76561198000000000", "Agent", "https://cdn.example/avatar.jpg");
+        var restored = JsonSerializer.Deserialize<LobbyMemberSnapshot>(JsonSerializer.Serialize(member));
+
+        Assert.IsNotNull(restored);
+        Assert.AreEqual(member.AvatarUrl, restored.AvatarUrl);
+        Assert.IsNull(new LobbyMemberSnapshot("76561198000000001", "Player").AvatarUrl);
+    }
 }

@@ -8,6 +8,7 @@ import type {
   WarmupAgentInput,
   WarmupStatus,
   GlobalSettings,
+  GlobalSettingsInput,
 } from './models';
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -55,7 +56,7 @@ export class CoreClient {
     return this.request<GlobalSettings>('/v1/settings', { signal });
   }
 
-  updateSettings(input: { steamProxyUrl: string | null }) {
+  updateSettings(input: GlobalSettingsInput) {
     return this.request<GlobalSettings>('/v1/settings', { method: 'PUT', body: input });
   }
 

@@ -3,6 +3,7 @@ using System.Text.Json;
 using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Profiles;
 using Microsoft.EntityFrameworkCore;
 
 namespace L4d2MatchmakingCore.Lobbies;
@@ -10,7 +11,8 @@ namespace L4d2MatchmakingCore.Lobbies;
 public sealed class LobbyQueryService(
     MatchmakingDbContext dbContext,
     IHealthyAgentSelector selector,
-    IAgentControlClient agents)
+    IAgentControlClient agents,
+    ISteamProfileService profiles)
 {
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> QueryLeases = [];
 
@@ -79,7 +81,26 @@ public sealed class LobbyQueryService(
 
         try
         {
-            return await agents.QueryLobbyAsync(agent, lobbyId, includeMembers, cancellationToken);
+            var snapshot = await agents.QueryLobbyAsync(agent, lobbyId, includeMembers, cancellationToken);
+            if (snapshot.MemberDataStatus != LobbyMemberDataStatus.Complete)
+                return snapshot;
+
+            var resolved = await profiles.ResolveAsync(
+                snapshot.Members.Select(member => member.SteamId).ToArray(),
+                cancellationToken);
+            return snapshot with
+            {
+                Members = snapshot.Members.Select(member =>
+                {
+                    if (!resolved.TryGetValue(member.SteamId, out var profile))
+                        return member;
+                    return member with
+                    {
+                        PersonaName = profile.PersonaName ?? member.PersonaName,
+                        AvatarUrl = profile.AvatarUrl,
+                    };
+                }).ToArray(),
+            };
         }
         catch (AgentLobbyQueryException exception) when (exception.Code == "lobby_operation_preservation_failed")
         {
