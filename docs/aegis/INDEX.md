@@ -11,3 +11,4 @@
 - [管理前端与 A2S 观测实施计划](work/2026-08-18-management-frontend/30-plan.md)
 - [管理前端与 A2S 观测原子任务](work/2026-08-18-management-frontend/40-atomic-tasks.md)
 - [管理前端运行说明](../../frontend/README.md)
+- [系统概览暖服层级展示设计](specs/2026-08-19-overview-warmup-hierarchy-design.md)
