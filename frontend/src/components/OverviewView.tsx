@@ -332,7 +332,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                       A2S 不可用目标服务器 ({unavailableServers.length} 台)
                     </h3>
                     <p className="text-xs text-red-800 mt-0.5 leading-relaxed">
-                      无法获取 A2S 状态查询响应，请检查服务器网络路由、UDP 27015 端口开放状态及防火墙规则。
+                      无法获取 A2S 状态查询响应，请检查服务器网络路由、游戏端口开放状态及防火墙规则。
                     </p>
                   </div>
                 </div>

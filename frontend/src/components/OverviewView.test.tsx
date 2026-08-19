@@ -198,4 +198,26 @@ describe('系统概览大厅 ID', () => {
     await user.click(screen.getByRole('button', { name: '全部展开' }));
     expect(screen.getByText('节点-alpha')).toBeInTheDocument();
   });
+
+  it('不可用服务器提示使用通用游戏端口文案', () => {
+    render(
+      <OverviewView
+        targets={[{
+          id: 'server-unavailable', endpoint: '10.0.0.8:27016', name: '不可用服务器',
+          currentPlayers: 0, maxPlayers: 12, a2sStatus: 'unavailable', enabled: true,
+          priority: 0, requiresReservation: false, maxConcurrentWarmups: 2,
+          activeWarmupsCount: 0, attemptWindowSeconds: 720, playerTarget: 6,
+          createdAt: '2026-08-19T00:00:00Z', updatedAt: '2026-08-19T00:00:00Z',
+        }]}
+        agents={[]}
+        observations={[]}
+        attempts={[]}
+        onNavigateToTarget={vi.fn()}
+        onNavigateTab={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('无法获取 A2S 状态查询响应，请检查服务器网络路由、游戏端口开放状态及防火墙规则。')).toBeInTheDocument();
+    expect(screen.queryByText(/UDP 27015/)).not.toBeInTheDocument();
+  });
 });
