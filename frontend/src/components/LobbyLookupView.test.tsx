@@ -4,7 +4,7 @@ import { LobbyLookupView } from './LobbyLookupView';
 import { ApiService } from '../services/api';
 
 describe('大厅查询加入 URI', () => {
-  it('查询成功后显示可复制的 Steam 加入 URI', async () => {
+  it('不预填大厅 ID 或显示示例，输入后查询成功显示可复制的 Steam 加入 URI', async () => {
     vi.spyOn(ApiService, 'lookupLobby').mockResolvedValue({
       data: {
         lobbyId: '109775242226986793',
@@ -20,6 +20,12 @@ describe('大厅查询加入 URI', () => {
     });
 
     render(<LobbyLookupView />);
+    const lobbyIdInput = screen.getByPlaceholderText('请输入大厅 ID (64 位非零十进制数字)');
+    expect(lobbyIdInput).toHaveValue('');
+    expect(screen.getByRole('button', { name: '查询大厅' })).toBeDisabled();
+    expect(screen.queryByText('示例大厅 ID：')).not.toBeInTheDocument();
+
+    fireEvent.change(lobbyIdInput, { target: { value: '109775242226986793' } });
     fireEvent.click(screen.getByRole('button', { name: '查询大厅' }));
 
     const uri = await screen.findByDisplayValue(

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export const LobbyLookupView: React.FC = () => {
-  const [lobbyIdInput, setLobbyIdInput] = useState('109775241038923456');
+  const [lobbyIdInput, setLobbyIdInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<LobbyLookupResult | null>(null);
@@ -78,10 +78,6 @@ export const LobbyLookupView: React.FC = () => {
     }
   };
 
-  const handleQuickLookup = (id: string) => {
-    setLobbyIdInput(id);
-  };
-
   return (
     <div className="space-y-6 pb-12">
       {/* Page Title */}
@@ -129,32 +125,6 @@ export const LobbyLookupView: React.FC = () => {
             )}
           </button>
         </form>
-
-        {/* Preset quick test tags */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
-          <span>示例大厅 ID：</span>
-          <button
-            type="button"
-            onClick={() => handleQuickLookup('109775241038923456')}
-            className="font-mono text-blue-600 hover:underline bg-slate-50 px-2 py-0.5 rounded border border-slate-200"
-          >
-            109775241038923456 (完整 4 人)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickLookup('109775241038923488')}
-            className="font-mono text-blue-600 hover:underline bg-slate-50 px-2 py-0.5 rounded border border-slate-200"
-          >
-            109775241038923488 (对抗 2 人)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickLookup('109775241038921100')}
-            className="font-mono text-blue-600 hover:underline bg-slate-50 px-2 py-0.5 rounded border border-slate-200"
-          >
-            109775241038921100 (未确认成员)
-          </button>
-        </div>
 
         {/* Error message */}
         {errorMessage && (
