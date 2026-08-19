@@ -38,4 +38,18 @@ describe('大厅查询', () => {
     fireEvent.click(screen.getByRole('button', { name: '查询大厅' }));
     expect(query).not.toHaveBeenCalled();
   });
+
+  it('显示成员头像，并为缺失头像显示默认图标', async () => {
+    const query = vi.fn().mockResolvedValue({ ...snapshot, memberDataStatus: 'complete', members: [
+      { steamId: '76561198000000000', personaName: 'Player One', avatarUrl: 'https://cdn.example/player.jpg' },
+      { steamId: '76561198000000001', personaName: null, avatarUrl: null },
+    ] });
+    render(<LobbyQueryView queryLobby={query} />);
+    fireEvent.change(screen.getByLabelText('大厅 ID'), { target: { value: '109775242646351561' } });
+    fireEvent.click(screen.getByRole('button', { name: '查询大厅' }));
+
+    await screen.findByAltText('Player One 头像');
+    expect(screen.getByAltText('Player One 头像')).toHaveAttribute('src', 'https://cdn.example/player.jpg');
+    expect(screen.getByLabelText('未知玩家头像')).toBeInTheDocument();
+  });
 });

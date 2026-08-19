@@ -303,7 +303,7 @@ export const LobbyLookupView: React.FC = () => {
                     {result.members?.map((member, idx) => (
                       <tr key={member.steamId || idx} className="hover:bg-slate-50/80">
                         <td className="py-2.5 px-4 font-medium text-slate-900 flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5 text-slate-400" />
+                          {member.avatarUrl ? <img alt={`${member.personaName || member.steamId} 头像`} className="h-8 w-8 rounded-full object-cover" src={member.avatarUrl} /> : <User aria-label="未知玩家头像" className="h-8 w-8 rounded-full bg-slate-100 p-1.5 text-slate-400" />}
                           <span>{member.personaName || '未知玩家'}</span>
                           {member.steamId === result.ownerSteamId && (
                             <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-200">

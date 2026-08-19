@@ -58,8 +58,8 @@ export const ApiService = {
   rebuildAgent(id: string) { return request(`/v1/agents/${id}/recreate`, { method: 'POST' }); },
   openAgentVncSession(id: string) { return request<AgentVncSession>(`/v1/agents/${id}/vnc-sessions`, { method: 'POST' }); },
   deleteAgent(id: string) { return request<{ success?: boolean }>(`/v1/agents/${id}`, { method: 'DELETE' }); },
-  getGlobalSettings() { return request<{ steamProxyUrl: string | null; updatedAt: string }>('/v1/settings'); },
-  updateGlobalSettings(steamProxyUrl: string | null) { return request<{ steamProxyUrl: string | null; updatedAt: string }>('/v1/settings', { method: 'PUT', body: JSON.stringify({ steamProxyUrl }) }); },
+  getGlobalSettings() { return request<{ steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; updatedAt: string }>('/v1/settings'); },
+  updateGlobalSettings(input: { steamProxyUrl: string | null; steamWebApiKey?: string; clearSteamWebApiKey?: boolean }) { return request<{ steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; updatedAt: string }>('/v1/settings', { method: 'PUT', body: JSON.stringify(input) }); },
   async lookupLobby(id: string) {
     const result = await request<any>(`/v1/lobbies/${encodeURIComponent(id)}`);
     if (!result.data) return result;

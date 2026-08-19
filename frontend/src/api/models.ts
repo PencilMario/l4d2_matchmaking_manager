@@ -55,7 +55,14 @@ export interface WarmupAgentInput {
 
 export interface GlobalSettings {
   steamProxyUrl: string | null;
+  steamWebApiKeyConfigured: boolean;
   updatedAt: string;
+}
+
+export interface GlobalSettingsInput {
+  steamProxyUrl: string | null;
+  steamWebApiKey?: string;
+  clearSteamWebApiKey?: boolean;
 }
 
 export interface WarmupStatus {
@@ -80,6 +87,7 @@ export interface WarmupStatus {
 export interface LobbyMember {
   steamId: string;
   personaName: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface LobbySnapshot {

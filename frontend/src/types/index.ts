@@ -81,6 +81,7 @@ export interface ServerObservation {
 export interface LobbyMember {
   steamId: string;
   personaName: string;
+  avatarUrl?: string | null;
   isReady: boolean;
   joinedAt: string;
   ping?: number;
