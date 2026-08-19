@@ -141,6 +141,8 @@ describe('系统概览大厅 ID', () => {
     expect(screen.getByText('空闲服务器')).toBeInTheDocument();
     expect(screen.getByText('在线服务器')).toBeInTheDocument();
     expect(screen.getByText('服务器暖服剩余时间')).toBeInTheDocument();
+    expect(screen.getByText('服务器暖服开始时间')).toBeInTheDocument();
+    expect(screen.queryByText('节点开始时间')).not.toBeInTheDocument();
     expect(screen.getByText('节点-alpha')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '折叠节点列表' }));

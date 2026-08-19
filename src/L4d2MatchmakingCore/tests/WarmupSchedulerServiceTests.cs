@@ -26,7 +26,7 @@ public sealed class WarmupSchedulerServiceTests
         db.WarmupAttempts.Add(new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target, WarmupAgentId = agent.Id, OperationId = operation, Mode = "reserved", State = "active", StartedAt = DateTimeOffset.UtcNow, ObservedAt = DateTimeOffset.UtcNow });
         db.ReservationLeases.Add(new ReservationLease { TargetServerId = target, OperationId = operation, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1) });
         await db.SaveChangesAsync();
-        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", null, null, DateTimeOffset.UtcNow));
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow), null, DateTimeOffset.UtcNow));
         var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db));
 
         await scheduler.RecoverAsync(CancellationToken.None);
@@ -90,6 +90,109 @@ public sealed class WarmupSchedulerServiceTests
         Assert.AreEqual(2, await db.WarmupAttempts.CountAsync(attempt => attempt.State == "active"));
         Assert.AreEqual(1, await db.WarmupAttempts.CountAsync(attempt => attempt.TargetServerId == preferredTarget.Id && attempt.State == "active"));
         CollectionAssert.AreEquivalent(new[] { preferredTarget.Port, fallbackTarget.Port }, agents.StartRequests.Select(request => (int)request.Port).ToArray());
+    }
+
+    [TestMethod]
+    public async Task TickPrefersUnexpiredStandardContinuationOverHigherPriorityFreshTarget()
+    {
+        await using var db = CreateDb();
+        var busyAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "busy-agent", Status = "running", SteamDataVolumeName = "busy-steam", AccountConfigVolumeName = "busy-config", NoVncPort = 18083 };
+        var idleAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "idle-agent", Status = "running", SteamDataVolumeName = "idle-steam", AccountConfigVolumeName = "idle-config", NoVncPort = 18084 };
+        var continuationTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 2, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 0 };
+        var freshTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 10 };
+        var operation = Guid.NewGuid();
+        db.AddRange(busyAgent, idleAgent, continuationTarget, freshTarget,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = continuationTarget.Id, WarmupAgentId = busyAgent.Id, OperationId = operation, Mode = "standard", State = "active", Phase = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-5), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", null, null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new BatchSelector([busyAgent, idleAgent]), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(continuationTarget.Id, (await db.WarmupAttempts.SingleAsync(attempt => attempt.WarmupAgentId == idleAgent.Id)).TargetServerId);
+    }
+
+    [TestMethod]
+    public async Task TickContinuationInheritsEarliestServerStartedAt()
+    {
+        await using var db = CreateDb();
+        var busyAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "busy-agent", Status = "running", SteamDataVolumeName = "busy-steam", AccountConfigVolumeName = "busy-config", NoVncPort = 18083 };
+        var idleAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "idle-agent", Status = "running", SteamDataVolumeName = "idle-steam", AccountConfigVolumeName = "idle-config", NoVncPort = 18084 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 2, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var startedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var operation = Guid.NewGuid();
+        db.AddRange(busyAgent, idleAgent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = busyAgent.Id, OperationId = operation, Mode = "standard", State = "active", Phase = "active", StartedAt = startedAt, ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", null, null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new BatchSelector([busyAgent, idleAgent]), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        var continuation = await db.WarmupAttempts.SingleAsync(attempt => attempt.WarmupAgentId == idleAgent.Id);
+        Assert.AreEqual(startedAt, continuation.StartedAt);
+    }
+
+    [TestMethod]
+    public async Task TickUsesEarliestServerStartedAtForEveryAttemptDeadline()
+    {
+        await using var db = CreateDb();
+        var firstAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "first-agent", Status = "running", SteamDataVolumeName = "first-steam", AccountConfigVolumeName = "first-config", NoVncPort = 18083 };
+        var secondAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "second-agent", Status = "running", SteamDataVolumeName = "second-steam", AccountConfigVolumeName = "second-config", NoVncPort = 18084 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = false, RequiresReservation = false, MaxConcurrentWarmups = 2, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        var earliestStartedAt = DateTimeOffset.UtcNow.AddMinutes(-13);
+        db.AddRange(firstAgent, secondAgent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = firstAgent.Id, OperationId = operation, Mode = "standard", State = "active", Phase = "active", StartedAt = earliestStartedAt, ObservedAt = DateTimeOffset.UtcNow },
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = secondAgent.Id, OperationId = Guid.NewGuid(), Mode = "standard", State = "active", Phase = "active", StartedAt = earliestStartedAt.AddMinutes(5), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow), null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new BatchSelector([firstAgent, secondAgent]), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(0, await db.WarmupAttempts.CountAsync(attempt => attempt.State == "active" || attempt.State == "uncertain"));
+    }
+
+    [TestMethod]
+    public async Task TickDoesNotPreferExpiredStandardContinuation()
+    {
+        await using var db = CreateDb();
+        var busyAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "busy-agent", Status = "running", SteamDataVolumeName = "busy-steam", AccountConfigVolumeName = "busy-config", NoVncPort = 18083 };
+        var idleAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "idle-agent", Status = "running", SteamDataVolumeName = "idle-steam", AccountConfigVolumeName = "idle-config", NoVncPort = 18084 };
+        var expiredTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 2, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 0 };
+        var freshTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 10 };
+        var operation = Guid.NewGuid();
+        db.AddRange(busyAgent, idleAgent, expiredTarget, freshTarget,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = expiredTarget.Id, WarmupAgentId = busyAgent.Id, OperationId = operation, Mode = "standard", State = "active", Phase = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-13), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", null, null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new BatchSelector([busyAgent, idleAgent]), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(freshTarget.Id, (await db.WarmupAttempts.SingleAsync(attempt => attempt.WarmupAgentId == idleAgent.Id)).TargetServerId);
+    }
+
+    [TestMethod]
+    public async Task TickDoesNotApplyContinuationPreferenceToReservationServer()
+    {
+        await using var db = CreateDb();
+        var busyAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "busy-agent", Status = "running", SteamDataVolumeName = "busy-steam", AccountConfigVolumeName = "busy-config", NoVncPort = 18083 };
+        var idleAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "idle-agent", Status = "running", SteamDataVolumeName = "idle-steam", AccountConfigVolumeName = "idle-config", NoVncPort = 18084 };
+        var reservationTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = true, MaxConcurrentWarmups = 2, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 0 };
+        var freshTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 10 };
+        var operation = Guid.NewGuid();
+        db.AddRange(busyAgent, idleAgent, reservationTarget, freshTarget,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = reservationTarget.Id, WarmupAgentId = busyAgent.Id, OperationId = operation, Mode = "reserved", State = "active", Phase = "awaiting_first_member", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-5), ObservedAt = DateTimeOffset.UtcNow },
+            new ReservationLease { TargetServerId = reservationTarget.Id, OperationId = operation, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5) });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", null, null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new BatchSelector([busyAgent, idleAgent]), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(freshTarget.Id, (await db.WarmupAttempts.SingleAsync(attempt => attempt.WarmupAgentId == idleAgent.Id)).TargetServerId);
     }
 
     [TestMethod]
