@@ -43,6 +43,7 @@ describe('大厅查询加入 URI', () => {
     });
 
     render(<LobbyLookupView />);
+    fireEvent.change(screen.getByPlaceholderText('请输入大厅 ID (64 位非零十进制数字)'), { target: { value: '109775242226986793' } });
     fireEvent.click(screen.getByRole('button', { name: '查询大厅' }));
 
     expect(await screen.findByAltText('Player One 头像')).toHaveAttribute('src', 'https://cdn.example/player.jpg');
