@@ -69,6 +69,9 @@ public sealed class WarmupSchedulerService(
         var activeAttempts = await dbContext.WarmupAttempts
             .Where(attempt => attempt.State == "active" || attempt.State == "uncertain")
             .ToListAsync(cancellationToken);
+        var serverStartedAt = activeAttempts
+            .GroupBy(attempt => attempt.TargetServerId)
+            .ToDictionary(group => group.Key, group => group.Min(attempt => attempt.StartedAt));
         var schedulingEngine = engine ?? new WarmupDecisionEngine();
         var recreateRequests = new List<RecreateRequest>();
         foreach (var attempt in activeAttempts)
@@ -123,7 +126,7 @@ public sealed class WarmupSchedulerService(
             var observed = schedulingEngine.ObserveExternalMembers(
                 new WarmupAttemptSnapshot(
                     Enum.TryParse<WarmupPhase>(attempt.Phase, true, out var phase) ? phase : WarmupPhase.AwaitingFirstMember,
-                    attempt.StartedAt.AddSeconds(target.AttemptWindowSeconds),
+                    serverStartedAt.GetValueOrDefault(attempt.TargetServerId, attempt.StartedAt).AddSeconds(target.AttemptWindowSeconds),
                     attempt.LobbyReadyAt ?? attempt.StartedAt,
                     attempt.FirstExternalMemberAt,
                     attempt.QuietSince,
@@ -191,6 +194,11 @@ public sealed class WarmupSchedulerService(
         var cursors = await dbContext.TargetServerRotationCursors
             .ToDictionaryAsync(cursor => cursor.Priority, cancellationToken);
         var plannedCursorTargets = cursors.ToDictionary(pair => pair.Key, pair => pair.Value.LastTargetServerId);
+        var continuationStartedAt = activeAttempts
+            .Where(attempt => attempt.State is "active" or "uncertain")
+            .GroupBy(attempt => attempt.TargetServerId)
+            .ToDictionary(group => group.Key, group => group.Min(attempt => attempt.StartedAt));
+        var skippedContinuationTargets = new HashSet<Guid>();
         var plannedStarts = new List<PlannedStart>();
         var nextAgentIndex = 0;
         foreach (var request in recreateRequests)
@@ -215,8 +223,19 @@ public sealed class WarmupSchedulerService(
         }
         while (nextAgentIndex < idleAgents.Count)
         {
-            var planned = await PlanNextStartAsync(
-                idleAgents[nextAgentIndex++],
+            var agent = idleAgents[nextAgentIndex++];
+            var planned = await PlanContinuationStartAsync(
+                agent,
+                targetServers,
+                continuationStartedAt,
+                skippedContinuationTargets,
+                schedulingEngine,
+                activeWarmups,
+                leaseTargetServerIds,
+                plannedCursorTargets,
+                cancellationToken);
+            planned ??= await PlanNextStartAsync(
+                agent,
                 targetServers,
                 schedulingEngine,
                 activeWarmups,
@@ -252,6 +271,44 @@ public sealed class WarmupSchedulerService(
             result.Plan.Attempt.ObservedAt = start.Operation.ObservedAt;
         }
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<PlannedStart?> PlanContinuationStartAsync(
+        WarmupAgent agent,
+        IReadOnlyList<TargetServer> targetServers,
+        IReadOnlyDictionary<Guid, DateTimeOffset> continuationStartedAt,
+        HashSet<Guid> skippedContinuationTargets,
+        WarmupDecisionEngine schedulingEngine,
+        Dictionary<Guid, int> activeWarmups,
+        HashSet<Guid> leaseTargetServerIds,
+        Dictionary<int, Guid> plannedCursorTargets,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var candidate = targetServers
+            .Where(server => !server.RequiresReservation &&
+                continuationStartedAt.TryGetValue(server.Id, out var startedAt) &&
+                startedAt.AddSeconds(server.AttemptWindowSeconds) > now &&
+                activeWarmups.GetValueOrDefault(server.Id) < server.MaxConcurrentWarmups &&
+                !skippedContinuationTargets.Contains(server.Id))
+            .OrderBy(server => continuationStartedAt[server.Id])
+            .ThenBy(server => server.Id)
+            .FirstOrDefault();
+        if (candidate is null)
+            return null;
+
+        var planned = await PlanStartAsync(
+            agent,
+            candidate,
+            continuationStartedAt[candidate.Id],
+            schedulingEngine,
+            activeWarmups,
+            leaseTargetServerIds,
+            plannedCursorTargets,
+            cancellationToken);
+        if (planned is null)
+            skippedContinuationTargets.Add(candidate.Id);
+        return planned;
     }
 
     private async Task<PlannedStart?> PlanNextStartAsync(

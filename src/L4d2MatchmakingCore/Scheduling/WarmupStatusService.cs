@@ -49,9 +49,13 @@ public sealed class WarmupStatusService(MatchmakingDbContext dbContext)
                 target.AttemptWindowSeconds))
             .ToListAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
+        var serverStartedAt = rows
+            .GroupBy(row => row.TargetServerId)
+            .ToDictionary(group => group.Key, group => group.Min(row => row.StartedAt));
         return rows.Select(row =>
         {
-            var deadline = row.StartedAt.AddSeconds(row.AttemptWindowSeconds);
+            var startedAt = serverStartedAt[row.TargetServerId];
+            var deadline = startedAt.AddSeconds(row.AttemptWindowSeconds);
             return new WarmupStatusResponse(
                 row.TargetServerId,
                 row.TargetEndpoint,
@@ -62,7 +66,7 @@ public sealed class WarmupStatusService(MatchmakingDbContext dbContext)
                 row.Mode,
                 row.State,
                 row.Phase,
-                row.StartedAt,
+                startedAt,
                 row.LobbyReadyAt,
                 row.FirstExternalMemberAt,
                 row.QuietSince,

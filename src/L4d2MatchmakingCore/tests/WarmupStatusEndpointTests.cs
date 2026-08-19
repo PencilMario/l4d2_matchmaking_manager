@@ -59,11 +59,14 @@ public sealed class WarmupStatusEndpointTests
             .ToHashSet();
         CollectionAssert.AreEquivalent(new[] { "active", "uncertain" }, states.ToArray());
         var first = payload.RootElement[0];
+        var second = payload.RootElement[1];
         Assert.AreEqual(target.Id, first.GetProperty("targetServerId").GetGuid());
         Assert.AreEqual("203.0.113.7:27083", first.GetProperty("targetEndpoint").GetString());
         Assert.AreEqual(agent.Id, first.GetProperty("warmupAgentId").GetGuid());
         Assert.AreEqual("status-agent", first.GetProperty("warmupAgentName").GetString());
         Assert.IsTrue(first.GetProperty("deadline").GetDateTimeOffset() > first.GetProperty("startedAt").GetDateTimeOffset());
+        Assert.AreEqual(first.GetProperty("startedAt").GetDateTimeOffset(), second.GetProperty("startedAt").GetDateTimeOffset());
+        Assert.AreEqual(first.GetProperty("deadline").GetDateTimeOffset(), second.GetProperty("deadline").GetDateTimeOffset());
         Assert.IsTrue(first.GetProperty("remainingSeconds").GetInt32() > 0);
         var responseText = payload.RootElement.GetRawText();
         Assert.IsFalse(responseText.Contains("sensitive-ciphertext", StringComparison.Ordinal));
