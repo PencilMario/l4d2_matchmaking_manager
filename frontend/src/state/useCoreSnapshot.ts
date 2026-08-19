@@ -17,6 +17,8 @@ export interface CoreSnapshotClient {
   recreateAgent?(agentId: string): Promise<WarmupAgent>;
   deleteAgent?(agentId: string): Promise<void>;
   queryLobby?(lobbyId: string): Promise<LobbySnapshot>;
+  getSettings?(): Promise<import('../api/models').GlobalSettings>;
+  updateSettings?(input: { steamProxyUrl: string | null }): Promise<import('../api/models').GlobalSettings>;
 }
 
 export interface CoreSnapshot {

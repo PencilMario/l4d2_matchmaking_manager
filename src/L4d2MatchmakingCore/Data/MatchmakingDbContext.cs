@@ -11,6 +11,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
     public DbSet<ReservationLease> ReservationLeases => Set<ReservationLease>();
     public DbSet<TargetServerRotationCursor> TargetServerRotationCursors => Set<TargetServerRotationCursor>();
     public DbSet<SharedLibraryMaintenanceLease> SharedLibraryMaintenanceLeases => Set<SharedLibraryMaintenanceLease>();
+    public DbSet<CoreSettings> CoreSettings => Set<CoreSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,6 +38,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.Property(agent => agent.AccountConfigVolumeName).HasMaxLength(128).IsRequired();
             entity.HasIndex(agent => agent.AccountConfigVolumeName).IsUnique();
             entity.Property(agent => agent.DownloadRegion).HasMaxLength(128);
+            entity.Property(agent => agent.KeepVncAlive).HasDefaultValue(false);
             entity.Property(agent => agent.ContainerId).HasMaxLength(128);
             entity.Property(agent => agent.NoVncPort).IsRequired();
             entity.HasIndex(agent => agent.NoVncPort).IsUnique();
@@ -74,6 +76,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
         modelBuilder.Entity<TargetServerRotationCursor>(entity =>
         {
             entity.HasKey(cursor => cursor.Priority);
+            entity.Property(cursor => cursor.Priority).ValueGeneratedNever();
             entity.Property(cursor => cursor.LastTargetServerId).IsRequired();
         });
 
@@ -81,6 +84,13 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
         {
             entity.HasKey(lease => lease.Name);
             entity.Property(lease => lease.Name).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<CoreSettings>(entity =>
+        {
+            entity.HasKey(settings => settings.Name);
+            entity.Property(settings => settings.Name).HasMaxLength(64);
+            entity.Property(settings => settings.SteamProxyUrl).HasMaxLength(2048);
         });
     }
 }

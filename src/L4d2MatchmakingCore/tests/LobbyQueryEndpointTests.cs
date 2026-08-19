@@ -87,6 +87,27 @@ public sealed class LobbyQueryEndpointTests
     }
 
     [TestMethod]
+    public async Task QueryUsesTheAgentOwningTheRequestedActiveLobbyBeforeAnIdleAgent()
+    {
+        using var environment = new TestEnvironment();
+        const string lobbyId = "109775242170052468";
+        var owner = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+        var idle = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+        var agentClient = new FakeClient(Snapshot());
+        await using var factory = new QueryFactory(new FakeSelector(idle, owner), agentClient);
+        var attempt = Attempt(owner.Id, "reserved", "active");
+        attempt.LobbyId = lobbyId;
+        await factory.SeedAttemptsAsync(attempt);
+        using var client = Authorized(factory);
+
+        var response = await client.GetAsync($"/v1/lobbies/{lobbyId}");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.AreEqual(owner.Id, agentClient.QueryCalls.Single().AgentId);
+        Assert.IsTrue(agentClient.QueryCalls.Single().IncludeMembers);
+    }
+
+    [TestMethod]
     public async Task QueryUsesMetadataOnlyFallbackWhenOnlyReservationAgentsAreHealthy()
     {
         using var environment = new TestEnvironment();

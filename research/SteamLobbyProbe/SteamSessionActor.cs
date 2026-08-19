@@ -170,7 +170,7 @@ public sealed class SteamSessionActor : ISteamSessionActor
 
         if (heldLobbyId == lobbyId)
         {
-            return Complete(metadata, currentSteamId);
+            return Complete(metadata, _activeOperation?.Lobby);
         }
 
         if (_activeOperation is not null && heldLobbyId == 0)
@@ -186,7 +186,7 @@ public sealed class SteamSessionActor : ISteamSessionActor
 
         try
         {
-            return Complete(_runtime.ReadLobby(lobbyId), currentSteamId);
+            return Complete(_runtime.ReadLobby(lobbyId));
         }
         finally
         {
@@ -212,12 +212,18 @@ public sealed class SteamSessionActor : ISteamSessionActor
     private static LobbySnapshot MetadataOnly(LobbySnapshot snapshot, string status) =>
         snapshot with { Members = [], MemberDataStatus = status };
 
-    private static LobbySnapshot Complete(LobbySnapshot snapshot, ulong currentSteamId) =>
-        snapshot with
-        {
-            Members = snapshot.Members.Where(member => member.SteamId != currentSteamId.ToString()).ToArray(),
-            MemberDataStatus = LobbyMemberDataStatus.Complete,
-        };
+    private static LobbySnapshot Complete(LobbySnapshot snapshot, LobbySnapshot? heldLobby = null)
+    {
+        if (heldLobby is null || heldLobby.Members.Count == 0)
+            return snapshot with { MemberDataStatus = LobbyMemberDataStatus.Complete };
+
+        var members = snapshot.Members
+            .Concat(heldLobby.Members)
+            .GroupBy(member => member.SteamId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
+        return snapshot with { Members = members, MemberDataStatus = LobbyMemberDataStatus.Complete };
+    }
 
     private void FailActiveOperation(string failure)
     {

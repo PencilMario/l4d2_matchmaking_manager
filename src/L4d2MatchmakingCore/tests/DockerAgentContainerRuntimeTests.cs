@@ -56,10 +56,9 @@ public sealed class DockerAgentContainerRuntimeTests
             "network",
             18083,
             18183,
-            "/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so",
-            "always");
+            "/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so");
         var service = new WarmupAgentContainerService(runtime, options);
-        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083 };
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083, KeepVncAlive = true };
 
         await service.CreateAsync(agent, CancellationToken.None);
 
@@ -95,6 +94,43 @@ public sealed class DockerAgentContainerRuntimeTests
             new AgentDeviceMapping("/dev/fuse", "/dev/fuse", "rwm"));
     }
 
+    [TestMethod]
+    public async Task CreateDefaultsToReclaimedVncMode()
+    {
+        var runtime = new FakeRuntime();
+        var service = new WarmupAgentContainerService(runtime, new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083 };
+
+        await service.CreateAsync(agent, CancellationToken.None);
+
+        Assert.IsNotNull(runtime.Definition);
+        CollectionAssert.Contains(runtime.Definition.Environment.ToList(), "STEAM_LOGIN_UI_MODE=auto");
+    }
+
+    [TestMethod]
+    public async Task VncLifecycleUsesTheManagedRuntimeContract()
+    {
+        var runtime = new FakeRuntime();
+        var service = new WarmupAgentContainerService(runtime, new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), ContainerId = "container-id" };
+
+        Assert.IsTrue(await service.EnsureVncStartedAsync(agent, CancellationToken.None));
+        await service.StopVncAsync(agent, CancellationToken.None);
+
+        CollectionAssert.AreEqual(
+            new[] { "status", "start", "stop" },
+            runtime.VncCommands.ToArray());
+    }
+
+    [TestMethod]
+    public void VncStatusParserTreatsSupervisorStoppedAsStartable()
+    {
+        Assert.AreEqual(AgentVncState.Running, AgentVncStateParser.Parse(0, "x11vnc RUNNING pid 17\nfrontend RUNNING pid 18"));
+        Assert.AreEqual(AgentVncState.Stopped, AgentVncStateParser.Parse(3, "x11vnc STOPPED Not started\nfrontend STOPPED Not started"));
+        Assert.AreEqual(AgentVncState.Partial, AgentVncStateParser.Parse(3, "x11vnc RUNNING pid 17\nfrontend STOPPED Not started"));
+        Assert.ThrowsException<InvalidOperationException>(() => AgentVncStateParser.Parse(4, "vnc UNKNOWN"));
+    }
+
     private sealed class FakeRuntime : IAgentContainerRuntime
     {
         public ManagedAgentContainerDefinition? Definition { get; private set; }
@@ -117,6 +153,26 @@ public sealed class DockerAgentContainerRuntimeTests
         {
             DeleteCalled = true;
             DeleteVolumesRequested = deleteVolumes;
+            return Task.CompletedTask;
+        }
+
+        public List<string> VncCommands { get; } = [];
+
+        public Task<AgentVncState> GetVncStateAsync(string containerId, CancellationToken cancellationToken)
+        {
+            VncCommands.Add("status");
+            return Task.FromResult(AgentVncState.Stopped);
+        }
+
+        public Task StartVncAsync(string containerId, CancellationToken cancellationToken)
+        {
+            VncCommands.Add("start");
+            return Task.CompletedTask;
+        }
+
+        public Task StopVncAsync(string containerId, CancellationToken cancellationToken)
+        {
+            VncCommands.Add("stop");
             return Task.CompletedTask;
         }
     }

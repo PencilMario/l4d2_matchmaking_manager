@@ -11,6 +11,9 @@ public static class WarmupAgentEndpoints
         group.MapPost("/{agentId:guid}/start", StartAsync);
         group.MapPost("/{agentId:guid}/stop", StopAsync);
         group.MapPost("/{agentId:guid}/recreate", RecreateAsync);
+        group.MapPost("/{agentId:guid}/vnc-sessions", OpenVncSessionAsync);
+        group.MapPost("/{agentId:guid}/vnc-sessions/close", CloseVncSessionAsync);
+        group.Map("/{agentId:guid}/vnc/{**path}", ProxyVncAsync).AllowAnonymous();
         group.MapDelete("/{agentId:guid}", DeleteAsync);
         return group;
     }
@@ -74,6 +77,96 @@ public static class WarmupAgentEndpoints
 
     private static Task<IResult> RecreateAsync(Guid agentId, WarmupAgentService service, CancellationToken cancellationToken) =>
         MutateAsync(() => service.RecreateAsync(agentId, cancellationToken));
+
+    private static async Task<IResult> OpenVncSessionAsync(
+        Guid agentId,
+        WarmupAgentService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var session = await service.OpenVncSessionAsync(agentId, cancellationToken);
+            if (session is null)
+                return Results.NotFound();
+            // noVNC prefixes its `path` option with '/', so this must be relative.
+            var websocketPath = $"v1/agents/{agentId}/vnc/websockify";
+            var url = $"/v1/agents/{agentId}/vnc/?session={Uri.EscapeDataString(session.Token)}&path={Uri.EscapeDataString(websocketPath)}";
+            return Results.Created(url, new OpenAgentVncSessionResponse(url, session.ExpiresAt));
+        }
+        catch (InvalidOperationException exception) when (exception.Message == "warmup_agent_not_running")
+        {
+            return Results.Conflict(exception.Message);
+        }
+        catch (InvalidOperationException)
+        {
+            return Results.StatusCode(StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private static async Task<IResult> CloseVncSessionAsync(
+        Guid agentId,
+        WarmupAgentService service,
+        CancellationToken cancellationToken) =>
+        await service.CloseVncSessionAsync(agentId, cancellationToken)
+            ? Results.NoContent()
+            : Results.NotFound();
+
+    private static async Task ProxyVncAsync(
+        HttpContext context,
+        Guid agentId,
+        string? path,
+        AgentVncSessionService sessions,
+        IAgentVncProxy proxy,
+        CancellationToken cancellationToken)
+    {
+        var initialToken = context.Request.Query["session"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(initialToken))
+        {
+            var exchangedSession = await sessions.ExchangeTokenAsync(agentId, initialToken, cancellationToken);
+            if (exchangedSession is null)
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+            context.Response.Cookies.Append(CookieName(agentId), exchangedSession.Token, new CookieOptions
+            {
+                Expires = exchangedSession.ExpiresAt,
+                HttpOnly = true,
+                IsEssential = true,
+                Path = $"/v1/agents/{agentId}/vnc",
+                SameSite = SameSiteMode.Strict,
+                Secure = context.Request.IsHttps,
+            });
+            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers["Referrer-Policy"] = "no-referrer";
+            context.Response.Redirect(RemoveSessionQuery(context));
+            return;
+        }
+
+        if (!context.Request.Cookies.TryGetValue(CookieName(agentId), out var cookieToken) ||
+            !sessions.TryGet(agentId, cookieToken, out var session) ||
+            session is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        using var proxyCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, session.LifetimeToken);
+        await proxy.ProxyAsync(context, agentId, path ?? string.Empty, proxyCancellation.Token);
+    }
+
+    private static string CookieName(Guid agentId) => $"l4d2_vnc_{agentId:N}";
+
+    private static string RemoveSessionQuery(HttpContext context)
+    {
+        var query = QueryString.Create(context.Request.Query
+            .Where(pair => !string.Equals(pair.Key, "session", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(pair => pair.Value.Select(value => new KeyValuePair<string, string?>(pair.Key, value))));
+        var path = context.Request.Path.Value?.EndsWith("/vnc/", StringComparison.OrdinalIgnoreCase) == true
+            ? $"{context.Request.Path}web/"
+            : context.Request.Path.Value ?? string.Empty;
+        return path + query;
+    }
 
     private static async Task<IResult> MutateAsync(Func<Task<WarmupAgentResponse?>> mutation)
     {

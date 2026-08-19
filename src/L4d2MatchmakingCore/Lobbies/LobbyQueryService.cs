@@ -30,6 +30,20 @@ public sealed class LobbyQueryService(
             .GroupBy(attempt => attempt.WarmupAgentId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
+        var activeLobbyOwners = attempts
+            .Where(attempt => attempt.LobbyId == lobbyId)
+            .Select(attempt => attempt.WarmupAgentId)
+            .Distinct()
+            .Join(healthyAgents, agentId => agentId, agent => agent.Id, (_, agent) => agent)
+            .ToList();
+
+        foreach (var owner in activeLobbyOwners)
+        {
+            var result = await TryQueryAsync(owner, lobbyId, includeMembers: true, cancellationToken);
+            if (result is not null)
+                return result;
+        }
+
         var membershipCandidates = healthyAgents
             .Where(agent => !attemptsByAgent.ContainsKey(agent.Id))
             .Concat(healthyAgents.Where(agent => IsActiveStandardOnly(attemptsByAgent.GetValueOrDefault(agent.Id))))

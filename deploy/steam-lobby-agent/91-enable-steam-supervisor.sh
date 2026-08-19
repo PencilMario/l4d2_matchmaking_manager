@@ -72,7 +72,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         enable_vnc=true
         case "${login_ui_mode}" in
             always)
-                steam_arguments='-vgui -no-browser'
+                steam_arguments=''
                 ;;
             never)
                 steam_arguments='-silent -no-browser'

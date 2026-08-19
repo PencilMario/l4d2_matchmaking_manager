@@ -7,10 +7,11 @@ namespace SteamLobbyProbe.Tests;
 public sealed class SteamSessionActorQueryTests
 {
     private const ulong QueryLobbyId = 109775242170052468UL;
+    private const ulong ManagedLobbyId = 109775242170052469UL;
     private const ulong PlayerSteamId = 76561198000000001UL;
 
     [TestMethod]
-    public async Task QueryTemporarilyJoinsAndRemovesTheQueryAccountFromMembers()
+    public async Task QueryTemporarilyJoinsAndKeepsTheQueryAccountInMembers()
     {
         var native = new QueryRuntime();
         await using var actor = CreateActor(native);
@@ -18,7 +19,7 @@ public sealed class SteamSessionActorQueryTests
         var snapshot = await actor.QueryLobbyAsync(QueryLobbyId, includeMembers: true, CancellationToken.None);
 
         Assert.AreEqual(LobbyMemberDataStatus.Complete, snapshot.MemberDataStatus);
-        CollectionAssert.AreEqual(new[] { PlayerSteamId.ToString() }, snapshot.Members.Select(member => member.SteamId).ToArray());
+        CollectionAssert.AreEqual(new[] { native.CurrentSteamId.ToString(), PlayerSteamId.ToString() }, snapshot.Members.Select(member => member.SteamId).ToArray());
         Assert.AreEqual(1, native.JoinCalls);
         Assert.AreEqual(1, native.LeaveCalls);
         Assert.IsFalse(native.IsCurrentUserLobbyMember(QueryLobbyId, native.CurrentSteamId));
@@ -36,6 +37,18 @@ public sealed class SteamSessionActorQueryTests
         Assert.AreEqual(LobbyMemberDataStatus.MetadataOnlyAgentStateChanged, snapshot.MemberDataStatus);
         Assert.AreEqual(0, snapshot.Members.Count);
         Assert.AreEqual(0, native.JoinCalls);
+    }
+
+    [TestMethod]
+    public async Task QueryKeepsTheHeldLobbyAgentWhenTheFreshReadHasNoMembers()
+    {
+        var native = new QueryRuntime { ReadHeldLobbyWithoutMembers = true };
+        await using var actor = CreateActor(native);
+        await actor.StartAsync(Operation(AgentLobbyMode.Standard), CancellationToken.None);
+
+        var snapshot = await actor.QueryLobbyAsync(ManagedLobbyId, includeMembers: true, CancellationToken.None);
+
+        CollectionAssert.Contains(snapshot.Members.Select(member => member.SteamId).ToArray(), native.CurrentSteamId.ToString());
     }
 
     [TestMethod]
@@ -151,6 +164,7 @@ public sealed class SteamSessionActorQueryTests
         public bool ThrowAfterJoining { get; set; }
         public bool ThrowOnLeave { get; set; }
         public bool PreserveOriginalLobby { get; set; } = true;
+        public bool ReadHeldLobbyWithoutMembers { get; set; }
 
         public AgentHealthSnapshot ObserveHealth() => new(true, null, DateTimeOffset.UtcNow);
 
@@ -164,6 +178,8 @@ public sealed class SteamSessionActorQueryTests
         {
             if (ThrowAfterJoining && _joined.Contains(lobbyId))
                 throw new SteamRuntimeException("lobby_data_unavailable");
+            if (ReadHeldLobbyWithoutMembers && lobbyId == ManagedLobbyId)
+                return Snapshot(lobbyId, "L4D2C1", includeSelf: false);
             return Snapshot(lobbyId, "L4D2C1", _joined.Contains(lobbyId));
         }
 

@@ -22,10 +22,12 @@ COPY --from=build /out/agent/ /opt/l4d2-agent/
 COPY --from=build /out/probe/ /opt/steam-lobby-probe/
 COPY deploy/steam-lobby-agent/l4d2-lobby-agent.ini /etc/supervisor.d/l4d2-lobby-agent.ini
 COPY deploy/steam-lobby-agent/91-enable-steam-supervisor.sh /etc/cont-init.d/91-enable-steam-supervisor.sh
+COPY deploy/steam-lobby-agent/l4d2-steam-status.sh /usr/local/bin/l4d2-steam-status
+COPY deploy/steam-lobby-agent/l4d2-steam-status.desktop /usr/share/applications/l4d2-steam-status.desktop
 RUN rm -f /etc/cont-init.d/60-configure_gpu_driver.sh \
     && sed -i 's|if \[\[ ! -f /tmp/\.desktop-apps-updated \]\]; then|if false; then # skip desktop-apps-updated bootstrap|' /usr/bin/start-desktop.sh \
     && sed -i 's/if (!window\.isSecureContext) {/if (false) {/' /opt/frontend/noVNC/core/rfb.js \
-    && chmod +x /etc/cont-init.d/91-enable-steam-supervisor.sh /opt/l4d2-agent/L4d2LobbyAgent /opt/steam-lobby-probe/SteamLobbyProbe \
+    && chmod +x /etc/cont-init.d/91-enable-steam-supervisor.sh /usr/local/bin/l4d2-steam-status /opt/l4d2-agent/L4d2LobbyAgent /opt/steam-lobby-probe/SteamLobbyProbe \
     && mkdir -p /var/lib/l4d2-agent \
     && chmod 0750 /var/lib/l4d2-agent
 

@@ -7,6 +7,7 @@ import type {
   WarmupAgent,
   WarmupAgentInput,
   WarmupStatus,
+  GlobalSettings,
 } from './models';
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -48,6 +49,14 @@ export class CoreClient {
 
   listWarmups(signal?: AbortSignal) {
     return this.request<WarmupStatus[]>('/v1/warmups', { signal });
+  }
+
+  getSettings(signal?: AbortSignal) {
+    return this.request<GlobalSettings>('/v1/settings', { signal });
+  }
+
+  updateSettings(input: { steamProxyUrl: string | null }) {
+    return this.request<GlobalSettings>('/v1/settings', { method: 'PUT', body: input });
   }
 
   queryLobby(lobbyId: string, signal?: AbortSignal) {

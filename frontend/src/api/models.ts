@@ -42,6 +42,7 @@ export interface WarmupAgent {
   status: string;
   downloadRegion: string | null;
   noVncPort: number;
+  keepVncAlive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +50,12 @@ export interface WarmupAgent {
 export interface WarmupAgentInput {
   name: string;
   downloadRegion: string | null;
+  keepVncAlive: boolean;
+}
+
+export interface GlobalSettings {
+  steamProxyUrl: string | null;
+  updatedAt: string;
 }
 
 export interface WarmupStatus {

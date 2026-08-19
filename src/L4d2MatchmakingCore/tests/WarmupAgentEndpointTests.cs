@@ -5,6 +5,7 @@ using System.Text.Json;
 using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.Data;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -78,6 +79,27 @@ public sealed class WarmupAgentEndpointTests
     }
 
     [TestMethod]
+    public async Task AgentSettingsPersistKeepVncAlive()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new AgentFactory(new FakeRuntime());
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null, true));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        Assert.IsTrue(agent.KeepVncAlive);
+
+        var updated = await client.PutAsJsonAsync($"/v1/agents/{agent.Id}", new UpdateWarmupAgentRequest("account-1", "tokyo", false));
+        var updatedAgent = await updated.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
+        Assert.IsNotNull(updatedAgent);
+        Assert.IsFalse(updatedAgent.KeepVncAlive);
+        Assert.AreEqual("tokyo", updatedAgent.DownloadRegion);
+    }
+
+    [TestMethod]
     public async Task LifecycleEndpointsManageContainerWithoutDeletingAccountVolumes()
     {
         using var environment = new CoreTestEnvironment();
@@ -105,6 +127,166 @@ public sealed class WarmupAgentEndpointTests
         Assert.AreEqual(HttpStatusCode.NotFound, (await client.GetAsync($"/v1/agents/{agent.Id}")).StatusCode);
     }
 
+    [TestMethod]
+    public async Task DeletingAnAgentWaitsForItsInProgressCreation()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime
+        {
+            CreateStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
+            AllowCreate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
+            DeleteStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
+        };
+        await using var factory = new AgentFactory(runtime);
+        using var client = CreateAuthorizedClient(factory);
+
+        var creating = client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        await runtime.CreateStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var pendingAgent = (await client.GetFromJsonAsync<List<WarmupAgentResponse>>("/v1/agents"))?.Single();
+        Assert.IsNotNull(pendingAgent);
+
+        var deleting = client.DeleteAsync($"/v1/agents/{pendingAgent.Id}");
+        await Assert.ThrowsExceptionAsync<TimeoutException>(
+            () => runtime.DeleteStarted.Task.WaitAsync(TimeSpan.FromMilliseconds(100)));
+
+        runtime.AllowCreate.SetResult();
+        Assert.AreEqual(HttpStatusCode.Created, (await creating).StatusCode);
+        Assert.AreEqual(HttpStatusCode.NoContent, (await deleting).StatusCode);
+        Assert.AreEqual(HttpStatusCode.NotFound, (await client.GetAsync($"/v1/agents/{pendingAgent.Id}")).StatusCode);
+    }
+
+    [TestMethod]
+    public async Task VncSessionStartsOnlyTheRequestedAgentAndCanBeClosed()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        await using var factory = new AgentFactory(runtime);
+        using var client = CreateAuthorizedClient(factory);
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        var opened = await client.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions", null);
+        var openedJson = await opened.Content.ReadAsStringAsync();
+        var sessionUrl = JsonDocument.Parse(openedJson).RootElement.GetProperty("url").GetString();
+        var closed = await client.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions/close", null);
+
+        Assert.AreEqual(HttpStatusCode.Created, opened.StatusCode);
+        Assert.IsNotNull(sessionUrl);
+        StringAssert.StartsWith(sessionUrl, $"/v1/agents/{agent.Id}/vnc/");
+        StringAssert.Contains(sessionUrl, $"path={Uri.EscapeDataString($"v1/agents/{agent.Id}/vnc/websockify")}");
+        Assert.AreEqual(1, runtime.StartVncCalls);
+        Assert.AreEqual(HttpStatusCode.NoContent, closed.StatusCode);
+        Assert.AreEqual(1, runtime.StopVncCalls);
+    }
+
+    [TestMethod]
+    public async Task VncSessionReturnsServerErrorWhenNoVncRuntimeControlFails()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime { VncStateException = new InvalidOperationException("agent_vnc_status_failed") };
+        await using var factory = new AgentFactory(runtime);
+        using var client = CreateAuthorizedClient(factory);
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        var opened = await client.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions", null);
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, opened.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task VncSessionRenewalReturnsServerErrorWhenTheRuntimeBecomesPartial()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        await using var factory = new AgentFactory(runtime);
+        using var client = CreateAuthorizedClient(factory);
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        var opened = await client.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions", null);
+        Assert.AreEqual(HttpStatusCode.Created, opened.StatusCode);
+        runtime.VncState = AgentVncState.Partial;
+
+        var renewed = await client.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions", null);
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, renewed.StatusCode);
+        Assert.AreEqual(1, runtime.StartVncCalls);
+        Assert.AreEqual(0, runtime.StopVncCalls);
+    }
+
+    [TestMethod]
+    public async Task VncProxyExchangesTheShortLivedTokenForAnAgentScopedCookie()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        var proxy = new FakeVncProxy();
+        await using var factory = new AgentFactory(runtime, proxy);
+        using var client = CreateAuthorizedClient(factory);
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        var opened = await client.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions", null);
+        var url = JsonDocument.Parse(await opened.Content.ReadAsStringAsync()).RootElement.GetProperty("url").GetString();
+        Assert.IsNotNull(url);
+
+        using var noRedirect = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
+        var exchanged = await noRedirect.GetAsync(url);
+
+        Assert.AreEqual(HttpStatusCode.Found, exchanged.StatusCode);
+        Assert.AreEqual(0, proxy.Calls);
+        Assert.IsTrue(exchanged.Headers.TryGetValues("Set-Cookie", out var setCookie));
+        StringAssert.Contains(setCookie.Single().ToLowerInvariant(), $"path=/v1/agents/{agent.Id}/vnc".ToLowerInvariant());
+        Assert.AreEqual("no-referrer", exchanged.Headers.GetValues("Referrer-Policy").Single());
+        var redirectedUrl = exchanged.Headers.Location?.ToString();
+        Assert.IsNotNull(redirectedUrl);
+        Assert.IsFalse(redirectedUrl.Contains("session=", StringComparison.OrdinalIgnoreCase));
+
+        using var cookieClient = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
+        cookieClient.DefaultRequestHeaders.TryAddWithoutValidation("Cookie", setCookie.Single().Split(';')[0]);
+        var proxied = await cookieClient.GetAsync(redirectedUrl);
+        Assert.AreEqual(HttpStatusCode.OK, proxied.StatusCode);
+        Assert.AreEqual("proxied", await proxied.Content.ReadAsStringAsync());
+        Assert.AreEqual(agent.Id, proxy.AgentId);
+        Assert.AreEqual("web/", proxy.Path);
+
+        using var replayClient = factory.CreateClient();
+        var replayed = await replayClient.GetAsync(url);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, replayed.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task NewQueryTokenWinsOverAStaleVncCookie()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        await using var factory = new AgentFactory(runtime, new FakeVncProxy());
+        using var authorized = CreateAuthorizedClient(factory);
+        var created = await authorized.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        var first = await authorized.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions", null);
+        var firstUrl = JsonDocument.Parse(await first.Content.ReadAsStringAsync()).RootElement.GetProperty("url").GetString();
+        Assert.IsNotNull(firstUrl);
+
+        using var noRedirect = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
+        var firstExchange = await noRedirect.GetAsync(firstUrl);
+        var staleCookie = firstExchange.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+        var closed = await authorized.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions/close", null);
+        Assert.AreEqual(HttpStatusCode.NoContent, closed.StatusCode);
+        var second = await authorized.PostAsync($"/v1/agents/{agent.Id}/vnc-sessions", null);
+        var secondUrl = JsonDocument.Parse(await second.Content.ReadAsStringAsync()).RootElement.GetProperty("url").GetString();
+        Assert.IsNotNull(secondUrl);
+
+        noRedirect.DefaultRequestHeaders.TryAddWithoutValidation("Cookie", staleCookie);
+        var reopened = await noRedirect.GetAsync(secondUrl);
+
+        Assert.AreEqual(HttpStatusCode.Found, reopened.StatusCode);
+        Assert.IsTrue(reopened.Headers.TryGetValues("Set-Cookie", out _));
+    }
+
     private static HttpClient CreateAuthorizedClient(WebApplicationFactory<global::Program> factory)
     {
         var client = factory.CreateClient();
@@ -112,7 +294,7 @@ public sealed class WarmupAgentEndpointTests
         return client;
     }
 
-    private sealed class AgentFactory(FakeRuntime runtime) : WebApplicationFactory<global::Program>
+    private sealed class AgentFactory(FakeRuntime runtime, IAgentVncProxy? proxy = null) : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
 
@@ -128,26 +310,56 @@ public sealed class WarmupAgentEndpointTests
                 services.AddSingleton<IAgentContainerRuntime>(runtime);
                 services.RemoveAll<AgentContainerOptions>();
                 services.AddSingleton(new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
+                if (proxy is not null)
+                {
+                    services.RemoveAll<IAgentVncProxy>();
+                    services.AddSingleton(proxy);
+                }
             });
+        }
+    }
+
+    private sealed class FakeVncProxy : IAgentVncProxy
+    {
+        public Guid AgentId { get; private set; }
+        public int Calls { get; private set; }
+        public string Path { get; private set; } = string.Empty;
+
+        public async Task ProxyAsync(HttpContext context, Guid agentId, string path, CancellationToken cancellationToken)
+        {
+            Calls++;
+            AgentId = agentId;
+            Path = path;
+            await context.Response.WriteAsync("proxied", cancellationToken);
         }
     }
 
     private sealed class FakeRuntime(IReadOnlySet<int>? usedPorts = null) : IAgentContainerRuntime
     {
         private readonly IReadOnlySet<int> _usedPorts = usedPorts ?? new HashSet<int>();
+        public TaskCompletionSource? AllowCreate { get; init; }
+        public TaskCompletionSource? CreateStarted { get; init; }
+        public TaskCompletionSource? DeleteStarted { get; init; }
+        public Exception? VncStateException { get; init; }
+        public AgentVncState VncState { get; set; } = AgentVncState.Stopped;
         public int CreateCalls { get; private set; }
         public int StartCalls { get; private set; }
         public int StopCalls { get; private set; }
+        public int StartVncCalls { get; private set; }
+        public int StopVncCalls { get; private set; }
         public int DeleteCalls { get; private set; }
         public List<(string ContainerId, bool DeleteVolumes)> DeleteRequests { get; } = [];
 
         public Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(_usedPorts);
 
-        public Task<string> CreateAsync(ManagedAgentContainerDefinition definition, CancellationToken cancellationToken)
+        public async Task<string> CreateAsync(ManagedAgentContainerDefinition definition, CancellationToken cancellationToken)
         {
             CreateCalls++;
-            return Task.FromResult($"container-{CreateCalls}");
+            CreateStarted?.TrySetResult();
+            if (AllowCreate is not null)
+                await AllowCreate.Task.WaitAsync(cancellationToken);
+            return $"container-{CreateCalls}";
         }
 
         public Task StartAsync(string containerId, CancellationToken cancellationToken)
@@ -166,6 +378,26 @@ public sealed class WarmupAgentEndpointTests
         {
             DeleteCalls++;
             DeleteRequests.Add((containerId, deleteVolumes));
+            DeleteStarted?.TrySetResult();
+            return Task.CompletedTask;
+        }
+
+        public Task<AgentVncState> GetVncStateAsync(string containerId, CancellationToken cancellationToken) =>
+            VncStateException is null
+                ? Task.FromResult(VncState)
+                : Task.FromException<AgentVncState>(VncStateException);
+
+        public Task StartVncAsync(string containerId, CancellationToken cancellationToken)
+        {
+            StartVncCalls++;
+            VncState = AgentVncState.Running;
+            return Task.CompletedTask;
+        }
+
+        public Task StopVncAsync(string containerId, CancellationToken cancellationToken)
+        {
+            StopVncCalls++;
+            VncState = AgentVncState.Stopped;
             return Task.CompletedTask;
         }
     }

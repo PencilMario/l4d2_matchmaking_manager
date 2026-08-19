@@ -42,6 +42,10 @@ if ($initializer -notmatch '-silent -no-browser') {
     throw 'The initializer must suppress the Steam UI after account login is complete.'
 }
 
+if (-not [regex]::IsMatch($initializer, "(?s)always\)\s*steam_arguments=''")) {
+    throw 'The persistent VNC mode must start Steam with its default arguments.'
+}
+
 if ($initializer -notmatch 'set_vnc_autostart' -or
     $initializer -notmatch '/etc/supervisor\.d/vnc\.ini' -or
     $initializer -notmatch 'set_vnc_autostart "\$\{enable_vnc\}"') {

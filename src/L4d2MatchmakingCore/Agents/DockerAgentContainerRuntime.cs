@@ -5,6 +5,7 @@ namespace L4d2MatchmakingCore.Agents;
 
 public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDisposable
 {
+    private static readonly string[] VncPrograms = ["x11vnc", "frontend"];
     private readonly DockerClient _client = new DockerClientConfiguration().CreateClient();
 
     public async Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken)
@@ -91,6 +92,44 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
         }, cancellationToken);
     }
 
+    public async Task<AgentVncState> GetVncStateAsync(string containerId, CancellationToken cancellationToken)
+    {
+        var result = await ExecuteSupervisorCommandAsync(containerId, "status", cancellationToken);
+        return AgentVncStateParser.Parse(result.ExitCode, result.StandardOutput);
+    }
+
+    public async Task StartVncAsync(string containerId, CancellationToken cancellationToken)
+    {
+        await ExecuteSupervisorCommandAsync(containerId, "start", cancellationToken);
+        if (await GetVncStateAsync(containerId, cancellationToken) != AgentVncState.Running)
+            throw new InvalidOperationException("agent_vnc_start_failed");
+    }
+
+    public async Task StopVncAsync(string containerId, CancellationToken cancellationToken)
+    {
+        await ExecuteSupervisorCommandAsync(containerId, "stop", cancellationToken);
+        if (await GetVncStateAsync(containerId, cancellationToken) != AgentVncState.Stopped)
+            throw new InvalidOperationException("agent_vnc_stop_failed");
+    }
+
+    private async Task<AgentExecResult> ExecuteSupervisorCommandAsync(
+        string containerId,
+        string operation,
+        CancellationToken cancellationToken)
+    {
+        await EnsureManagedAsync(containerId, cancellationToken);
+        var exec = await _client.Exec.ExecCreateContainerAsync(containerId, new ContainerExecCreateParameters
+        {
+            Cmd = ["supervisorctl", operation, .. VncPrograms],
+            AttachStdout = true,
+            AttachStderr = true,
+        }, cancellationToken);
+        using var stream = await _client.Exec.StartAndAttachContainerExecAsync(exec.ID, false, cancellationToken);
+        var output = await stream.ReadOutputToEndAsync(cancellationToken);
+        var inspection = await _client.Exec.InspectContainerExecAsync(exec.ID, cancellationToken);
+        return new AgentExecResult(checked((int)inspection.ExitCode), output.stdout, output.stderr);
+    }
+
     private async Task EnsureManagedAsync(string containerId, CancellationToken cancellationToken)
     {
         var container = await _client.Containers.InspectContainerAsync(containerId, cancellationToken);
@@ -104,3 +143,5 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
 
     public void Dispose() => _client.Dispose();
 }
+
+public sealed record AgentExecResult(int ExitCode, string StandardOutput, string StandardError);
