@@ -36,6 +36,19 @@ public sealed class ProbeStatusServiceTests
     }
 
     [TestMethod]
+    public async Task GetAsyncIncludesTheCurrentSteamDownloadRegion()
+    {
+        var service = new ProbeStatusService(
+            new FixedFakeSessionService(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow)),
+            new FakeDesktopDetector(true),
+            regionReader: new FixedDownloadRegionReader("hongkong"));
+
+        var result = await service.GetAsync(CancellationToken.None);
+
+        Assert.AreEqual("hongkong", result.CurrentDownloadRegion);
+    }
+
+    [TestMethod]
     public async Task GetAsyncMarksSteamApiInitializationFailureAsFailed()
     {
         var service = new ProbeStatusService(
@@ -130,5 +143,10 @@ public sealed class ProbeStatusServiceTests
             MarkReadyCalls++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FixedDownloadRegionReader(string? region) : ISteamDownloadRegionReader
+    {
+        public string? Read() => region;
     }
 }

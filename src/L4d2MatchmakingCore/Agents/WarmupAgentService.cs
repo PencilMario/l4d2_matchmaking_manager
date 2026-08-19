@@ -1,4 +1,5 @@
 using System.Text.Json;
+using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -80,17 +81,20 @@ public sealed class WarmupAgentService(
         foreach (var agent in agents)
         {
             var ready = false;
+            AgentHealthSnapshot? health = null;
             if (agent.Status == "running")
             {
                 try
                 {
-                    ready = (await agentControlClient.GetHealthAsync(agent, cancellationToken)).Ready;
+                    var observedHealth = await agentControlClient.GetHealthAsync(agent, cancellationToken);
+                    health = observedHealth;
+                    ready = observedHealth.Ready;
                 }
                 catch (HttpRequestException)
                 {
                 }
             }
-            responses.Add(ToResponse(agent, ready));
+            responses.Add(ToResponse(agent, ready, agent.DownloadRegion ?? health?.CurrentDownloadRegion));
         }
         return responses;
     }
@@ -271,11 +275,11 @@ public sealed class WarmupAgentService(
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
-    private static WarmupAgentResponse ToResponse(WarmupAgent agent, bool ready = false) => new(
+    private static WarmupAgentResponse ToResponse(WarmupAgent agent, bool ready = false, string? downloadRegion = null) => new(
         agent.Id,
         agent.Name,
         agent.Status,
-        agent.DownloadRegion,
+        downloadRegion ?? agent.DownloadRegion,
         agent.KeepVncAlive,
         agent.NoVncPort,
         agent.CreatedAt,

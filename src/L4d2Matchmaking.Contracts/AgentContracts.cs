@@ -46,4 +46,5 @@ public sealed record AgentOperationStartResult(
 public sealed record AgentHealthSnapshot(
     bool Ready,
     string? Failure,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt,
+    string? CurrentDownloadRegion = null);

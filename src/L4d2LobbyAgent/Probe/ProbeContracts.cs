@@ -19,6 +19,53 @@ public interface ISteamDesktopDetector
     bool IsRunning();
 }
 
+public interface ISteamDownloadRegionReader
+{
+    string? Read();
+}
+
+public sealed class SteamDownloadRegionReader : ISteamDownloadRegionReader
+{
+    private static readonly System.Text.RegularExpressions.Regex RegionEntry = new(
+        "^\\s*\\\"DownloadRegion\\\"\\s+\\\"(?<region>[^\\\"]*)\\\"",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private readonly string configPath;
+
+    public SteamDownloadRegionReader(string configPath)
+    {
+        this.configPath = configPath;
+    }
+
+    public static SteamDownloadRegionReader FromEnvironment() =>
+        new(Path.Combine(
+            Environment.GetEnvironmentVariable("USER_HOME") ?? "/home/default",
+            ".steam", "steam", "config", "config.vdf"));
+
+    public string? Read()
+    {
+        try
+        {
+            foreach (var line in File.ReadLines(configPath))
+            {
+                var match = RegionEntry.Match(line);
+                if (match.Success)
+                    return string.IsNullOrWhiteSpace(match.Groups["region"].Value)
+                        ? null
+                        : match.Groups["region"].Value;
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        return null;
+    }
+}
+
 public sealed record ProbeCommandResult(
     bool Ready,
     string? Failure,
@@ -61,4 +108,5 @@ public sealed record ProbeStatusResponse(
     bool Ready,
     string? Failure,
     DateTimeOffset ObservedAt,
-    ProbeChecks Checks);
+    ProbeChecks Checks,
+    string? CurrentDownloadRegion = null);

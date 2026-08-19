@@ -5,9 +5,11 @@ namespace L4d2LobbyAgent.Probe;
 public sealed class ProbeStatusService(
     IAgentSteamSessionService sessionService,
     ISteamDesktopDetector desktopDetector,
-    IAgentReadinessMarker? readinessMarker = null)
+    IAgentReadinessMarker? readinessMarker = null,
+    ISteamDownloadRegionReader? regionReader = null)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
+    private readonly ISteamDownloadRegionReader regionReader = regionReader ?? SteamDownloadRegionReader.FromEnvironment();
 
     public async Task<ProbeStatusResponse> GetAsync(CancellationToken cancellationToken)
     {
@@ -32,7 +34,8 @@ public sealed class ProbeStatusService(
                     health.Ready ? "ok" : "unknown",
                     GetLoggedOnCheck(health),
                     health.Ready ? "ok" : "failed",
-                    null));
+                    null),
+                this.regionReader.Read());
         }
         finally
         {
