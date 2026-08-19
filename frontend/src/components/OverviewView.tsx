@@ -107,6 +107,26 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     },
   ];
 
+  const groupedWarmups = Array.from(
+    attempts.reduce((groups, attempt) => {
+      const group = groups.get(attempt.targetServerId) ?? [];
+      group.push(attempt);
+      groups.set(attempt.targetServerId, group);
+      return groups;
+    }, new Map<string, WarmupAttempt[]>()),
+  )
+    .map(([targetServerId, items]) => ({
+      targetServerId,
+      target: targets.find((target) => target.id === targetServerId),
+      attempts: [...items].sort(
+        (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt),
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        Date.parse(b.attempts[0].startedAt) - Date.parse(a.attempts[0].startedAt),
+    );
+
   return (
     <div className="space-y-6 pb-12">
       {/* Page Title */}
@@ -260,8 +280,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200 font-medium">
-                <th className="py-2.5 px-4 font-semibold">目标服务器</th>
-                <th className="py-2.5 px-4 font-semibold">暖服节点</th>
+                <th className="py-2.5 px-4 font-semibold">服务器 / 暖服节点</th>
                 <th className="py-2.5 px-4 font-semibold">运行模式</th>
                 <th className="py-2.5 px-4 font-semibold">当前状态</th>
                 <th className="py-2.5 px-4 font-semibold">当前阶段</th>
@@ -271,102 +290,85 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {attempts.length === 0 ? (
+              {groupedWarmups.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
                     暂无暖服任务记录
                   </td>
                 </tr>
               ) : (
-                attempts.map((item) => {
-                  const statusInfo = formatAttemptStatus(item.status);
-                  const isClickable = Boolean(item.targetServerId);
+                groupedWarmups.flatMap((group) => {
+                  const serverName =
+                    group.target?.name ||
+                    group.attempts[0].targetServerName ||
+                    group.attempts[0].targetServerEndpoint;
+                  const endpoint = group.target?.endpoint || group.attempts[0].targetServerEndpoint;
+                  const operationModes = [...new Set(group.attempts.map((item) => item.operationMode))];
+                  const modeLabel = operationModes.length === 1
+                    ? formatOperationMode(operationModes[0])
+                    : '混合模式';
 
-                  return (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-50/80 transition-colors"
-                    >
-                      {/* Target Server (Clickable link to target server) */}
-                      <td className="py-2.5 px-4 max-w-[220px]">
-                        {isClickable ? (
-                          <button
-                            type="button"
-                            onClick={() => onNavigateToTarget(item.targetServerId)}
-                            className="text-left font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 group truncate"
-                            title={`点击跳转至服务器: ${item.targetServerName || item.targetServerEndpoint}`}
-                          >
-                            <span className="truncate">
-                              {item.targetServerName || item.targetServerEndpoint}
-                            </span>
-                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
-                          </button>
-                        ) : (
-                          <span className="font-medium text-slate-800 truncate block">
-                            {item.targetServerName || item.targetServerEndpoint}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-slate-400 font-mono block truncate">
-                          {item.targetServerEndpoint}
-                        </span>
-                      </td>
-
-                      {/* Agent */}
-                      <td className="py-2.5 px-4 font-medium text-slate-800 whitespace-nowrap">
-                        {item.agentName}
-                      </td>
-
-                      {/* Mode */}
-                      <td className="py-2.5 px-4 whitespace-nowrap text-slate-600">
-                        {formatOperationMode(item.operationMode)}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-2.5 px-4 whitespace-nowrap">
-                        <Badge
-                          label={statusInfo.label}
-                          badgeClass={statusInfo.badgeClass}
-                          dotClass={statusInfo.dotClass}
-                          title={item.status ? `原始值: ${item.status}` : undefined}
-                        />
-                      </td>
-
-                      {/* Phase */}
-                      <td className="py-2.5 px-4 whitespace-nowrap text-slate-600">
-                        {formatAttemptPhase(item.phase)}
-                      </td>
-
-                      {/* Lobby ID */}
-                      <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
-                        {item.lobbyId ? (
-                          <Tooltip content={`完整大厅 ID: ${item.lobbyId}`}>
-                            <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] text-slate-700 border border-slate-200">
-                              {item.lobbyId}
-                            </span>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-slate-400">--</span>
-                        )}
-                      </td>
-
-                      {/* Remaining Time */}
-                      <td className="py-2.5 px-4 whitespace-nowrap font-mono text-slate-700">
-                        {item.status === 'active' ? (
-                          <div className="inline-flex items-center gap-1 font-semibold text-blue-700">
-                            <Clock className="w-3 h-3 text-blue-500" />
-                            <span>{formatSecondsToTime(item.remainingSeconds)}</span>
+                  return [
+                    <tr key={`${group.targetServerId}-parent`} className="bg-slate-50/70 border-b border-slate-200">
+                      <td colSpan={7} className="px-4 py-3">
+                        <div className="flex min-w-[760px] items-center gap-4">
+                          <div className="min-w-[240px] flex-1">
+                            {group.target ? (
+                              <button
+                                type="button"
+                                onClick={() => onNavigateToTarget(group.targetServerId)}
+                                className="text-left font-semibold text-blue-700 hover:text-blue-900 hover:underline inline-flex items-center gap-1 group max-w-full"
+                                title={`点击跳转至服务器: ${serverName}`}
+                              >
+                                <span className="truncate">{serverName}</span>
+                                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+                              </button>
+                            ) : (
+                              <span className="font-semibold text-slate-800">{serverName}</span>
+                            )}
+                            <span className="block text-[11px] text-slate-400 font-mono truncate">{endpoint}</span>
                           </div>
-                        ) : (
-                          <span className="text-slate-400">已结束</span>
-                        )}
+                          <span className="text-xs text-slate-600 whitespace-nowrap">运行模式：<strong className="text-slate-800">{modeLabel}</strong></span>
+                          <span className="text-xs font-medium text-slate-800 whitespace-nowrap">当前调度节点 {group.attempts.length}</span>
+                          <span className="text-xs font-medium text-slate-800 whitespace-nowrap">当前人数 {group.target ? `${group.target.currentPlayers}/${group.target.maxPlayers}` : '--'}</span>
+                        </div>
                       </td>
-
-                      {/* Start Time */}
-                      <td className="py-2.5 px-4 whitespace-nowrap text-slate-500 font-mono text-[11px]">
-                        {formatDateTime(item.startedAt)}
-                      </td>
-                    </tr>
-                  );
+                    </tr>,
+                    ...group.attempts.map((item, index) => {
+                      const statusInfo = formatAttemptStatus(item.status);
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 pl-9 pr-4 border-l-2 border-slate-200 max-w-[240px]">
+                            <div className="font-medium text-slate-800 truncate">暖服节点[{index + 1}]</div>
+                            <div className="text-[11px] text-slate-500 truncate">{item.agentName}</div>
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap text-slate-400">--</td>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            <Badge
+                              label={statusInfo.label}
+                              badgeClass={statusInfo.badgeClass}
+                              dotClass={statusInfo.dotClass}
+                              title={item.status ? `原始值: ${item.status}` : undefined}
+                            />
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap text-slate-600">{formatAttemptPhase(item.phase)}</td>
+                          <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
+                            {item.lobbyId ? (
+                              <Tooltip content={`完整大厅 ID: ${item.lobbyId}`}>
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] text-slate-700 border border-slate-200">{item.lobbyId}</span>
+                              </Tooltip>
+                            ) : <span className="text-slate-400">--</span>}
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap font-mono text-slate-700">
+                            {item.status === 'active' ? (
+                              <div className="inline-flex items-center gap-1 font-semibold text-blue-700"><Clock className="w-3 h-3 text-blue-500" /><span>{formatSecondsToTime(item.remainingSeconds)}</span></div>
+                            ) : <span className="text-slate-400">已结束</span>}
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap text-slate-500 font-mono text-[11px]">{formatDateTime(item.startedAt)}</td>
+                        </tr>
+                      );
+                    }),
+                  ];
                 })
               )}
             </tbody>
