@@ -101,8 +101,9 @@ describe('系统概览大厅 ID', () => {
     expect(screen.getByText('暖服节点-B')).toBeInTheDocument();
     expect(screen.getByText('109775242226986793')).toBeInTheDocument();
     expect(screen.getByText('109775242226986794')).toBeInTheDocument();
-    expect(screen.getByText('Steam 区域: hongkong')).toBeInTheDocument();
-    expect(screen.getByText('Steam 区域: 未设置')).toBeInTheDocument();
+    expect(screen.getByText('hongkong')).toBeInTheDocument();
+    expect(screen.getByText('--')).toBeInTheDocument();
+    expect(screen.queryByText(/Steam 区域/)).not.toBeInTheDocument();
     expect(screen.queryByText('端口: 18083')).not.toBeInTheDocument();
   });
 
