@@ -4,6 +4,7 @@ using L4d2MatchmakingCore.Auth;
 using L4d2MatchmakingCore.Configuration;
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Lobbies;
+using L4d2MatchmakingCore.Profiles;
 using L4d2MatchmakingCore.Scheduling;
 using L4d2MatchmakingCore.Servers;
 using L4d2MatchmakingCore.Settings;
@@ -26,6 +27,11 @@ builder.Services.AddSingleton<ISecretProtector>(services => services.GetRequired
 builder.Services.AddScoped<TargetServerService>();
 builder.Services.AddScoped<TargetServerObservationService>();
 builder.Services.AddScoped<GlobalSettingsService>();
+builder.Services.AddHttpClient<ISteamProfileService, SteamProfileService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.steampowered.com");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 var agentContainerOptions = builder.Environment.IsEnvironment("Testing")
     ? new AgentContainerOptions("l4d2-steam-lobby-agent:local", "/mnt/steam-library", "l4d2-matchmaking", 18083, 18183, "/mnt/steam-library/libsteam_api.so")
     : AgentContainerOptions.FromConfiguration(builder.Configuration);

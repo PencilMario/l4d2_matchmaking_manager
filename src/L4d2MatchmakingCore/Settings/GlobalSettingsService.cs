@@ -4,9 +4,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace L4d2MatchmakingCore.Settings;
 
+public interface ISteamWebApiKeyProvider
+{
+    Task<string?> GetSteamWebApiKeyAsync(CancellationToken cancellationToken);
+}
+
 public sealed class GlobalSettingsService(
     MatchmakingDbContext dbContext,
-    ISecretProtector secretProtector)
+    ISecretProtector secretProtector) : ISteamWebApiKeyProvider
 {
     public async Task<GlobalSettingsResponse> GetAsync(CancellationToken cancellationToken)
     {
