@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Profiles;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,33 @@ public sealed class LobbyQueryEndpointTests
         Assert.AreEqual(agent.Id, agentClient.QueryCalls.Single().AgentId);
         Assert.IsTrue(agentClient.QueryCalls.Single().IncludeMembers);
         Assert.AreEqual(HttpStatusCode.BadRequest, malformed.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task QueryMergesSteamProfilesIntoCompleteMemberData()
+    {
+        using var environment = new TestEnvironment();
+        const string steamId = "76561198000000000";
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+        var lobby = Snapshot() with
+        {
+            Members = [new LobbyMemberSnapshot(steamId, null)],
+        };
+        var profiles = new FakeProfileService(new Dictionary<string, SteamProfileData>
+        {
+            [steamId] = new("Player One", "https://cdn.example/player.jpg"),
+        });
+        await using var factory = new QueryFactory(new FakeSelector(agent), new FakeClient(lobby), profiles);
+        using var client = Authorized(factory);
+
+        var response = await client.GetAsync($"/v1/lobbies/{lobby.LobbyId}");
+        var result = await response.Content.ReadFromJsonAsync<LobbySnapshot>();
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(result);
+        Assert.AreEqual("Player One", result.Members.Single().PersonaName);
+        Assert.AreEqual("https://cdn.example/player.jpg", result.Members.Single().AvatarUrl);
+        Assert.AreEqual(1, profiles.Calls);
     }
 
     [TestMethod]
@@ -125,6 +153,7 @@ public sealed class LobbyQueryEndpointTests
         Assert.AreEqual(LobbyMemberDataStatus.MetadataOnlyNoQueryAgent, result.MemberDataStatus);
         Assert.AreEqual(reserved.Id, agentClient.QueryCalls.Single().AgentId);
         Assert.IsFalse(agentClient.QueryCalls.Single().IncludeMembers);
+        Assert.AreEqual(0, factory.ProfileService.Calls);
     }
 
     [TestMethod]
@@ -203,10 +232,11 @@ public sealed class LobbyQueryEndpointTests
         Assert.AreEqual(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
-    private sealed class QueryFactory(IHealthyAgentSelector selector, IAgentControlClient client) : WebApplicationFactory<global::Program>
+    private sealed class QueryFactory(IHealthyAgentSelector selector, IAgentControlClient client, FakeProfileService? profileService = null) : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
         private readonly InMemoryDatabaseRoot _databaseRoot = new();
+        public FakeProfileService ProfileService { get; } = profileService ?? new FakeProfileService(new Dictionary<string, SteamProfileData>());
 
         protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.ConfigureServices(services =>
         {
@@ -215,8 +245,10 @@ public sealed class LobbyQueryEndpointTests
             services.AddDbContext<MatchmakingDbContext>(options => options.UseInMemoryDatabase(_databaseName, _databaseRoot));
             services.RemoveAll<IHealthyAgentSelector>();
             services.RemoveAll<IAgentControlClient>();
+            services.RemoveAll<ISteamProfileService>();
             services.AddSingleton(selector);
             services.AddSingleton(client);
+            services.AddSingleton<ISteamProfileService>(ProfileService);
         });
 
         public async Task SeedAttemptsAsync(params WarmupAttempt[] attempts)
@@ -255,6 +287,23 @@ public sealed class LobbyQueryEndpointTests
         public Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken) => Task.FromResult<WarmupAgent?>(null);
         public Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<WarmupAgent>>([]);
+    }
+
+    private sealed class FakeProfileService(IReadOnlyDictionary<string, SteamProfileData> profiles) : ISteamProfileService
+    {
+        public int Calls { get; private set; }
+
+        public Task<IReadOnlyDictionary<string, SteamProfileData>> ResolveAsync(
+            IReadOnlyCollection<string> steamIds,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult<IReadOnlyDictionary<string, SteamProfileData>>(
+                steamIds.Distinct(StringComparer.Ordinal).ToDictionary(
+                    id => id,
+                    id => profiles.GetValueOrDefault(id, new SteamProfileData(null, null)),
+                    StringComparer.Ordinal));
+        }
     }
 
     private sealed class FakeClient(LobbySnapshot lobby) : IAgentControlClient
