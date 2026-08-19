@@ -1,6 +1,7 @@
 using System.Text.Json;
 using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Data;
+using L4d2MatchmakingCore.Scheduling;
 using Microsoft.EntityFrameworkCore;
 
 namespace L4d2MatchmakingCore.Agents;
@@ -11,7 +12,8 @@ public sealed class WarmupAgentService(
     AgentContainerOptions options,
     AgentVncSessionService vncSessions,
     AgentLifecycleCoordinator lifecycleCoordinator,
-    IAgentControlClient agentControlClient)
+    IAgentControlClient agentControlClient,
+    WarmupAttemptDrainService attemptDrain)
 {
     public Task<WarmupAgentResponse> CreateAsync(
         CreateWarmupAgentRequest request,
@@ -172,6 +174,8 @@ public sealed class WarmupAgentService(
         var agent = await FindAsync(agentId, cancellationToken);
         if (agent is null)
             return null;
+        if (!await attemptDrain.DrainAgentAsync(agent.Id, cancellationToken))
+            throw new InvalidOperationException("warmup_agent_recreate_drain_failed");
         await vncSessions.CloseAsync(agent.Id, cancellationToken);
         if (!string.IsNullOrWhiteSpace(agent.ContainerId))
             await containers.DeleteAsync(agent, cancellationToken);
