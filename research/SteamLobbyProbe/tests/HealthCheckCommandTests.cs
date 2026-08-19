@@ -75,6 +75,30 @@ public sealed class HealthCheckCommandTests
         Assert.AreEqual(true, decodedType.GetProperty("CallbackOk")?.GetValue(decoded));
     }
 
+    [TestMethod]
+    public void LobbyCreatedDecoderReadsTheManualDispatchPaddedPayload()
+    {
+        var probeAssemblyPath = Path.Combine(AppContext.BaseDirectory, "SteamLobbyProbe.dll");
+        var assembly = Assembly.LoadFrom(probeAssemblyPath);
+        var programType = assembly.GetType("Program");
+        var apiCallResultType = assembly.GetType("Program+ApiCallResult");
+        var decoder = programType?.GetMethod("DecodeLobbyCreated", BindingFlags.NonPublic | BindingFlags.Static);
+        var constructor = apiCallResultType?.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).SingleOrDefault();
+
+        Assert.IsNotNull(decoder);
+        Assert.IsNotNull(constructor);
+
+        const ulong lobbyId = 109775242233456789;
+        var raw = new byte[16];
+        BitConverter.GetBytes(1).CopyTo(raw, 0);
+        BitConverter.GetBytes(lobbyId).CopyTo(raw, sizeof(int) * 2);
+        var apiCallResult = constructor.Invoke([true, false, raw]);
+
+        var decoded = decoder.Invoke(null, [apiCallResult]);
+        Assert.IsNotNull(decoded);
+        Assert.AreEqual(lobbyId, decoded.GetType().GetProperty("LobbyId")?.GetValue(decoded));
+    }
+
     private static async Task<ProcessResult> RunProbeAsync(params string[] arguments)
     {
         using var process = new Process

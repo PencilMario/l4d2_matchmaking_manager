@@ -862,7 +862,7 @@ internal static class Program
 
     private static LobbyCreatedResult WaitForLobbyCreatedManual(SteamApi api, int pipe, nint utils, ulong call)
     {
-        return DecodeLobbyCreated(WaitForApiCallManual(api, pipe, utils, call, LobbyCreatedCallback, LobbyCreatedCompactPayloadSize));
+        return DecodeLobbyCreated(WaitForApiCallManual(api, pipe, utils, call, LobbyCreatedCallback, LobbyCreatedPaddedPayloadSize));
     }
 
     private static ApiCallResult WaitForApiCall(SteamApi api, nint utils, ulong call, int callbackId, int callbackSize)
