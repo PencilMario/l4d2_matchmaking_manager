@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { WarmupAgent, WarmupAttempt } from '../types';
 import { Badge } from './common/Badge';
 import { Tooltip } from './common/Tooltip';
@@ -73,6 +73,11 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
     setEditingAgent(agent);
     setIsModalOpen(true);
   };
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setEditingAgent(null);
+  }, []);
 
   const handleModalSubmit = async (data: { name: string; steamRegion?: string; keepVncAlive: boolean }) => {
     setIsSubmitting(true);
@@ -474,10 +479,7 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
       {/* Agent Create / Edit Modal */}
       <WarmupAgentModal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingAgent(null);
-        }}
+        onClose={handleCloseModal}
         onSubmit={handleModalSubmit}
         initialData={editingAgent}
         isLoading={isSubmitting}

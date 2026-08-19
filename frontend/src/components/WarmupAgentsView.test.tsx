@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WarmupAgentsView } from './WarmupAgentsView';
 
@@ -49,5 +49,48 @@ describe('WarmupAgentsView VNC access', () => {
     );
 
     expect(screen.getByText('等待 Steam 登录').parentElement).toHaveClass('bg-amber-50');
+  });
+
+  it('keeps the Steam region dropdown focused when polling replaces the agent object', () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(
+        <WarmupAgentsView
+          agents={[agent]}
+          attempts={[]}
+          onCreateAgent={vi.fn()}
+          onDeleteAgent={vi.fn()}
+          onRebuildAgent={vi.fn()}
+          onRefresh={vi.fn()}
+          onStartAgent={vi.fn()}
+          onStopAgent={vi.fn()}
+          onUpdateAgent={vi.fn()}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '编辑暖服节点' }));
+      vi.runOnlyPendingTimers();
+      const regionSelect = screen.getByLabelText('Steam 下载区域');
+      regionSelect.focus();
+
+      rerender(
+        <WarmupAgentsView
+          agents={[{ ...agent, updatedAt: '2026-08-19T00:00:05Z' }]}
+          attempts={[]}
+          onCreateAgent={vi.fn()}
+          onDeleteAgent={vi.fn()}
+          onRebuildAgent={vi.fn()}
+          onRefresh={vi.fn()}
+          onStartAgent={vi.fn()}
+          onStopAgent={vi.fn()}
+          onUpdateAgent={vi.fn()}
+        />
+      );
+
+      vi.runOnlyPendingTimers();
+      expect(document.activeElement).toBe(regionSelect);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
