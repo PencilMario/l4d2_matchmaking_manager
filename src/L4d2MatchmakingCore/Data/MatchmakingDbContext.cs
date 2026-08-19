@@ -91,6 +91,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.HasKey(settings => settings.Name);
             entity.Property(settings => settings.Name).HasMaxLength(64);
             entity.Property(settings => settings.SteamProxyUrl).HasMaxLength(2048);
+            entity.Property(settings => settings.SteamWebApiKeyCiphertext).HasMaxLength(2048);
         });
     }
 }

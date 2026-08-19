@@ -22,6 +22,7 @@ builder.Services
         static _ => { });
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IRconCredentialProtector, RconCredentialProtector>();
+builder.Services.AddSingleton<ISecretProtector>(services => services.GetRequiredService<IRconCredentialProtector>());
 builder.Services.AddScoped<TargetServerService>();
 builder.Services.AddScoped<TargetServerObservationService>();
 builder.Services.AddScoped<GlobalSettingsService>();
