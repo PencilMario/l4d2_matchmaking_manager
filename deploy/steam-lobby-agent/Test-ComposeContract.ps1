@@ -32,6 +32,10 @@ if ($dockerfile -notmatch 'millennium/steam-region-bridge') {
     throw 'The Agent image must include the managed Steam Region Bridge plugin source.'
 }
 
+if ($dockerfile -notmatch 'libssl3t64:i386') {
+    throw 'The Agent image must include the 32-bit OpenSSL runtime required by Millennium.'
+}
+
 if ($dockerfile -notmatch 'COPY src/L4d2Matchmaking.Contracts/L4d2Matchmaking.Contracts\.csproj src/L4d2Matchmaking.Contracts/') {
     throw 'The Docker build must copy shared Contracts before restoring the Agent and Probe projects.'
 }

@@ -50,3 +50,17 @@ if ($initializer -notmatch 'millennium-v3\.4\.1-linux-x86_64\.tar\.gz' -or
     $initializer -notmatch '5f2f6f73915523a7b3f7ecc500dd3e6ed0e5c88a1b1db6584c40f173aa9d13d4') {
     throw 'The initializer must pin and verify the known Millennium v3.4.1 Linux archive.'
 }
+
+if ($initializer -notmatch 'chmod 0755 "\$\{millennium_install_directory\}"/\*') {
+    throw 'The Millennium runtime must be executable by the non-root Steam user when UMASK is restrictive.'
+}
+
+if ($initializer -notmatch 'steam_runtime_root="\$\{USER_HOME:-/home/default\}/\.steam"' -or
+    $initializer -match '"\$\{steam_root\}/ubuntu12_32/libXtst\.so\.6"' -or
+    $initializer -match '"\$\{steam_root\}/ubuntu12_64/libXtst\.so\.6"') {
+    throw 'Millennium bootstrap links must target Steam''s actual .steam/ubuntu12 runtime directories.'
+}
+
+if ($initializer -notmatch '"\$\{steam_root\}/ubuntu12_32/steam"') {
+    throw 'The initializer must provide Millennium''s expected Steam executable path as an alias to the actual runtime binary.'
+}

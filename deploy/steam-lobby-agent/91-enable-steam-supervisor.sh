@@ -3,6 +3,7 @@ set -e
 
 if [ "${ENABLE_STEAM:-}" = "true" ]; then
     steam_root="${USER_HOME:-/home/default}/.steam/steam"
+    steam_runtime_root="${USER_HOME:-/home/default}/.steam"
     library_directory="${steam_root}/steamapps"
     library_file="${library_directory}/libraryfolders.vdf"
     steam_config_directory="${steam_root}/config"
@@ -50,7 +51,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         }
         install -d -m 0755 "${millennium_install_directory}"
         cp -a "${extract_directory}/usr/lib/millennium/." "${millennium_install_directory}/"
-        chmod +x "${millennium_install_directory}"/*
+        chmod 0755 "${millennium_install_directory}"/*
     }
 
     install_steam_region_bridge() {
@@ -101,13 +102,16 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     export STEAM_DOWNLOAD_REGION_STATUS_FILE="${steam_region_status_file}"
 
     install -d -o "${PUID:-1000}" -g "${PGID:-1000}" -m 0700 \
-        "${steam_root}/ubuntu12_32" "${steam_root}/ubuntu12_64"
+        "${steam_runtime_root}/ubuntu12_32" "${steam_runtime_root}/ubuntu12_64" \
+        "${steam_root}/ubuntu12_32"
+    ln -sfn "${steam_runtime_root}/ubuntu12_32/steam" \
+        "${steam_root}/ubuntu12_32/steam"
     ln -sfn "${millennium_install_directory}/libmillennium_bootstrap_x86.so" \
-        "${steam_root}/ubuntu12_32/libXtst.so.6"
+        "${steam_runtime_root}/ubuntu12_32/libXtst.so.6"
     ln -sfn "${millennium_install_directory}/libmillennium_bootstrap_hhx64.so" \
-        "${steam_root}/ubuntu12_64/libXtst.so.6"
+        "${steam_runtime_root}/ubuntu12_64/libXtst.so.6"
     ln -sfn "${millennium_install_directory}/libmillennium_hhx64.so" \
-        "${steam_root}/ubuntu12_64/libmillennium_hhx64.so"
+        "${steam_runtime_root}/ubuntu12_64/libmillennium_hhx64.so"
 
     set_l4d2_update_policy() {
         manifest="${STEAM_SHARED_LIBRARY_PATH:-}/steamapps/appmanifest_550.acf"

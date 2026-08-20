@@ -18,6 +18,10 @@ RUN dotnet publish research/SteamLobbyProbe/SteamLobbyProbe.csproj -c Release -r
 # The maintained image owns the desktop, noVNC, Steam lifecycle and supervisor.
 FROM josh5/steam-headless@sha256:1803d3d1bb51899dcc40a41625442a33108f1d205332eb09aa8dc662cfae0bd5
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libssl3t64:i386 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /out/agent/ /opt/l4d2-agent/
 COPY --from=build /out/probe/ /opt/steam-lobby-probe/
 COPY deploy/steam-lobby-agent/l4d2-lobby-agent.ini /etc/supervisor.d/l4d2-lobby-agent.ini
