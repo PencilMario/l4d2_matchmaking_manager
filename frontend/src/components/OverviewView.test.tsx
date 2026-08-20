@@ -102,7 +102,10 @@ describe('系统概览大厅 ID', () => {
     expect(screen.getByText('暖服节点-B')).toBeInTheDocument();
     expect(screen.getByText('109775242226986793')).toBeInTheDocument();
     expect(screen.getByText('109775242226986794')).toBeInTheDocument();
-    expect(screen.getByText('中国 - 上海')).toBeInTheDocument();
+    const regionLabel = screen.getByText('中国 - 上海');
+    const phaseLabel = screen.getAllByText('等待就绪')[0];
+    expect(regionLabel).toHaveClass('bg-slate-100', 'px-1.5', 'py-0.5', 'rounded', 'text-[11px]', 'border', 'border-slate-200');
+    expect(regionLabel.className).toBe(phaseLabel.className);
     expect(screen.queryByText('cng')).not.toBeInTheDocument();
     expect(screen.getByText('--')).toBeInTheDocument();
     expect(screen.queryByText(/Steam 区域/)).not.toBeInTheDocument();
