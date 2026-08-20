@@ -8,6 +8,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
     private const int LobbyTypePublic = 2;
     private const int LobbyEnterCallback = 504;
     private const int LobbyDataUpdateCallback = 505;
+    private const int LobbyChatMsgCallback = 507;
     private const int LobbyCreatedCallback = 513;
     private const int LobbyMatchListCallback = 510;
     private const int SteamApiCallCompletedCallback = 703;
@@ -19,6 +20,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
     private nint _user;
     private int _pipe;
     private bool _initialized;
+    private ActiveLobbyJoinDataResponder? _activeJoinDataResponder;
 
     public AgentHealthSnapshot ObserveHealth()
     {
@@ -67,6 +69,8 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         try
         {
             var metadata = RealSessionSettings.CreateLobbyMetadata(profile, request.GameMode);
+            foreach (var pair in CreateServerMetadata(address.ToString(), request.Port, created.LobbyId))
+                metadata.Add(pair.Key, pair.Value);
             foreach (var pair in metadata)
             {
                 if (!_api.SetLobbyData(_matchmaking, created.LobbyId, pair.Key, pair.Value))
@@ -99,7 +103,15 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
                     throw new SteamRuntimeException("reservation_failed");
             }
 
-            return ReadLobby(created.LobbyId);
+            var lobby = ReadLobby(created.LobbyId);
+            var ownerSteamId = _api.GetSteamId(_user);
+            if (ownerSteamId == 0)
+                throw new SteamRuntimeException("steam_not_logged_on");
+            _activeJoinDataResponder = new ActiveLobbyJoinDataResponder(
+                created.LobbyId,
+                ownerSteamId,
+                address + ":" + request.Port);
+            return lobby;
         }
         catch
         {
@@ -196,7 +208,11 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
     {
         EnsureInitialized();
         if (lobbyId != 0)
+        {
+            if (_activeJoinDataResponder?.LobbyId == lobbyId)
+                _activeJoinDataResponder = null;
             _api!.LeaveLobby(_matchmaking, lobbyId);
+        }
     }
 
     public void PumpCallbacks()
@@ -207,7 +223,17 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         _api!.ManualDispatchRunFrame(_pipe);
         var callback = new Program.CallbackMsg();
         while (_api.ManualDispatchGetNextCallback(_pipe, ref callback))
-            _api.ManualDispatchFreeLastCallback(_pipe);
+        {
+            try
+            {
+                if (callback.Callback == LobbyChatMsgCallback)
+                    HandleLobbyChatMessage(callback);
+            }
+            finally
+            {
+                _api.ManualDispatchFreeLastCallback(_pipe);
+            }
+        }
     }
 
     public void Dispose()
@@ -219,6 +245,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         }
         finally
         {
+            _activeJoinDataResponder = null;
             if (_module != 0)
                 NativeLibrary.Free(_module);
             _module = 0;
@@ -256,6 +283,62 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         {
             Dispose();
             throw new SteamRuntimeException("steam_api_load_failed", exception);
+        }
+    }
+
+    internal static Dictionary<string, string> CreateServerMetadata(string ipv4Address, ushort port, ulong lobbyId)
+    {
+        if (!IPAddress.TryParse(ipv4Address, out var address) || address.AddressFamily != AddressFamily.InterNetwork ||
+            port == 0 || lobbyId == 0)
+        {
+            throw new ArgumentException("A nonzero IPv4 endpoint and lobby ID are required.");
+        }
+
+        var endpoint = address + ":" + port;
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["server:adrlocal"] = endpoint,
+            ["server:adronline"] = endpoint,
+            ["server:connectstring"] = endpoint,
+            ["server:reservationid"] = lobbyId.ToString(),
+        };
+    }
+
+    private void HandleLobbyChatMessage(Program.CallbackMsg callback)
+    {
+        if (_activeJoinDataResponder is null || callback.Param == 0 || callback.ParamSize < 24)
+            return;
+
+        var raw = new byte[Math.Clamp(callback.ParamSize, 0, 64)];
+        Marshal.Copy(callback.Param, raw, 0, raw.Length);
+        var lobbyId = BitConverter.ToUInt64(raw, 0);
+        var chatId = BitConverter.ToInt32(raw, 20);
+        var buffer = Marshal.AllocHGlobal(4096);
+        try
+        {
+            var size = _api!.GetLobbyChatEntry(
+                _matchmaking,
+                lobbyId,
+                chatId,
+                out var senderSteamId,
+                buffer,
+                4096,
+                out var entryType);
+            if (size <= 0 || entryType != 1)
+                return;
+
+            var message = new byte[Math.Min(size, 4096)];
+            Marshal.Copy(buffer, message, 0, message.Length);
+            if (_activeJoinDataResponder.TryCreateReply(lobbyId, message, senderSteamId, out var reply) &&
+                reply.Length > 0)
+            {
+                var sent = _api.SendLobbyChatMsg(_matchmaking, lobbyId, reply);
+                Console.WriteLine($"ReplyJoinData lobby_id={lobbyId} recipient={senderSteamId} size={reply.Length} sent={sent}");
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
         }
     }
 
