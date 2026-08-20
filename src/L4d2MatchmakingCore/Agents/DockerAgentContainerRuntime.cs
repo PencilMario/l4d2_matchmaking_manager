@@ -84,12 +84,19 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
 
     public async Task DeleteAsync(string containerId, bool deleteVolumes, CancellationToken cancellationToken)
     {
-        await EnsureManagedAsync(containerId, cancellationToken);
-        await _client.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters
+        try
         {
-            Force = true,
-            RemoveVolumes = deleteVolumes,
-        }, cancellationToken);
+            await EnsureManagedAsync(containerId, cancellationToken);
+            await _client.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters
+            {
+                Force = true,
+                RemoveVolumes = deleteVolumes,
+            }, cancellationToken);
+        }
+        catch (DockerContainerNotFoundException)
+        {
+            // A prior interrupted recreate can leave a stale database container ID.
+        }
     }
 
     public async Task<AgentVncState> GetVncStateAsync(string containerId, CancellationToken cancellationToken)
