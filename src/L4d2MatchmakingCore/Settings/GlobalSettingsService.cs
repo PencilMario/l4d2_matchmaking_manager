@@ -36,6 +36,52 @@ public sealed class GlobalSettingsService(
         return ToResponse(settings);
     }
 
+    public async Task<VncProxySettingsResponse> GetVncProxyAsync(CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateAsync(cancellationToken);
+        return new VncProxySettingsResponse(settings.SteamProxyUrl, settings.UpdatedAt);
+    }
+
+    public async Task<VncProxySettingsResponse> UpdateVncProxyAsync(
+        UpdateVncProxyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateAsync(cancellationToken);
+        settings.SteamProxyUrl = NormalizeProxyUrl(request.ProxyUrl);
+        settings.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new VncProxySettingsResponse(settings.SteamProxyUrl, settings.UpdatedAt);
+    }
+
+    public async Task<SteamWebApiKeySettingsResponse> GetSteamWebApiKeySettingsAsync(
+        CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateAsync(cancellationToken);
+        return new SteamWebApiKeySettingsResponse(
+            settings.SteamWebApiKeyCiphertext is not null,
+            settings.UpdatedAt);
+    }
+
+    public async Task<SteamWebApiKeySettingsResponse> UpdateSteamWebApiKeyAsync(
+        UpdateSteamWebApiKeyRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Clear && !string.IsNullOrWhiteSpace(request.ApiKey))
+            throw new ArgumentException("steam_web_api_key_update_conflict");
+
+        var settings = await GetOrCreateAsync(cancellationToken);
+        if (request.Clear)
+            settings.SteamWebApiKeyCiphertext = null;
+        else if (!string.IsNullOrWhiteSpace(request.ApiKey))
+            settings.SteamWebApiKeyCiphertext = secretProtector.Protect(request.ApiKey.Trim());
+
+        settings.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new SteamWebApiKeySettingsResponse(
+            settings.SteamWebApiKeyCiphertext is not null,
+            settings.UpdatedAt);
+    }
+
     public async Task<string?> GetSteamProxyUrlAsync(CancellationToken cancellationToken)
     {
         var settings = await dbContext.CoreSettings.AsNoTracking().SingleOrDefaultAsync(

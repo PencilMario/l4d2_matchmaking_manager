@@ -398,7 +398,7 @@ export default function App() {
             )}
 
             {activeTab === 'lobby' && <LobbyLookupView />}
-            {activeTab === 'settings' && <GlobalSettingsView load={async () => { const result = await ApiService.getGlobalSettings(); if (!result.data) throw new Error(result.error || '读取全局设置失败'); return result.data; }} save={async input => { const result = await ApiService.updateGlobalSettings(input); if (!result.data) throw new Error(result.error || '保存全局设置失败'); return result.data; }} />}
+            {activeTab === 'settings' && <GlobalSettingsView load={async () => { const result = await ApiService.getGlobalSettings(); if (!result.data) throw new Error(result.error || '读取全局设置失败'); return result.data; }} saveProxy={async input => { const result = await ApiService.updateVncProxySettings(input); if (!result.data) throw new Error(result.error || '保存 VNC 代理失败'); return result.data; }} saveKey={async input => { const result = await ApiService.updateSteamWebApiKeySettings(input); if (!result.data) throw new Error(result.error || '保存 Steam Web API Key 失败'); return result.data; }} />}
           </div>
         </main>
       </div>

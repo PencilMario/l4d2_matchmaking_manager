@@ -44,6 +44,13 @@ POST   /v1/agents/{agentId}/stop
 POST   /v1/agents/{agentId}/recreate
 DELETE /v1/agents/{agentId}
 
+GET    /v1/settings
+PUT    /v1/settings
+GET    /v1/settings/vnc-proxy
+PUT    /v1/settings/vnc-proxy
+GET    /v1/settings/steam-web-api-key
+PUT    /v1/settings/steam-web-api-key
+
 GET    /v1/warmups
 GET    /v1/lobbies/{lobbyId}
 ```
@@ -574,6 +581,63 @@ Content-Type: application/json; charset=utf-8
 | `remainingSeconds` | 到 `deadline` 的非负整数秒，每次查询都会重新计算。 |
 
 空数组表示没有运行中的暖服，不代表服务器或 Agent 配置不存在。
+
+## 全局设置
+
+全局设置接口都需要鉴权。旧的 `GET/PUT /v1/settings` 保留给已部署的旧客户端兼容使用；
+新前端必须使用下列两个独立资源，避免保存 VNC 代理时覆盖 Steam Web API Key，或反之。
+
+### VNC 代理
+
+`GET /v1/settings/vnc-proxy` 返回当前 VNC 代理设置：
+
+```json
+{
+  "proxyUrl": "http://127.0.0.1:7890/",
+  "updatedAt": "2026-08-20T10:00:00+00:00"
+}
+```
+
+`PUT /v1/settings/vnc-proxy` 仅更新该设置：
+
+```json
+{
+  "proxyUrl": "http://127.0.0.1:7890"
+}
+```
+
+传入 `null`、空字符串或只含空白的 `proxyUrl` 会清除代理。代理必须是没有用户名、查询字符串或
+片段的绝对 `http`/`https` URL，否则返回 `400 "invalid_steam_proxy_url"`。
+
+### Steam Web API Key
+
+`GET /v1/settings/steam-web-api-key` 只返回密钥的配置状态，绝不返回原始密钥或密文：
+
+```json
+{
+  "configured": true,
+  "updatedAt": "2026-08-20T10:00:00+00:00"
+}
+```
+
+`PUT /v1/settings/steam-web-api-key` 写入新密钥：
+
+```json
+{
+  "apiKey": "<Steam Web API Key>"
+}
+```
+
+清除密钥使用：
+
+```json
+{
+  "clear": true
+}
+```
+
+`clear` 为 `true` 时不得同时提交非空 `apiKey`，否则返回
+`400 "steam_web_api_key_update_conflict"`。空白 `apiKey` 且未设置 `clear` 不改变已保存密钥。
 
 ## Lobby 查询
 

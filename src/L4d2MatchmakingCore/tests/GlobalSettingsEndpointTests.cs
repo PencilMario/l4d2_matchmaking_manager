@@ -82,6 +82,50 @@ public sealed class GlobalSettingsEndpointTests
         StringAssert.Contains(await clear.Content.ReadAsStringAsync(), "\"steamWebApiKeyConfigured\":false");
     }
 
+    [TestMethod]
+    public async Task VncProxyCanBeUpdatedWithoutChangingSteamWebApiKey()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new SettingsFactory();
+        using var client = CreateAuthorizedClient(factory);
+
+        var key = await client.PutAsJsonAsync("/v1/settings/steam-web-api-key", new { apiKey = "steam-test-key" });
+        var proxy = await client.PutAsJsonAsync("/v1/settings/vnc-proxy", new { proxyUrl = "http://127.0.0.1:7890" });
+        var currentProxy = await client.GetFromJsonAsync<VncProxySettingsResponse>("/v1/settings/vnc-proxy");
+        var currentKey = await client.GetFromJsonAsync<SteamWebApiKeySettingsResponse>("/v1/settings/steam-web-api-key");
+
+        Assert.AreEqual(HttpStatusCode.OK, key.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, proxy.StatusCode);
+        Assert.IsNotNull(currentProxy);
+        Assert.IsNotNull(currentKey);
+        Assert.AreEqual("http://127.0.0.1:7890/", currentProxy.ProxyUrl);
+        Assert.IsTrue(currentKey.Configured);
+    }
+
+    [TestMethod]
+    public async Task SteamWebApiKeyCanBeClearedWithoutChangingVncProxy()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new SettingsFactory();
+        using var client = CreateAuthorizedClient(factory);
+
+        await client.PutAsJsonAsync("/v1/settings/vnc-proxy", new { proxyUrl = "http://127.0.0.1:7890" });
+        await client.PutAsJsonAsync("/v1/settings/steam-web-api-key", new { apiKey = "steam-test-key" });
+        var clear = await client.PutAsJsonAsync("/v1/settings/steam-web-api-key", new { clear = true });
+        var currentProxy = await client.GetFromJsonAsync<VncProxySettingsResponse>("/v1/settings/vnc-proxy");
+        var currentKey = await client.GetFromJsonAsync<SteamWebApiKeySettingsResponse>("/v1/settings/steam-web-api-key");
+
+        Assert.AreEqual(HttpStatusCode.OK, clear.StatusCode);
+        Assert.IsNotNull(currentProxy);
+        Assert.IsNotNull(currentKey);
+        Assert.AreEqual("http://127.0.0.1:7890/", currentProxy.ProxyUrl);
+        Assert.IsFalse(currentKey.Configured);
+    }
+
+    private sealed record VncProxySettingsResponse(string? ProxyUrl, DateTimeOffset UpdatedAt);
+
+    private sealed record SteamWebApiKeySettingsResponse(bool Configured, DateTimeOffset UpdatedAt);
+
     private static HttpClient CreateAuthorizedClient(WebApplicationFactory<global::Program> factory)
     {
         var client = factory.CreateClient();

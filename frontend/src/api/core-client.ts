@@ -9,6 +9,10 @@ import type {
   WarmupStatus,
   GlobalSettings,
   GlobalSettingsInput,
+  SteamWebApiKeySettings,
+  SteamWebApiKeySettingsInput,
+  VncProxySettings,
+  VncProxySettingsInput,
 } from './models';
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -58,6 +62,22 @@ export class CoreClient {
 
   updateSettings(input: GlobalSettingsInput) {
     return this.request<GlobalSettings>('/v1/settings', { method: 'PUT', body: input });
+  }
+
+  getVncProxy(signal?: AbortSignal) {
+    return this.request<VncProxySettings>('/v1/settings/vnc-proxy', { signal });
+  }
+
+  updateVncProxy(input: VncProxySettingsInput) {
+    return this.request<VncProxySettings>('/v1/settings/vnc-proxy', { method: 'PUT', body: input });
+  }
+
+  getSteamWebApiKey(signal?: AbortSignal) {
+    return this.request<SteamWebApiKeySettings>('/v1/settings/steam-web-api-key', { signal });
+  }
+
+  updateSteamWebApiKey(input: SteamWebApiKeySettingsInput) {
+    return this.request<SteamWebApiKeySettings>('/v1/settings/steam-web-api-key', { method: 'PUT', body: input });
   }
 
   queryLobby(lobbyId: string, signal?: AbortSignal) {

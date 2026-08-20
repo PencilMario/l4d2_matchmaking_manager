@@ -9,3 +9,17 @@ public sealed record GlobalSettingsResponse(
     string? SteamProxyUrl,
     bool SteamWebApiKeyConfigured,
     DateTimeOffset UpdatedAt);
+
+public sealed record UpdateVncProxyRequest(string? ProxyUrl = null);
+
+public sealed record VncProxySettingsResponse(
+    string? ProxyUrl,
+    DateTimeOffset UpdatedAt);
+
+public sealed record UpdateSteamWebApiKeyRequest(
+    string? ApiKey = null,
+    bool Clear = false);
+
+public sealed record SteamWebApiKeySettingsResponse(
+    bool Configured,
+    DateTimeOffset UpdatedAt);

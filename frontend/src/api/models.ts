@@ -65,6 +65,25 @@ export interface GlobalSettingsInput {
   clearSteamWebApiKey?: boolean;
 }
 
+export interface VncProxySettings {
+  proxyUrl: string | null;
+  updatedAt: string;
+}
+
+export interface VncProxySettingsInput {
+  proxyUrl: string | null;
+}
+
+export interface SteamWebApiKeySettings {
+  configured: boolean;
+  updatedAt: string;
+}
+
+export interface SteamWebApiKeySettingsInput {
+  apiKey?: string;
+  clear?: boolean;
+}
+
 export interface WarmupStatus {
   targetServerId: string;
   targetEndpoint: string;

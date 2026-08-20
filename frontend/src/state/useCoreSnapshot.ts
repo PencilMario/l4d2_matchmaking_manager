@@ -19,6 +19,8 @@ export interface CoreSnapshotClient {
   queryLobby?(lobbyId: string): Promise<LobbySnapshot>;
   getSettings?(): Promise<import('../api/models').GlobalSettings>;
   updateSettings?(input: import('../api/models').GlobalSettingsInput): Promise<import('../api/models').GlobalSettings>;
+  updateVncProxy?(input: import('../api/models').VncProxySettingsInput): Promise<import('../api/models').VncProxySettings>;
+  updateSteamWebApiKey?(input: import('../api/models').SteamWebApiKeySettingsInput): Promise<import('../api/models').SteamWebApiKeySettings>;
 }
 
 export interface CoreSnapshot {

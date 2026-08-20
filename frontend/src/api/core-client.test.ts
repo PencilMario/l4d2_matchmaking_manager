@@ -47,6 +47,25 @@ describe('CoreClient', () => {
     expect(fetcher).toHaveBeenCalledWith('/v1/servers/observations', expect.any(Object));
   });
 
+  it('uses dedicated endpoints for VNC proxy and Steam Web API key updates', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ proxyUrl: 'http://127.0.0.1:7890/', updatedAt: '2026-08-20T00:00:00Z' }))
+      .mockResolvedValueOnce(jsonResponse({ configured: true, updatedAt: '2026-08-20T00:00:01Z' }));
+    const client = new CoreClient(() => 'test-token', fetcher);
+
+    await client.updateVncProxy({ proxyUrl: 'http://127.0.0.1:7890' });
+    await client.updateSteamWebApiKey({ apiKey: 'secret' });
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, '/v1/settings/vnc-proxy', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ proxyUrl: 'http://127.0.0.1:7890' }),
+    }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, '/v1/settings/steam-web-api-key', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ apiKey: 'secret' }),
+    }));
+  });
+
   it('calls the browser fetch with its global context by default', async () => {
     const browserFetch = vi.fn(function (this: typeof globalThis) {
       expect(this).toBe(globalThis);
