@@ -86,7 +86,7 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
-    public async Task TickQuarantinesAgentWhenSteamRestartFails()
+    public async Task TickKeepsAgentOutOfSchedulingUntilHealthRecoversWhenSteamRestartRequestFails()
     {
         await using var db = CreateDb();
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
@@ -99,7 +99,7 @@ public sealed class WarmupSchedulerServiceTests
 
         await scheduler.TickAsync(CancellationToken.None);
 
-        Assert.AreEqual("quarantined", agent.Status);
+        Assert.AreEqual("restarting", agent.Status);
         Assert.AreEqual(1, agents.RestartSteamCalls);
     }
 

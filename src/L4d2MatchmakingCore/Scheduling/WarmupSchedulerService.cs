@@ -480,7 +480,16 @@ public sealed class WarmupSchedulerService(
         }
         catch (Exception)
         {
-            QuarantineAgent(agent, operationId, "agent_steam_restart_failed", DateTimeOffset.UtcNow);
+            var now = DateTimeOffset.UtcNow;
+            agent.Status = "restarting";
+            agent.UpdatedAt = now;
+            dbContext.LobbyOperationAudits.Add(new LobbyOperationAudit
+            {
+                WarmupAgentId = agent.Id,
+                EventType = "steam_restart_request_failed",
+                DetailsJson = JsonSerializer.Serialize(new { operationId }),
+                ObservedAt = now,
+            });
         }
     }
 
