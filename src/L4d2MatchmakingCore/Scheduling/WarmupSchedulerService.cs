@@ -71,6 +71,22 @@ public sealed class WarmupSchedulerService(
         var activeAttempts = await dbContext.WarmupAttempts
             .Where(attempt => attempt.State == "active" || attempt.State == "uncertain")
             .ToListAsync(cancellationToken);
+        var activeAttemptAgentIds = activeAttempts.Select(attempt => attempt.WarmupAgentId).ToHashSet();
+        var activeAttemptTargetIds = activeAttempts.Select(attempt => attempt.TargetServerId).ToHashSet();
+        var knownAgentIds = (await dbContext.WarmupAgents
+                .Where(agent => activeAttemptAgentIds.Contains(agent.Id))
+                .Select(agent => agent.Id)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        var knownTargetIds = (await dbContext.TargetServers
+                .Where(target => activeAttemptTargetIds.Contains(target.Id))
+                .Select(target => target.Id)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        // An attempt whose Agent or target no longer exists cannot define a live countdown.
+        activeAttempts = activeAttempts
+            .Where(attempt => knownAgentIds.Contains(attempt.WarmupAgentId) && knownTargetIds.Contains(attempt.TargetServerId))
+            .ToList();
         var restartPendingAttempts = await dbContext.WarmupAttempts
             .Where(attempt => attempt.State == "restart_pending")
             .ToListAsync(cancellationToken);
@@ -91,6 +107,9 @@ public sealed class WarmupSchedulerService(
             var activeAgent = await dbContext.WarmupAgents.FindAsync([attempt.WarmupAgentId], cancellationToken);
             if (target is null || activeAgent is null)
                 continue;
+            var attemptDeadline = serverStartedAt
+                .GetValueOrDefault(attempt.TargetServerId, attempt.StartedAt)
+                .AddSeconds(target.AttemptWindowSeconds);
             AgentOperationSnapshot? snapshot;
             try
             {
@@ -112,7 +131,8 @@ public sealed class WarmupSchedulerService(
                 var missingOperationLease = await dbContext.ReservationLeases.FindAsync([attempt.TargetServerId], cancellationToken);
                 if (missingOperationLease?.OperationId == attempt.OperationId)
                     dbContext.ReservationLeases.Remove(missingOperationLease);
-                await RestartSteamAfterAttemptAsync(activeAgent, attempt.OperationId, cancellationToken);
+                if (DateTimeOffset.UtcNow >= attemptDeadline)
+                    await RestartSteamAfterAttemptAsync(activeAgent, attempt.OperationId, cancellationToken);
                 continue;
             }
             attempt.State = "active";
@@ -138,7 +158,7 @@ public sealed class WarmupSchedulerService(
             var observed = schedulingEngine.ObserveExternalMembers(
                 new WarmupAttemptSnapshot(
                     Enum.TryParse<WarmupPhase>(attempt.Phase, true, out var phase) ? phase : WarmupPhase.AwaitingFirstMember,
-                    serverStartedAt.GetValueOrDefault(attempt.TargetServerId, attempt.StartedAt).AddSeconds(target.AttemptWindowSeconds),
+                    attemptDeadline,
                     attempt.LobbyReadyAt ?? attempt.StartedAt,
                     attempt.FirstExternalMemberAt,
                     attempt.QuietSince,
@@ -152,7 +172,8 @@ public sealed class WarmupSchedulerService(
             attempt.ExternalMemberIdsJson = JsonSerializer.Serialize(observed.ExternalMemberIds);
             attempt.LobbyId = snapshot.Lobby.LobbyId;
             attempt.ObservedAt = snapshot.ObservedAt;
-            var decision = schedulingEngine.Evaluate(target, liveInfo.PlayerCount, observed, DateTimeOffset.UtcNow);
+            var now = DateTimeOffset.UtcNow;
+            var decision = schedulingEngine.Evaluate(target, liveInfo.PlayerCount, observed, now);
             if (decision is WarmupDecision.RecreateSameTarget or WarmupDecision.ReleaseAndReschedule or WarmupDecision.SkipTarget)
             {
                 try
@@ -173,7 +194,8 @@ public sealed class WarmupSchedulerService(
                 var lease = await dbContext.ReservationLeases.FindAsync([attempt.TargetServerId], cancellationToken);
                 if (lease?.OperationId == attempt.OperationId)
                     dbContext.ReservationLeases.Remove(lease);
-                await RestartSteamAfterAttemptAsync(activeAgent, attempt.OperationId, cancellationToken);
+                if (DateTimeOffset.UtcNow >= attemptDeadline)
+                    await RestartSteamAfterAttemptAsync(activeAgent, attempt.OperationId, cancellationToken);
                 if (decision == WarmupDecision.RecreateSameTarget)
                     recreateRequests.Add(new RecreateRequest(target.Id, attempt.StartedAt, attempt));
             }

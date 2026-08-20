@@ -67,7 +67,7 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
-    public async Task TickRestartsSteamAndExcludesAgentUntilHealthRecoversAfterAttemptCompletes()
+    public async Task TickRestartsSteamAndExcludesAgentUntilHealthRecoversAfterAttemptDeadlineExpires()
     {
         await using var db = CreateDb();
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
@@ -83,6 +83,97 @@ public sealed class WarmupSchedulerServiceTests
         Assert.AreEqual(1, agents.RestartSteamCalls);
         Assert.AreEqual("restarting", agent.Status);
         Assert.AreEqual(0, agents.StartCalls);
+    }
+
+    [TestMethod]
+    public async Task TickDoesNotRestartSteamWhenOperationStopsBeforeAttemptDeadline()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target, new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "stopped", null, null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(0, agents.RestartSteamCalls);
+        Assert.AreEqual("running", agent.Status);
+    }
+
+    [TestMethod]
+    public async Task TickIgnoresOrphanedAttemptWhenDeterminingAttemptDeadline()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), ObservedAt = DateTimeOffset.UtcNow },
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = Guid.NewGuid(), OperationId = Guid.NewGuid(), Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddDays(-1), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "stopped", null, null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(0, agents.RestartSteamCalls);
+        Assert.AreEqual("running", agent.Status);
+    }
+
+    [TestMethod]
+    public async Task TickRestartsSteamWhenAttemptDeadlineExpiresWhileOperationIsActive()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 60 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target, new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddSeconds(-61), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(
+            operation,
+            "active",
+            new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow),
+            null,
+            DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(1, agents.StopCalls);
+        Assert.AreEqual(1, agents.RestartSteamCalls);
+        Assert.AreEqual("restarting", agent.Status);
+    }
+
+    [TestMethod]
+    public async Task TickDoesNotRestartSteamWhenPlayerTargetIsReachedBeforeAttemptDeadline()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target, new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(
+            operation,
+            "active",
+            new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow),
+            null,
+            DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s(new Dictionary<int, int> { [target.Port] = target.PlayerTarget }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(1, agents.StopCalls);
+        Assert.AreEqual(0, agents.RestartSteamCalls);
+        Assert.AreEqual("running", agent.Status);
     }
 
     [TestMethod]
@@ -405,7 +496,7 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
-    public async Task TickRecreatesQuietLobbyOnTheSameTarget()
+    public async Task TickRecreatesQuietLobbyOnTheSameTargetWithoutRestartingSteam()
     {
         await using var db = CreateDb();
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
@@ -423,9 +514,9 @@ public sealed class WarmupSchedulerServiceTests
 
         await scheduler.TickAsync(CancellationToken.None);
 
-        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == operation && attempt.State == "restart_pending"));
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.TargetServerId == server.Id && attempt.State == "active" && attempt.OperationId != operation));
         Assert.AreEqual(1, agents.StopCalls);
-        Assert.AreEqual(1, agents.RestartSteamCalls);
+        Assert.AreEqual(0, agents.RestartSteamCalls);
     }
 
     [TestMethod]
@@ -452,6 +543,7 @@ public sealed class WarmupSchedulerServiceTests
 
         var replacement = await db.WarmupAttempts.SingleAsync(attempt => attempt.State == "active");
         Assert.AreEqual(quietTarget.Id, replacement.TargetServerId);
+        Assert.AreEqual(0, agents.RestartSteamCalls);
     }
 
     [TestMethod]
