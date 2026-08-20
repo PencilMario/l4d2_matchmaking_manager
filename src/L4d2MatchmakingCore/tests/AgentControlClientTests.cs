@@ -25,6 +25,7 @@ public sealed class AgentControlClientTests
         var start = await client.StartOperationAsync(agent, new AgentOperationRequest(operationId, AgentLobbyMode.Standard, "203.0.113.7", 27015), CancellationToken.None);
         var current = await client.GetOperationAsync(agent, operationId, CancellationToken.None);
         await client.StopOperationAsync(agent, operationId, CancellationToken.None);
+        await client.RestartSteamAsync(agent, CancellationToken.None);
         var snapshot = await client.ReadLobbyAsync(agent, lobby.LobbyId, CancellationToken.None);
 
         Assert.IsTrue(health.Ready);
@@ -41,6 +42,7 @@ public sealed class AgentControlClientTests
                 "POST /v1/operations",
                 $"GET /v1/operations/{operationId}",
                 $"DELETE /v1/operations/{operationId}",
+                "POST /v1/steam/restart",
                 $"GET /v1/lobbies/{lobby.LobbyId}",
             },
             handler.Requests);

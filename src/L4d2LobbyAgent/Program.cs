@@ -6,6 +6,7 @@ builder.Services.AddSingleton(AgentSessionOptions.FromEnvironment());
 builder.Services.AddSingleton<ISteamSessionActor>(services =>
     SteamSessionActor.Create(services.GetRequiredService<AgentSessionOptions>().SteamApiLibraryPath));
 builder.Services.AddSingleton<IAgentSteamSessionService, AgentSteamSessionService>();
+builder.Services.AddSingleton<ISteamDesktopController, SupervisorSteamDesktopController>();
 builder.Services.AddSingleton<ISteamDesktopDetector, SteamDesktopDetector>();
 builder.Services.AddSingleton<ISteamDownloadRegionReader>(_ => SteamDownloadRegionReader.FromEnvironment());
 builder.Services.AddSingleton<IAgentReadinessMarker>(_ => FileAgentReadinessMarker.FromEnvironment());
@@ -42,6 +43,13 @@ app.MapDelete("/v1/operations/{operationId:guid}", async (
     IAgentSteamSessionService service,
     CancellationToken cancellationToken) =>
     await service.StopAsync(operationId, cancellationToken) ? Results.NoContent() : Results.NotFound());
+app.MapPost("/v1/steam/restart", async (
+    ISteamDesktopController controller,
+    CancellationToken cancellationToken) =>
+{
+    await controller.RestartAsync(cancellationToken);
+    return Results.Accepted();
+});
 app.MapGet("/v1/lobbies/{lobbyId}", async (
     string lobbyId,
     IAgentSteamSessionService service,

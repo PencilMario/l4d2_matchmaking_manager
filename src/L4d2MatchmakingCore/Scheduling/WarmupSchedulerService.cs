@@ -66,14 +66,25 @@ public sealed class WarmupSchedulerService(
         if (selector is null || a2s is null)
             return;
 
+        await RestoreRestartedAgentsAsync(cancellationToken);
+
         var activeAttempts = await dbContext.WarmupAttempts
             .Where(attempt => attempt.State == "active" || attempt.State == "uncertain")
+            .ToListAsync(cancellationToken);
+        var restartPendingAttempts = await dbContext.WarmupAttempts
+            .Where(attempt => attempt.State == "restart_pending")
             .ToListAsync(cancellationToken);
         var serverStartedAt = activeAttempts
             .GroupBy(attempt => attempt.TargetServerId)
             .ToDictionary(group => group.Key, group => group.Min(attempt => attempt.StartedAt));
         var schedulingEngine = engine ?? new WarmupDecisionEngine();
         var recreateRequests = new List<RecreateRequest>();
+        foreach (var attempt in restartPendingAttempts)
+        {
+            var agent = await dbContext.WarmupAgents.FindAsync([attempt.WarmupAgentId], cancellationToken);
+            if (agent?.Status == "running")
+                recreateRequests.Add(new RecreateRequest(attempt.TargetServerId, attempt.StartedAt, attempt));
+        }
         foreach (var attempt in activeAttempts)
         {
             var target = await dbContext.TargetServers.FindAsync([attempt.TargetServerId], cancellationToken);
@@ -101,6 +112,7 @@ public sealed class WarmupSchedulerService(
                 var missingOperationLease = await dbContext.ReservationLeases.FindAsync([attempt.TargetServerId], cancellationToken);
                 if (missingOperationLease?.OperationId == attempt.OperationId)
                     dbContext.ReservationLeases.Remove(missingOperationLease);
+                await RestartSteamAfterAttemptAsync(activeAgent, attempt.OperationId, cancellationToken);
                 continue;
             }
             attempt.State = "active";
@@ -156,13 +168,14 @@ public sealed class WarmupSchedulerService(
                     QuarantineAgent(activeAgent, attempt.OperationId, "agent_operation_stop_uncertain", DateTimeOffset.UtcNow);
                     continue;
                 }
-                attempt.State = "completed";
-                attempt.CompletedAt = DateTimeOffset.UtcNow;
+                attempt.State = decision == WarmupDecision.RecreateSameTarget ? "restart_pending" : "completed";
+                attempt.CompletedAt = decision == WarmupDecision.RecreateSameTarget ? null : DateTimeOffset.UtcNow;
                 var lease = await dbContext.ReservationLeases.FindAsync([attempt.TargetServerId], cancellationToken);
                 if (lease?.OperationId == attempt.OperationId)
                     dbContext.ReservationLeases.Remove(lease);
+                await RestartSteamAfterAttemptAsync(activeAgent, attempt.OperationId, cancellationToken);
                 if (decision == WarmupDecision.RecreateSameTarget)
-                    recreateRequests.Add(new RecreateRequest(target.Id, attempt.StartedAt));
+                    recreateRequests.Add(new RecreateRequest(target.Id, attempt.StartedAt, attempt));
             }
         }
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -219,7 +232,14 @@ public sealed class WarmupSchedulerService(
                 plannedCursorTargets,
                 cancellationToken);
             if (planned is not null)
+            {
                 plannedStarts.Add(planned);
+                if (request.PendingAttempt is not null)
+                {
+                    request.PendingAttempt.State = "completed";
+                    request.PendingAttempt.CompletedAt = DateTimeOffset.UtcNow;
+                }
+            }
         }
         while (nextAgentIndex < idleAgents.Count)
         {
@@ -442,9 +462,54 @@ public sealed class WarmupSchedulerService(
         }
     }
 
-    private sealed record RecreateRequest(Guid TargetServerId, DateTimeOffset StartedAt);
+    private sealed record RecreateRequest(Guid TargetServerId, DateTimeOffset StartedAt, WarmupAttempt? PendingAttempt = null);
     private sealed record PlannedStart(WarmupAgent Agent, TargetServer Server, IPAddress Address, WarmupAttempt Attempt);
     private sealed record StartResult(PlannedStart Plan, AgentOperationStartResult? Start, Exception? Exception);
+
+    private async Task RestartSteamAfterAttemptAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await agents.RestartSteamAsync(agent, cancellationToken);
+            agent.Status = "restarting";
+            agent.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            QuarantineAgent(agent, operationId, "agent_steam_restart_failed", DateTimeOffset.UtcNow);
+        }
+    }
+
+    private async Task RestoreRestartedAgentsAsync(CancellationToken cancellationToken)
+    {
+        var restartingAgents = await dbContext.WarmupAgents
+            .Where(agent => agent.Status == "restarting")
+            .ToListAsync(cancellationToken);
+        foreach (var agent in restartingAgents)
+        {
+            try
+            {
+                if (!(await agents.GetHealthAsync(agent, cancellationToken)).Ready)
+                    continue;
+                agent.Status = "running";
+                agent.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                // Keep the Agent out of scheduling until a later health probe confirms Steam recovered.
+            }
+        }
+        if (restartingAgents.Count > 0)
+            await dbContext.SaveChangesAsync(cancellationToken);
+    }
 
     private void QuarantineAgent(WarmupAgent agent, Guid operationId, string reason, DateTimeOffset now)
     {

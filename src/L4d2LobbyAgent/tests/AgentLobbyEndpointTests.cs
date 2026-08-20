@@ -78,7 +78,20 @@ public sealed class AgentLobbyEndpointTests
         Assert.AreEqual(1, service.StopCalls);
     }
 
-    private sealed class AgentFactory(IAgentSteamSessionService service) : WebApplicationFactory<global::Program>
+    [TestMethod]
+    public async Task SteamRestartUsesTheDesktopController()
+    {
+        var controller = new FakeSteamDesktopController();
+        await using var factory = new AgentFactory(new FakeSessionService(), controller);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync("/v1/steam/restart", null);
+
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.AreEqual(1, controller.RestartCalls);
+    }
+
+    private sealed class AgentFactory(IAgentSteamSessionService service, ISteamDesktopController? controller = null) : WebApplicationFactory<global::Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -86,7 +99,22 @@ public sealed class AgentLobbyEndpointTests
             {
                 services.RemoveAll<IAgentSteamSessionService>();
                 services.AddSingleton(service);
+                if (controller is not null)
+                {
+                    services.RemoveAll<ISteamDesktopController>();
+                    services.AddSingleton(controller);
+                }
             });
+        }
+    }
+
+    private sealed class FakeSteamDesktopController : ISteamDesktopController
+    {
+        public int RestartCalls { get; private set; }
+        public Task RestartAsync(CancellationToken cancellationToken)
+        {
+            RestartCalls++;
+            return Task.CompletedTask;
         }
     }
 

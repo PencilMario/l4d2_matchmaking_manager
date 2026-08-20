@@ -13,6 +13,7 @@ public interface IAgentControlClient
     Task<AgentOperationStartResult> StartOperationAsync(WarmupAgent agent, AgentOperationRequest request, CancellationToken cancellationToken);
     Task<AgentOperationSnapshot?> GetOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken);
     Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken);
+    Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken) => Task.CompletedTask;
     Task<LobbySnapshot> ReadLobbyAsync(WarmupAgent agent, string lobbyId, CancellationToken cancellationToken);
     Task<LobbySnapshot> QueryLobbyAsync(
         WarmupAgent agent,
@@ -58,6 +59,12 @@ public sealed class AgentControlClient(HttpClient httpClient) : IAgentControlCli
     public async Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
     {
         using var response = await httpClient.DeleteAsync(UriFor(agent, $"/v1/operations/{operationId}"), cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsync(UriFor(agent, "/v1/steam/restart"), null, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 

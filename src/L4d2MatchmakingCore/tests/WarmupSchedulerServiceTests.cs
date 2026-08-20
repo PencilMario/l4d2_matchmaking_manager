@@ -67,6 +67,43 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
+    public async Task TickRestartsSteamAndExcludesAgentUntilHealthRecoversAfterAttemptCompletes()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target, new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-13), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "stopped", null, null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(1, agents.RestartSteamCalls);
+        Assert.AreEqual("restarting", agent.Status);
+        Assert.AreEqual(0, agents.StartCalls);
+    }
+
+    [TestMethod]
+    public async Task TickQuarantinesAgentWhenSteamRestartFails()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target, new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-13), ObservedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(operation, "stopped", null, null, DateTimeOffset.UtcNow), throwOnRestart: true);
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual("quarantined", agent.Status);
+        Assert.AreEqual(1, agents.RestartSteamCalls);
+    }
+
+    [TestMethod]
     public async Task TickStartsABatchWithoutExceedingTargetConcurrency()
     {
         await using var db = CreateDb();
@@ -386,8 +423,9 @@ public sealed class WarmupSchedulerServiceTests
 
         await scheduler.TickAsync(CancellationToken.None);
 
-        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == operation && attempt.State == "completed"));
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == operation && attempt.State == "restart_pending"));
         Assert.AreEqual(1, agents.StopCalls);
+        Assert.AreEqual(1, agents.RestartSteamCalls);
     }
 
     [TestMethod]
@@ -409,6 +447,7 @@ public sealed class WarmupSchedulerServiceTests
             DateTimeOffset.UtcNow));
         var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
 
+        await scheduler.TickAsync(CancellationToken.None);
         await scheduler.TickAsync(CancellationToken.None);
 
         var replacement = await db.WarmupAttempts.SingleAsync(attempt => attempt.State == "active");
@@ -456,6 +495,7 @@ public sealed class WarmupSchedulerServiceTests
             DateTimeOffset.UtcNow));
         var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
 
+        await scheduler.TickAsync(CancellationToken.None);
         await scheduler.TickAsync(CancellationToken.None);
 
         var replacement = await db.WarmupAttempts.SingleAsync(attempt => attempt.State == "active");
@@ -604,15 +644,19 @@ public sealed class WarmupSchedulerServiceTests
         AgentOperationSnapshot? snapshot,
         bool throwOnGetOperation = false,
         bool throwOnStart = false,
-        bool throwOnStop = false) : IAgentControlClient
+        bool throwOnStop = false,
+        bool throwOnRestart = false) : IAgentControlClient
     {
         private int _startCalls;
         private int _stopCalls;
+        private int _restartSteamCalls;
         public int StartCalls => _startCalls;
         public int StopCalls => _stopCalls;
+        public int RestartSteamCalls => _restartSteamCalls;
         public ConcurrentQueue<AgentOperationRequest> StartRequests { get; } = new();
         public AgentOperationRequest? LastStartRequest { get; private set; }
-        public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
+            Task.FromResult(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow));
         public Task<AgentOperationStartResult> StartOperationAsync(WarmupAgent agent, AgentOperationRequest request, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _startCalls);
@@ -630,6 +674,13 @@ public sealed class WarmupSchedulerServiceTests
         {
             Interlocked.Increment(ref _stopCalls);
             return throwOnStop
+                ? Task.FromException(new HttpRequestException("agent_unavailable"))
+                : Task.CompletedTask;
+        }
+        public Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _restartSteamCalls);
+            return throwOnRestart
                 ? Task.FromException(new HttpRequestException("agent_unavailable"))
                 : Task.CompletedTask;
         }
