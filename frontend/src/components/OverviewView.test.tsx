@@ -13,7 +13,7 @@ describe('系统概览大厅 ID', () => {
         attempts={[{
           id: 'attempt-1', targetServerId: 'server-1', targetServerEndpoint: '127.0.0.1:27015',
           agentId: 'agent-1', agentName: 'agent-1', operationMode: 'standard', status: 'active',
-          phase: 'observing_state', lobbyId: '109775242226986793', remainingSeconds: 30,
+          phase: 'Active', lobbyId: '109775242226986793', remainingSeconds: 30,
           totalSeconds: 720, startedAt: '2026-08-19T00:00:00Z', updatedAt: '2026-08-19T00:00:00Z',
         }]}
         onNavigateToTarget={vi.fn()}
@@ -66,7 +66,7 @@ describe('系统概览大厅 ID', () => {
             agentName: '暖服节点-A',
             operationMode: 'standard',
             status: 'active',
-            phase: 'awaiting_ready',
+            phase: 'AwaitingFirstMember',
             lobbyId: '109775242226986793',
             remainingSeconds: 60,
             totalSeconds: 720,
@@ -81,7 +81,7 @@ describe('系统概览大厅 ID', () => {
             agentName: '暖服节点-B',
             operationMode: 'standard',
             status: 'active',
-            phase: 'awaiting_ready',
+            phase: 'AwaitingFirstMember',
             lobbyId: '109775242226986794',
             remainingSeconds: 30,
             totalSeconds: 720,
@@ -103,7 +103,7 @@ describe('系统概览大厅 ID', () => {
     expect(screen.getByText('109775242226986793')).toBeInTheDocument();
     expect(screen.getByText('109775242226986794')).toBeInTheDocument();
     const regionLabel = screen.getByText('中国 - 上海');
-    const phaseLabel = screen.getAllByText('等待就绪')[0];
+    const phaseLabel = screen.getAllByText('等待外部成员进入')[0];
     expect(regionLabel).toHaveClass('bg-slate-100', 'px-1.5', 'py-0.5', 'rounded', 'text-[11px]', 'border', 'border-slate-200');
     expect(regionLabel.className).toBe(phaseLabel.className);
     expect(screen.queryByText('cng')).not.toBeInTheDocument();
@@ -137,7 +137,7 @@ describe('系统概览大厅 ID', () => {
         attempts={[{
           id: 'attempt-1', targetServerId: 'server-1', targetServerEndpoint: '127.0.0.1:27015',
           agentId: 'agent-1', agentName: '节点-alpha', operationMode: 'standard', status: 'active',
-          phase: 'awaiting_ready', lobbyId: 'lobby-1', remainingSeconds: 90, totalSeconds: 720,
+          phase: 'AwaitingFirstMember', lobbyId: 'lobby-1', remainingSeconds: 90, totalSeconds: 720,
           startedAt: '2026-08-19T00:00:00Z', updatedAt: '2026-08-19T00:00:00Z',
         }]}
         onNavigateToTarget={vi.fn()}
@@ -187,7 +187,7 @@ describe('系统概览大厅 ID', () => {
         attempts={[{
           id: 'attempt-1', targetServerId: 'server-1', targetServerEndpoint: '127.0.0.1:27015',
           agentId: 'agent-1', agentName: '节点-alpha', operationMode: 'standard', status: 'active',
-          phase: 'awaiting_ready', remainingSeconds: 90, totalSeconds: 720,
+          phase: 'AwaitingFirstMember', remainingSeconds: 90, totalSeconds: 720,
           startedAt: '2026-08-19T00:00:00Z', updatedAt: '2026-08-19T00:00:00Z',
         }]}
         onNavigateToTarget={vi.fn()}

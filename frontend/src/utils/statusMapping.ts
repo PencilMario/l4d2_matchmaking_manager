@@ -206,16 +206,12 @@ export function formatAttemptStatus(status?: AttemptStatus | string): {
 
 export function formatAttemptPhase(phase?: AttemptPhase | string): string {
   switch (phase) {
-    case 'discovering_lobby':
-      return '寻找大厅';
-    case 'injecting_match':
-      return '注入匹配';
-    case 'awaiting_ready':
-      return '等待就绪';
-    case 'player_inflow':
-      return '玩家流入';
-    case 'observing_state':
-      return '观测验证';
+    case 'Selecting':
+      return '选择目标';
+    case 'AwaitingFirstMember':
+      return '等待外部成员进入';
+    case 'Active':
+      return '观测服务器人数';
     default:
       return phase ? `未知阶段 (${phase})` : '未开始';
   }

@@ -14,8 +14,7 @@ export const warmupStateLabels: Record<string, string> = {
 };
 
 export const warmupPhaseLabels: Record<string, string> = {
-  creating_lobby: '正在创建大厅', awaiting_members: '等待成员进入', awaiting_external_members: '等待外部成员进入',
-  waiting: '等待处理', monitoring_players: '观测服务器人数', draining: '正在停止任务',
+  Selecting: '选择目标', AwaitingFirstMember: '等待外部成员进入', Active: '观测服务器人数',
 };
 
 export function labelWarmupState(value: string) { return warmupStateLabels[value] ?? '未知状态'; }

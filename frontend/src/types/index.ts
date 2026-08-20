@@ -5,11 +5,9 @@ export type AgentStatus = 'running' | 'restarting' | 'stopped' | 'created' | 'qu
 export type AttemptStatus = 'active' | 'uncertain' | 'completed' | 'failed' | 'cancelled' | string;
 
 export type AttemptPhase =
-  | 'discovering_lobby'
-  | 'injecting_match'
-  | 'awaiting_ready'
-  | 'player_inflow'
-  | 'observing_state'
+  | 'Selecting'
+  | 'AwaitingFirstMember'
+  | 'Active'
   | string;
 
 export type OperationMode = 'standard' | 'direct_lobby' | 'reservation_hold' | string;
