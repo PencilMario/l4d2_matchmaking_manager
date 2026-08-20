@@ -1,10 +1,13 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace L4d2MatchmakingCore.Data.Migrations;
 
-public partial class SteamWebApiKey : Migration
+[DbContext(typeof(MatchmakingDbContext))]
+[Migration("202608190003_SteamWebApiKey")]
+public sealed class SteamWebApiKey : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.AddColumn<string>(
         name: "SteamWebApiKeyCiphertext",
