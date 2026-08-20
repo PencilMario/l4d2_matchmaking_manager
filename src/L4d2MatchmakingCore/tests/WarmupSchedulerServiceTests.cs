@@ -750,6 +750,37 @@ public sealed class WarmupSchedulerServiceTests
         Assert.AreEqual(nextTarget.Id, (await db.WarmupAttempts.SingleAsync()).TargetServerId);
     }
 
+    [TestMethod]
+    public async Task TickSkipsTargetWithUnavailableObservationAndStartsNextTarget()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var unavailableTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 10 };
+        var nextTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 0 };
+        db.AddRange(agent, unavailableTarget, nextTarget);
+        await db.SaveChangesAsync();
+
+        var observations = new TargetServerObservationStore();
+        observations.Replace(unavailableTarget.Id, new TargetServerObservation(
+            unavailableTarget.Id,
+            "unavailable",
+            null,
+            null,
+            null,
+            DateTimeOffset.UtcNow));
+        var scheduler = CreateSchedulerWithObservationStore(
+            db,
+            new FakeAgents(null),
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s(),
+            observations);
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(nextTarget.Id, (await db.WarmupAttempts.SingleAsync()).TargetServerId);
+    }
+
     private static MatchmakingDbContext CreateDb() => new(new DbContextOptionsBuilder<MatchmakingDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
         .Options);
@@ -767,7 +798,39 @@ public sealed class WarmupSchedulerServiceTests
             .SingleOrDefault(candidate => candidate.GetParameters()
                 .Any(parameter => parameter.ParameterType == typeof(IRconCredentialProtector)));
         Assert.IsNotNull(constructor, "WarmupSchedulerService must receive the credential protector at the Agent request boundary.");
-        return (WarmupSchedulerService)constructor.Invoke([db, agents, maintenance, selector, a2s, null, credentials, null, null, null]);
+        return (WarmupSchedulerService)constructor.Invoke([db, agents, maintenance, selector, a2s, null, credentials, null, null, null, null]);
+    }
+
+    private static WarmupSchedulerService CreateSchedulerWithObservationStore(
+        MatchmakingDbContext db,
+        IAgentControlClient agents,
+        SharedLibraryMaintenanceService maintenance,
+        IHealthyAgentSelector selector,
+        ISourceA2sClient a2s,
+        TargetServerObservationStore observations)
+    {
+        var constructor = typeof(WarmupSchedulerService)
+            .GetConstructors()
+            .SingleOrDefault(candidate => candidate.GetParameters()
+                .Any(parameter => parameter.ParameterType == typeof(TargetServerObservationStore)));
+        Assert.IsNotNull(constructor, "WarmupSchedulerService must receive the target server observation store.");
+        var arguments = constructor.GetParameters().Select(parameter =>
+        {
+            if (parameter.ParameterType == typeof(MatchmakingDbContext))
+                return (object?)db;
+            if (parameter.ParameterType == typeof(IAgentControlClient))
+                return agents;
+            if (parameter.ParameterType == typeof(SharedLibraryMaintenanceService))
+                return maintenance;
+            if (parameter.ParameterType == typeof(IHealthyAgentSelector))
+                return selector;
+            if (parameter.ParameterType == typeof(ISourceA2sClient))
+                return a2s;
+            if (parameter.ParameterType == typeof(TargetServerObservationStore))
+                return observations;
+            return null;
+        }).ToArray();
+        return (WarmupSchedulerService)constructor.Invoke(arguments);
     }
 
     private static WarmupSchedulerService CreateSchedulerWithOptions(

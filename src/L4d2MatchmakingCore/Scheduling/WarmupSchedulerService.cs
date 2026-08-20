@@ -20,7 +20,8 @@ public sealed class WarmupSchedulerService(
     IRconCredentialProtector? rconCredentials = null,
     CoreOptions? coreOptions = null,
     WarmupAttemptDrainService? attemptDrain = null,
-    WarmupSchedulingGate? schedulingGate = null)
+    WarmupSchedulingGate? schedulingGate = null,
+    TargetServerObservationStore? observationStore = null)
 {
     private readonly WarmupAttemptDrainService? drain = attemptDrain;
     private readonly WarmupSchedulingGate gate = schedulingGate ?? new();
@@ -436,6 +437,8 @@ public sealed class WarmupSchedulerService(
         {
             return null;
         }
+        if (observationStore?.Get(server.Id)?.Status == "unavailable")
+            return null;
         IPEndPoint? endpoint;
         A2sServerInfo info;
         try
