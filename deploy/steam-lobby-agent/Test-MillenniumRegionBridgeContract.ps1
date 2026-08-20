@@ -26,6 +26,17 @@ if ($backendContent -notmatch 'STEAM_DOWNLOAD_REGION_ID' -or
     throw 'The bridge backend must read the target environment and persist the actual region state.'
 }
 
+if ($backendContent -notmatch 'type\(params\) == "table"' -or
+    $backendContent -notmatch 'tonumber\(params\)') {
+    throw 'The bridge backend must accept both Millennium callable argument shapes when recording a region.'
+}
+
+if ($backendContent -notmatch 'steam-region-bridge-region' -or
+    $backendContent -notmatch 'read_file' -or
+    $initializer -notmatch 'steam-region-bridge-region') {
+    throw 'The initializer and bridge backend must exchange the target region through an account-local Millennium config file.'
+}
+
 if ($bundleContent -notmatch 'SetSetting' -or $bundleContent -notmatch '64072' -or
     $bundleContent -notmatch 'vecValidDownloadRegions' -or
     $bundleContent -notmatch 'get_region_bridge_config' -or

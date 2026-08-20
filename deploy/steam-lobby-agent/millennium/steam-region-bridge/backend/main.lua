@@ -33,7 +33,10 @@ local function parse_region_id(value)
 end
 
 local function configured_region_id()
-    return parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION_ID"))
+    local configured_file = home_directory() .. "/.config/millennium/steam-region-bridge-region"
+    local configured_value = utils.read_file(configured_file)
+    return parse_region_id(configured_value and utils.trim(configured_value))
+        or parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION_ID"))
         or parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION"))
 end
 
@@ -44,7 +47,10 @@ function get_region_bridge_config(_params)
 end
 
 function record_region_state(params)
-    local region_id = params and tonumber(params.regionId)
+    local region_id = tonumber(params)
+    if type(params) == "table" then
+        region_id = tonumber(params.regionId)
+    end
     if region_id == nil or region_id < 0 or region_id > 2147483647 or region_id ~= math.floor(region_id) then
         return { success = false, error = "invalid_region_id" }
     end
