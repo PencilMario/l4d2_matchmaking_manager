@@ -30,23 +30,57 @@ public sealed class SteamDownloadRegionReader : ISteamDownloadRegionReader
         "^\\s*\\\"DownloadRegion\\\"\\s+\\\"(?<region>[^\\\"]*)\\\"",
         System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    private readonly string configPath;
+    private readonly string statePath;
+    private readonly string legacyConfigPath;
 
-    public SteamDownloadRegionReader(string configPath)
+    public SteamDownloadRegionReader(string statePath, string legacyConfigPath)
     {
-        this.configPath = configPath;
+        this.statePath = statePath;
+        this.legacyConfigPath = legacyConfigPath;
     }
 
-    public static SteamDownloadRegionReader FromEnvironment() =>
-        new(Path.Combine(
-            Environment.GetEnvironmentVariable("USER_HOME") ?? "/home/default",
-            ".steam", "steam", "config", "config.vdf"));
+    public static SteamDownloadRegionReader FromEnvironment()
+    {
+        var homeDirectory = Environment.GetEnvironmentVariable("USER_HOME")
+            ?? Environment.GetEnvironmentVariable("HOME")
+            ?? "/home/default";
+        var configDirectory = Path.Combine(homeDirectory, ".steam", "steam", "config");
+        return new(
+            Environment.GetEnvironmentVariable("STEAM_DOWNLOAD_REGION_STATUS_FILE")
+                ?? Path.Combine(configDirectory, "steam-download-region"),
+            Path.Combine(configDirectory, "config.vdf"));
+    }
 
     public string? Read()
     {
+        var state = ReadStateFile();
+        return state ?? ReadLegacyConfig();
+    }
+
+    private string? ReadStateFile()
+    {
         try
         {
-            foreach (var line in File.ReadLines(configPath))
+            var value = File.ReadAllText(statePath).Trim();
+            return int.TryParse(value, out var regionId) && regionId >= 0
+                ? regionId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : null;
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        return null;
+    }
+
+    private string? ReadLegacyConfig()
+    {
+        try
+        {
+            foreach (var line in File.ReadLines(legacyConfigPath))
             {
                 var match = RegionEntry.Match(line);
                 if (match.Success)

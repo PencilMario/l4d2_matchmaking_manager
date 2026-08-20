@@ -8,6 +8,7 @@ using L4d2MatchmakingCore.Profiles;
 using L4d2MatchmakingCore.Scheduling;
 using L4d2MatchmakingCore.Servers;
 using L4d2MatchmakingCore.Settings;
+using L4d2MatchmakingCore.Steam;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +24,7 @@ builder.Services
         static _ => { });
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IRconCredentialProtector, RconCredentialProtector>();
+builder.Services.AddSingleton<SteamDownloadRegionCatalog>();
 builder.Services.AddSingleton<ISecretProtector>(services => services.GetRequiredService<IRconCredentialProtector>());
 builder.Services.AddScoped<TargetServerService>();
 builder.Services.AddScoped<TargetServerObservationService>();
@@ -82,6 +84,7 @@ app.MapGroup("/v1/agents")
 app.MapLobbyQueryEndpoints();
 app.MapWarmupStatusEndpoints();
 app.MapGlobalSettingsEndpoints();
+app.MapSteamDownloadRegionEndpoints();
 
 app.Run();
 

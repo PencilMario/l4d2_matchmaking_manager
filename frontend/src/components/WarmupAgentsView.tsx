@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { WarmupAgent, WarmupAttempt } from '../types';
+import { SteamDownloadRegion, WarmupAgent, WarmupAttempt } from '../types';
 import { Badge } from './common/Badge';
 import { Tooltip } from './common/Tooltip';
 import { WarmupAgentModal } from './WarmupAgentModal';
 import { ConfirmDialog } from './common/ConfirmDialog';
 import { formatAgentStatus, formatDateTime } from '../utils/statusMapping';
+import { formatSteamDownloadRegion } from '../services/steam-download-region-display';
 import {
   Plus,
   RotateCw,
@@ -31,6 +32,9 @@ interface WarmupAgentsViewProps {
   onOpenVncSession?: (id: string) => Promise<{ url: string; expiresAt: string }>;
   onDeleteAgent: (id: string) => Promise<boolean>;
   isRefreshing?: boolean;
+  steamRegions?: readonly SteamDownloadRegion[];
+  isSteamRegionsLoading?: boolean;
+  steamRegionsError?: string | null;
 }
 
 export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
@@ -45,6 +49,9 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
   onOpenVncSession,
   onDeleteAgent,
   isRefreshing = false,
+  steamRegions = [],
+  isSteamRegionsLoading = false,
+  steamRegionsError = null,
 }) => {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -310,7 +317,7 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
                         <td className="py-3 px-3 whitespace-nowrap text-slate-600">
                           {agent.steamRegion ? (
                             <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-medium border border-slate-200">
-                              {agent.steamRegion}
+                              {formatSteamDownloadRegion(agent.steamRegion, steamRegions)}
                             </span>
                           ) : (
                             <span className="text-slate-400">默认</span>
@@ -483,6 +490,9 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
         onSubmit={handleModalSubmit}
         initialData={editingAgent}
         isLoading={isSubmitting}
+        steamRegions={steamRegions}
+        isSteamRegionsLoading={isSteamRegionsLoading}
+        steamRegionsError={steamRegionsError}
       />
 
       {/* Rebuild Confirmation Dialog */}

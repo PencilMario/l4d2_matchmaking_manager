@@ -89,6 +89,7 @@ describe('系统概览大厅 ID', () => {
             updatedAt: '2026-08-19T00:01:00Z',
           },
         ]}
+        steamRegions={[{ id: 47, name: '中国 - 上海' }]}
         onNavigateToTarget={vi.fn()}
         onNavigateTab={vi.fn()}
       />

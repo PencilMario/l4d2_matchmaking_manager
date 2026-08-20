@@ -23,7 +23,9 @@ services:
       LIBGL_ALWAYS_SOFTWARE: "1"
       STEAM_SHARED_LIBRARY_PATH: /mnt/steam-library
       STEAM_API_LIBRARY_PATH: ${STEAM_API_LIBRARY_PATH:-}
+      STEAM_DOWNLOAD_REGION_ID: ${STEAM_DOWNLOAD_REGION_ID:-}
       STEAM_DOWNLOAD_REGION: ${STEAM_DOWNLOAD_REGION:-}
+      STEAM_DOWNLOAD_REGION_STATUS_FILE: /home/default/.steam/steam/config/steam-download-region
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8083:8083"

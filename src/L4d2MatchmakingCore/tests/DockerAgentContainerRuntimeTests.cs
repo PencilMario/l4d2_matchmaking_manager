@@ -81,7 +81,9 @@ public sealed class DockerAgentContainerRuntimeTests
                 "LIBGL_ALWAYS_SOFTWARE=1",
                 "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
                 "STEAM_API_LIBRARY_PATH=/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so",
+                "STEAM_DOWNLOAD_REGION_ID=",
                 "STEAM_DOWNLOAD_REGION=",
+                "STEAM_DOWNLOAD_REGION_STATUS_FILE=/home/default/.steam/steam/config/steam-download-region",
             },
             runtime.Definition.Environment.ToArray());
         Assert.AreEqual(2L * 1024 * 1024 * 1024, runtime.Definition.SharedMemoryBytes);
@@ -92,6 +94,20 @@ public sealed class DockerAgentContainerRuntimeTests
         CollectionAssert.Contains(
             runtime.Definition.Devices.ToList(),
             new AgentDeviceMapping("/dev/fuse", "/dev/fuse", "rwm"));
+    }
+
+    [TestMethod]
+    public async Task CreateDerivesTheMillenniumRegionIdFromLegacyAgentConfiguration()
+    {
+        var runtime = new FakeRuntime();
+        var service = new WarmupAgentContainerService(runtime, new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083, DownloadRegion = "cng" };
+
+        await service.CreateAsync(agent, CancellationToken.None);
+
+        Assert.IsNotNull(runtime.Definition);
+        CollectionAssert.Contains(runtime.Definition.Environment.ToList(), "STEAM_DOWNLOAD_REGION_ID=47");
+        CollectionAssert.Contains(runtime.Definition.Environment.ToList(), "STEAM_DOWNLOAD_REGION=cng");
     }
 
     [TestMethod]

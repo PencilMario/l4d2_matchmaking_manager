@@ -1,41 +1,42 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { STEAM_DOWNLOAD_REGIONS, WarmupAgentModal } from './WarmupAgentModal';
+import { WarmupAgentModal } from './WarmupAgentModal';
+
+const steamRegions = [
+  { id: 32, name: '日本 - 东京' },
+  { id: 33, name: '中国 - 香港' },
+  { id: 47, name: '中国 - 上海' },
+  { id: 168, name: '中国 - 青岛' },
+  { id: 204, name: '中国 - 重庆' },
+];
 
 describe('WarmupAgentModal', () => {
-  it('uses Steam regional download options and submits the Steam configuration value', async () => {
+  it('uses the Core regional directory and submits the internal region ID', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
-    render(<WarmupAgentModal isOpen onClose={vi.fn()} onSubmit={onSubmit} />);
+    render(<WarmupAgentModal isOpen onClose={vi.fn()} onSubmit={onSubmit} steamRegions={steamRegions} />);
 
-    expect(STEAM_DOWNLOAD_REGIONS).toHaveLength(187);
-    expect(screen.getByRole('option', { name: '中国 - 香港' })).toHaveValue('hongkong');
-    expect(screen.getByRole('option', { name: '中国 - 重庆' })).toHaveValue('chongqing');
-    expect(screen.getByRole('option', { name: '日本 - 东京' })).toHaveValue('tokyo');
+    expect(screen.getByRole('option', { name: '中国 - 香港' })).toHaveValue('33');
+    expect(screen.getByRole('option', { name: '中国 - 重庆' })).toHaveValue('204');
+    expect(screen.getByRole('option', { name: '日本 - 东京' })).toHaveValue('32');
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'hk-agent' } });
-    fireEvent.change(screen.getByLabelText('Steam 下载区域'), { target: { value: 'hongkong' } });
+    fireEvent.change(screen.getByLabelText('Steam 下载区域'), { target: { value: '33' } });
     fireEvent.click(screen.getByRole('button', { name: '创建节点' }));
 
-    expect(onSubmit).toHaveBeenCalledWith({ name: 'hk-agent', steamRegion: 'hongkong', keepVncAlive: false });
+    expect(onSubmit).toHaveBeenCalledWith({ name: 'hk-agent', steamRegion: '33', keepVncAlive: false });
   });
 
-  it('sorts download regions by country and then city while keeping the default first', () => {
-    const labels = STEAM_DOWNLOAD_REGIONS.map(region => region.label);
+  it('keeps the local default option before the fetched regions', () => {
+    render(<WarmupAgentModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} steamRegions={steamRegions} />);
 
-    expect(labels[0]).toBe('使用 Steam 默认区域');
-    const chinaStart = labels.findIndex(label => label.startsWith('中国'));
-    const chinaEnd = labels.length - 1 - [...labels].reverse().findIndex(label => label.startsWith('中国'));
-    expect(chinaStart).toBeGreaterThan(0);
-    expect(labels.slice(chinaStart, chinaEnd + 1).every(label => label.startsWith('中国'))).toBe(true);
-    const sortedChineseLabels = [...labels.slice(chinaStart, chinaEnd + 1)].sort((left, right) =>
-      new Intl.Collator('zh-CN').compare(left.split(' - ')[0], right.split(' - ')[0]) ||
-      new Intl.Collator('zh-CN').compare(left.split(' - ')[1] ?? '', right.split(' - ')[1] ?? ''));
-    expect(labels.slice(chinaStart, chinaEnd + 1)).toEqual(sortedChineseLabels);
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveTextContent('使用 Steam 默认区域');
+    expect(options.slice(1).map(option => option.textContent)).toEqual(steamRegions.map(region => region.name));
   });
 
   it('prevents the mouse wheel from changing the focused Steam region', () => {
-    render(<WarmupAgentModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} />);
+    render(<WarmupAgentModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} steamRegions={steamRegions} />);
 
     const regionSelect = screen.getByLabelText('Steam 下载区域');
     regionSelect.focus();
@@ -60,11 +61,11 @@ describe('WarmupAgentModal', () => {
       updatedAt: '2026-08-19T00:00:00Z',
     };
     const { rerender } = render(
-      <WarmupAgentModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} initialData={firstAgent} />
+      <WarmupAgentModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} initialData={firstAgent} steamRegions={steamRegions} />
     );
 
     const regionSelect = screen.getByLabelText('Steam 下载区域');
-    fireEvent.change(regionSelect, { target: { value: 'tokyo' } });
+    fireEvent.change(regionSelect, { target: { value: '32' } });
 
     rerender(
       <WarmupAgentModal
@@ -72,9 +73,10 @@ describe('WarmupAgentModal', () => {
         onClose={vi.fn()}
         onSubmit={vi.fn()}
         initialData={{ ...firstAgent, updatedAt: '2026-08-19T00:00:05Z' }}
+        steamRegions={steamRegions}
       />
     );
 
-    expect(regionSelect).toHaveValue('tokyo');
+    expect(regionSelect).toHaveValue('32');
   });
 });

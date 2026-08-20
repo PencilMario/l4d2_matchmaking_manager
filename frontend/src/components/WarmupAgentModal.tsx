@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { WarmupAgent } from '../types';
+import { SteamDownloadRegion, WarmupAgent } from '../types';
 import { Modal } from './common/Modal';
 import { AlertCircle, Loader2 } from 'lucide-react';
-import { STEAM_DOWNLOAD_REGIONS } from '../data/steamDownloadRegions';
-
-export { STEAM_DOWNLOAD_REGIONS } from '../data/steamDownloadRegions';
+import { normalizeSteamDownloadRegion } from '../services/steam-download-region-display';
 
 interface WarmupAgentModalProps {
   isOpen: boolean;
@@ -12,6 +10,9 @@ interface WarmupAgentModalProps {
   onSubmit: (data: { name: string; steamRegion?: string; keepVncAlive: boolean }) => Promise<void>;
   initialData?: WarmupAgent | null;
   isLoading?: boolean;
+  steamRegions?: readonly SteamDownloadRegion[];
+  isSteamRegionsLoading?: boolean;
+  steamRegionsError?: string | null;
 }
 
 export const WarmupAgentModal: React.FC<WarmupAgentModalProps> = ({
@@ -20,6 +21,9 @@ export const WarmupAgentModal: React.FC<WarmupAgentModalProps> = ({
   onSubmit,
   initialData,
   isLoading = false,
+  steamRegions = [],
+  isSteamRegionsLoading = false,
+  steamRegionsError = null,
 }) => {
   const isEditing = Boolean(initialData);
   const [name, setName] = useState('');
@@ -35,7 +39,7 @@ export const WarmupAgentModal: React.FC<WarmupAgentModalProps> = ({
 
     if (initialData) {
       setName(initialData.name || '');
-      setSteamRegion(initialData.steamRegion || '');
+      setSteamRegion(normalizeSteamDownloadRegion(initialData.steamRegion) || '');
       setKeepVncAlive(initialData.keepVncAlive);
     } else {
       setName('');
@@ -151,14 +155,19 @@ export const WarmupAgentModal: React.FC<WarmupAgentModalProps> = ({
             onChange={(e) => setSteamRegion(e.target.value)}
             className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
           >
-            {STEAM_DOWNLOAD_REGIONS.map((reg) => (
-              <option key={reg.value} value={reg.value}>
-                {reg.label}
+            <option value="">使用 Steam 默认区域</option>
+            {steamRegions.map((region) => (
+              <option key={region.id} value={String(region.id)}>
+                {region.name}
               </option>
             ))}
           </select>
           <p className="text-[11px] text-slate-500 mt-1">
-            空值说明：使用 Steam 默认区域。设置匹配就近节点可提升大厅连接成功率。
+            {isSteamRegionsLoading
+              ? '正在读取 Steam 下载区域列表…'
+              : steamRegionsError
+                ? `下载区域列表暂时不可用：${steamRegionsError}`
+                : '空值说明：使用 Steam 默认区域。设置匹配就近节点可提升大厅连接成功率。'}
           </p>
         </div>
 

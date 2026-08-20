@@ -28,6 +28,10 @@ if ($dockerfile -notmatch '91-enable-steam-supervisor\.sh') {
     throw 'The image must enable Steam through the upstream supervisor after initialization.'
 }
 
+if ($dockerfile -notmatch 'millennium/steam-region-bridge') {
+    throw 'The Agent image must include the managed Steam Region Bridge plugin source.'
+}
+
 if ($dockerfile -notmatch 'COPY src/L4d2Matchmaking.Contracts/L4d2Matchmaking.Contracts\.csproj src/L4d2Matchmaking.Contracts/') {
     throw 'The Docker build must copy shared Contracts before restoring the Agent and Probe projects.'
 }
@@ -52,6 +56,10 @@ if ($steamInit -notmatch 'STEAM_SHARED_LIBRARY_PATH' -or $steamInit -notmatch 'l
 
 if ($steamInit -notmatch 'DisableShaderCache') {
     throw 'The Steam supervisor initializer must disable shader precaching for each account.'
+}
+
+if ($steamInit -notmatch 'steam_region_status_file' -or $steamInit -notmatch 'STEAM_DOWNLOAD_REGION_STATUS_FILE') {
+    throw 'The Steam initializer must define the account-local Millennium region state file.'
 }
 
 if ($compose -notmatch 'steam-data:') {
@@ -108,13 +116,18 @@ if ($compose -notmatch 'STEAM_SHARED_LIBRARY_PATH:\s*/mnt/steam-library') {
     throw 'Steam Desktop must receive the shared library path inside the container.'
 }
 
+if ($compose -notmatch 'STEAM_DOWNLOAD_REGION_ID:\s*\$\{STEAM_DOWNLOAD_REGION_ID:-\}') {
+    throw 'Steam Desktop must pass the numeric download region target to the account initializer.'
+}
+
 if ($compose -notmatch 'STEAM_DOWNLOAD_REGION:\s*\$\{STEAM_DOWNLOAD_REGION:-\}') {
-    throw 'Steam Desktop must pass the optional download region to the account initializer.'
+    throw 'Steam Desktop must retain the legacy download region environment for compatibility.'
 }
 
 $agentSupervisor = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'l4d2-lobby-agent.ini')
-if ($agentSupervisor -notmatch 'STEAM_DOWNLOAD_REGION') {
-    throw 'The Agent supervisor must receive the optional account download region.'
+if ($agentSupervisor -notmatch 'STEAM_DOWNLOAD_REGION_ID' -or
+    $agentSupervisor -notmatch 'STEAM_DOWNLOAD_REGION_STATUS_FILE') {
+    throw 'The Agent supervisor must receive the numeric region target and Millennium state path.'
 }
 
 if ($compose -notmatch 'target:\s*/mnt/steam-library') {

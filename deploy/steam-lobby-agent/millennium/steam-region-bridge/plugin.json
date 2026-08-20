@@ -1,0 +1,7 @@
+{
+  "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
+  "name": "steam-region-bridge",
+  "common_name": "Steam Region Bridge",
+  "description": "Set Steam download region through SteamClient.Settings.",
+  "backendType": "lua"
+}

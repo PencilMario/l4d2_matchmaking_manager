@@ -37,7 +37,9 @@ public sealed class WarmupAgentContainerService(
             "LIBGL_ALWAYS_SOFTWARE=1",
             "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
             "STEAM_API_LIBRARY_PATH=" + options.SteamApiLibraryPath,
+            "STEAM_DOWNLOAD_REGION_ID=" + LegacySteamRegionId(agent.DownloadRegion),
             "STEAM_DOWNLOAD_REGION=" + (agent.DownloadRegion ?? string.Empty),
+            "STEAM_DOWNLOAD_REGION_STATUS_FILE=/home/default/.steam/steam/config/steam-download-region",
         };
         if (agent.KeepVncAlive && settings is not null)
         {
@@ -98,5 +100,16 @@ public sealed class WarmupAgentContainerService(
 
     public Task DeleteAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
         runtime.DeleteAsync(agent.ContainerId ?? $"l4d2-agent-{agent.Id:N}", false, cancellationToken);
+
+    private static string LegacySteamRegionId(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        null or "" => string.Empty,
+        "cng" or "shanghai" => "47",
+        "hongkong" => "33",
+        "qingdao" => "168",
+        "tokyo" => "32",
+        _ when int.TryParse(value, out var regionId) && regionId >= 0 => regionId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        _ => string.Empty,
+    };
 
 }

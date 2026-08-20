@@ -18,8 +18,13 @@ if ($fixture -notmatch '"AutoUpdateBehavior"\s+"0"') {
 $initializer = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '91-enable-steam-supervisor.sh')
 if ($initializer -notmatch 'set_l4d2_update_policy' -or
     $initializer -notmatch '"AutoUpdateBehavior" "1"' -or
-    $initializer -notmatch 'STEAM_DOWNLOAD_REGION') {
-    throw 'The initializer must set AppID 550 to update-on-launch and persist the optional region account-locally.'
+    $initializer -notmatch 'STEAM_DOWNLOAD_REGION_ID' -or
+    $initializer -notmatch 'steam_download_region_id') {
+    throw 'The initializer must set AppID 550 to update-on-launch and pass the optional region target to Millennium.'
+}
+
+if ($initializer -match 'set_download_region' -or $initializer -match '"DownloadRegion"') {
+    throw 'The initializer must not edit the legacy DownloadRegion VDF value.'
 }
 
 if ($initializer -notmatch '"DisableShaderCache" "1"') {

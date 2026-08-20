@@ -9,6 +9,7 @@ import {
   TabKey,
   TargetServer,
   WarmupAgent,
+  SteamDownloadRegion,
 } from './types';
 import {
   ApiService,
@@ -25,11 +26,15 @@ import { TargetServersView } from './components/TargetServersView';
 import { WarmupAgentsView } from './components/WarmupAgentsView';
 import { LobbyLookupView } from './components/LobbyLookupView';
 import { GlobalSettingsView } from './components/GlobalSettingsView';
+import { loadSteamDownloadRegions } from './services/steam-download-regions';
 
 export default function App() {
   const [token, setToken] = useState<string>(() => getAuthToken());
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(Boolean(token));
   const [authError, setAuthError] = useState<string | null>(null);
+  const [steamRegions, setSteamRegions] = useState<SteamDownloadRegion[]>([]);
+  const [steamRegionsLoading, setSteamRegionsLoading] = useState(false);
+  const [steamRegionsError, setSteamRegionsError] = useState<string | null>(null);
 
   // App State Data
   const [state, setState] = useState<AppStateData>({
@@ -63,6 +68,31 @@ export default function App() {
   useEffect(() => {
     setUnauthorizedHandler(handleUnauthorized);
   }, [handleUnauthorized]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setSteamRegionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSteamRegionsLoading(true);
+    setSteamRegionsError(null);
+    void loadSteamDownloadRegions(() => ApiService.fetchSteamDownloadRegions())
+      .then((regions) => {
+        if (!cancelled) setSteamRegions(regions);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setSteamRegionsError(error instanceof Error ? error.message : '读取下载区域失败');
+      })
+      .finally(() => {
+        if (!cancelled) setSteamRegionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, token]);
 
   // Synchronize state fetcher (used by both initial load, 5s polling, and manual refresh)
   const refreshData = useCallback(async (isManual = false) => {
@@ -327,6 +357,7 @@ export default function App() {
                 agents={state.agents}
                 attempts={state.attempts}
                 observations={state.observations}
+                steamRegions={steamRegions}
                 onNavigateToTarget={handleNavigateToTarget}
                 onNavigateTab={(tab) => setActiveTab(tab)}
               />
@@ -360,6 +391,9 @@ export default function App() {
                 onOpenVncSession={handleOpenAgentVncSession}
                 onDeleteAgent={handleDeleteAgent}
                 isRefreshing={state.isRefreshing}
+                steamRegions={steamRegions}
+                isSteamRegionsLoading={steamRegionsLoading}
+                steamRegionsError={steamRegionsError}
               />
             )}
 

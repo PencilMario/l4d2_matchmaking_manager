@@ -14,6 +14,11 @@ export type AttemptPhase =
 
 export type OperationMode = 'standard' | 'direct_lobby' | 'reservation_hold' | string;
 
+export interface SteamDownloadRegion {
+  id: number;
+  name: string;
+}
+
 export interface TargetServer {
   id: string;
   endpoint: string;

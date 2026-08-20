@@ -36,3 +36,6 @@ research/SteamLobbyProbe/SteamLobbyProbe-*.zip
 
 # Externally supplied ASF source checkout
 research/vendor/
+
+# Local Steam Region Bridge PoC checkout
+research/SteamRegionBridge/

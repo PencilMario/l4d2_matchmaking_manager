@@ -49,6 +49,49 @@ public sealed class ProbeStatusServiceTests
     }
 
     [TestMethod]
+    public void SteamDownloadRegionReaderPrefersTheMillenniumStateFile()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "l4d2-region-reader-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var statePath = Path.Combine(directory, "steam-download-region");
+        var legacyPath = Path.Combine(directory, "config.vdf");
+        File.WriteAllText(statePath, "168\n");
+        File.WriteAllText(legacyPath, "                \"DownloadRegion\" \"la\"\n");
+
+        try
+        {
+            var reader = new SteamDownloadRegionReader(statePath, legacyPath);
+
+            Assert.AreEqual("168", reader.Read());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void SteamDownloadRegionReaderFallsBackToTheLegacyConfig()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "l4d2-region-reader-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var statePath = Path.Combine(directory, "steam-download-region");
+        var legacyPath = Path.Combine(directory, "config.vdf");
+        File.WriteAllText(legacyPath, "                \"DownloadRegion\" \"la\"\n");
+
+        try
+        {
+            var reader = new SteamDownloadRegionReader(statePath, legacyPath);
+
+            Assert.AreEqual("la", reader.Read());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task GetAsyncMarksSteamApiInitializationFailureAsFailed()
     {
         var service = new ProbeStatusService(

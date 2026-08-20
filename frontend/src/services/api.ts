@@ -1,4 +1,4 @@
-import type { LobbyLookupResult } from '../types';
+import type { LobbyLookupResult, SteamDownloadRegion } from '../types';
 
 export const AUTH_TOKEN_KEY = 'l4d2_mgmt_access_token';
 let token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
@@ -14,6 +14,7 @@ export function setUnauthorizedHandler(handler: () => void) { onUnauthorized = h
 type RawServer = { id: string; endpoint: string; requiresReservation: boolean; priority: number; maxConcurrentWarmups: number; attemptWindowSeconds: number; playerTarget: number; enabled: boolean; hasRconCredentials: boolean; createdAt: string; updatedAt: string };
 type RawObservation = { targetServerId: string; status: string; serverName: string | null; playerCount: number | null; maxPlayers: number | null; observedAt: string | null };
 type RawAgent = { id: string; name: string; status: string; ready?: boolean; downloadRegion: string | null; keepVncAlive: boolean; noVncPort: number; createdAt: string; updatedAt: string };
+type RawSteamDownloadRegion = { id: number; name: string };
 type AgentVncSession = { url: string; expiresAt: string };
 type RawWarmup = { targetServerId: string; targetEndpoint: string; warmupAgentId: string; warmupAgentName: string; operationId: string; lobbyId: string | null; mode: string; state: string; phase: string; startedAt: string; observedAt: string; deadline: string; remainingSeconds: number };
 
@@ -33,6 +34,11 @@ function serverInput(data: any) {
 }
 
 export const ApiService = {
+  async fetchSteamDownloadRegions(): Promise<SteamDownloadRegion[]> {
+    const result = await request<RawSteamDownloadRegion[]>('/v1/steam/download-regions');
+    if (!result.data) throw new Error(result.error || '读取 Steam 下载区域失败');
+    return result.data;
+  },
   async fetchAllState(): Promise<any> {
     const [servers, agents, warmups, observations, health] = await Promise.all([
       request<RawServer[]>('/v1/servers'), request<RawAgent[]>('/v1/agents'), request<RawWarmup[]>('/v1/warmups'), request<RawObservation[]>('/v1/servers/observations'), request<{ status: string }>('/healthz'),
