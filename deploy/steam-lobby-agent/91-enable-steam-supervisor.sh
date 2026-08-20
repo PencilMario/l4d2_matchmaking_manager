@@ -2,6 +2,10 @@
 set -e
 
 if [ "${ENABLE_STEAM:-}" = "true" ]; then
+    # Allow the Agent service user (a member of sudo) to control only Supervisor.
+    sed -i 's|^;chmod=0700.*$|chmod=0660|' /etc/supervisord.conf
+    sed -i 's|^;chown=nobody:nogroup.*$|chown=root:sudo|' /etc/supervisord.conf
+
     steam_root="${USER_HOME:-/home/default}/.steam/steam"
     steam_runtime_root="${USER_HOME:-/home/default}/.steam"
     library_directory="${steam_root}/steamapps"

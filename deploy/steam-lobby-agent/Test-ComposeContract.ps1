@@ -54,6 +54,14 @@ if ($steamInit -notmatch 'autostart=true') {
     throw 'The Steam supervisor initializer must enable the Steam service.'
 }
 
+if ($steamInit -notmatch 'chmod=0660' -or $steamInit -notmatch 'chown=root:sudo') {
+    throw 'The Steam supervisor socket must grant the Agent service group-only control access.'
+}
+
+if ($steamInit -match 'chmod=0666') {
+    throw 'The Steam supervisor socket must not be writable by every container user.'
+}
+
 if ($steamInit -notmatch 'STEAM_SHARED_LIBRARY_PATH' -or $steamInit -notmatch 'libraryfolders\.vdf') {
     throw 'The Steam supervisor initializer must configure the shared Steam library for each account.'
 }
