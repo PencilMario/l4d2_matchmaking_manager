@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path $PSScriptRoot 'millennium/steam-region-bridge'
 $plugin = Join-Path $root 'plugin.json'
 $backend = Join-Path $root 'backend/main.lua'
+$frontend = Join-Path $root 'frontend/index.tsx'
 $bundle = Join-Path $root '.millennium/Dist/index.js'
 $initializer = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '91-enable-steam-supervisor.sh')
 
@@ -14,6 +15,7 @@ foreach ($path in @($plugin, $backend, $bundle)) {
 
 $pluginJson = Get-Content -Raw -LiteralPath $plugin | ConvertFrom-Json
 $backendContent = Get-Content -Raw -LiteralPath $backend
+$frontendContent = Get-Content -Raw -LiteralPath $frontend
 $bundleContent = Get-Content -Raw -LiteralPath $bundle
 if ($pluginJson.name -ne 'steam-region-bridge' -or $pluginJson.backendType -ne 'lua') {
     throw 'The bridge must be a Lua Millennium plugin named steam-region-bridge.'
@@ -31,11 +33,43 @@ if ($backendContent -notmatch 'type\(params\) == "table"' -or
     throw 'The bridge backend must accept both Millennium callable argument shapes when recording a region.'
 }
 
+if ($backendContent -notmatch 'local json = require\("json"\)' -or
+    $backendContent -notmatch 'return json\.encode\(\{\s*targetRegionId' -or
+    $backendContent -notmatch 'return json\.encode\(\{\s*success') {
+    throw 'The bridge backend must JSON-encode object results because Millennium Lua RPC only transports scalar return values.'
+}
+
+if ($backendContent -notmatch 'steam-region-bridge-region' -or
+    $backendContent -notmatch 'read_file' -or
+    $initializer -notmatch 'millennium_region_target_file' -or
+    $initializer -notmatch 'steam-region-bridge-region' -or
+    $backendContent -notmatch 'configured_home = "/home/default"' -or
+    $backendContent -notmatch 'Steam Region Bridge config target') {
+    throw 'The initializer and bridge backend must exchange the target region through an account-local Millennium config file.'
+}
+
 if ($bundleContent -notmatch 'SetSetting' -or $bundleContent -notmatch '64072' -or
     $bundleContent -notmatch 'vecValidDownloadRegions' -or
     $bundleContent -notmatch 'get_region_bridge_config' -or
     $bundleContent -notmatch 'record_region_state') {
     throw 'The bridge bundle must use SteamClient.Settings, wait for Steam regions, and read backend configuration.'
+}
+
+if ($bundleContent -notmatch 'SetSetting target=' -or
+    $bundleContent -notmatch 'SetSetting observed=' -or
+    $bundleContent -notmatch 'result=') {
+    throw 'The deployed bridge bundle must log the Steam SetSetting result and the post-write observed region.'
+}
+
+if ($frontendContent -notmatch 'setResult = await' -or
+    $frontendContent -notmatch 'setResult !== true' -or
+    $frontendContent -notmatch 'currentRegionId !== targetRegionId') {
+    throw 'The bridge must verify both the Steam SetSetting result and the post-write region state.'
+}
+
+if ($frontendContent -notmatch 'JSON\.parse' -or
+    $frontendContent -notmatch 'targetRegionId') {
+    throw 'The bridge must decode JSON-serialized Millennium callable results before reading targetRegionId.'
 }
 
 if ($initializer -match 'set_download_region' -or $initializer -match '"DownloadRegion"') {

@@ -13,3 +13,4 @@
 - [管理前端运行说明](../../frontend/README.md)
 - [系统概览暖服层级展示设计](specs/2026-08-19-overview-warmup-hierarchy-design.md)
 - [系统概览暖服层级展示实施计划](work/2026-08-19-overview-warmup-hierarchy/30-plan.md)
+- [Steam 下载区域与 Millennium Bridge 修复证据](work/2026-08-20-steam-download-region-fix/50-evidence.md)

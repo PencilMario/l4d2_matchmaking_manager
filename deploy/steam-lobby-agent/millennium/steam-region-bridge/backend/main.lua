@@ -1,5 +1,6 @@
 local logger = require("logger")
 local millennium = require("millennium")
+local json = require("json")
 local utils = require("utils")
 
 local function home_directory()
@@ -33,14 +34,29 @@ local function parse_region_id(value)
 end
 
 local function configured_region_id()
-    return parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION_ID"))
+    local configured_home = utils.getenv("USER_HOME")
+    if configured_home == nil or configured_home == "" then
+        configured_home = "/home/default"
+    end
+    local configured_file = configured_home .. "/.config/millennium/steam-region-bridge-region"
+    local configured_value = utils.read_file(configured_file)
+    local file_region_id = parse_region_id(configured_value and utils.trim(configured_value))
+    local environment_region_id = parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION_ID"))
         or parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION"))
+    local target_region_id = file_region_id or environment_region_id
+    logger:info(
+        "Steam Region Bridge config target " .. tostring(target_region_id)
+            .. " file " .. configured_file
+            .. " fileRegion " .. tostring(file_region_id)
+            .. " environmentRegion " .. tostring(environment_region_id)
+    )
+    return target_region_id
 end
 
 function get_region_bridge_config(_params)
-    return {
+    return json.encode({
         targetRegionId = configured_region_id(),
-    }
+    })
 end
 
 function record_region_state(params)
@@ -49,16 +65,16 @@ function record_region_state(params)
         region_id = tonumber(params.regionId)
     end
     if region_id == nil or region_id < 0 or region_id > 2147483647 or region_id ~= math.floor(region_id) then
-        return { success = false, error = "invalid_region_id" }
+        return json.encode({ success = false, error = "invalid_region_id" })
     end
 
     local ok, error_message = utils.write_file(status_file_path(), tostring(math.floor(region_id)) .. "\n")
     if not ok then
         logger:error("Steam Region Bridge could not persist the current region: " .. tostring(error_message))
-        return { success = false, error = "state_write_failed" }
+        return json.encode({ success = false, error = "state_write_failed" })
     end
 
-    return { success = true, currentRegionId = math.floor(region_id) }
+    return json.encode({ success = true, currentRegionId = math.floor(region_id) })
 end
 
 local function on_load()

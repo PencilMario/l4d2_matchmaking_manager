@@ -36,6 +36,14 @@ if ($dockerfile -notmatch 'libssl3t64:i386') {
     throw 'The Agent image must include the 32-bit OpenSSL runtime required by Millennium.'
 }
 
+if ($dockerfile -notmatch 'MILLENNIUM_ARCHIVE_URL' -or
+    $dockerfile -notmatch 'millennium-v3\.4\.1-linux-x86_64\.tar\.gz' -or
+    $dockerfile -notmatch '5f2f6f73915523a7b3f7ecc500dd3e6ed0e5c88a1b1db6584c40f173aa9d13d4' -or
+    $dockerfile -notmatch 'tar --extract --gzip' -or
+    $dockerfile -notmatch '/usr/lib/millennium') {
+    throw 'The Agent image must preinstall and checksum the pinned Millennium runtime so startup does not depend on a live download.'
+}
+
 if ($dockerfile -notmatch 'COPY src/L4d2Matchmaking.Contracts/L4d2Matchmaking.Contracts\.csproj src/L4d2Matchmaking.Contracts/') {
     throw 'The Docker build must copy shared Contracts before restoring the Agent and Probe projects.'
 }

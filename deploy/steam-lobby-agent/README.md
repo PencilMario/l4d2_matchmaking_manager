@@ -33,8 +33,9 @@ Steam 登录和 Steam Guard。
 
 每个账号的 Steam 配置均写入 `DisableShaderCache=1`。可在 Core 创建/更新 Agent 时设置
 `downloadRegion`；更新后需调用 Agent 的 `recreate` 路由，令新容器取得新的数字区域 ID。
-容器首次初始化时会校验并安装固定版本的 Millennium，然后自动安装并启用
-`steam-region-bridge`。插件使用 Steam 内部 `SteamClient.Settings` 接口设置
+镜像构建时会校验并预装固定版本的 Millennium，容器初始化时只在旧镜像缺少运行库时
+回退下载同一固定版本，然后自动安装并启用 `steam-region-bridge`。插件使用 Steam
+内部 `SteamClient.Settings` 接口设置
 `download_region`，不会编辑 `config.vdf`；实际区域 ID 写入账号私有的
 `~/.steam/steam/config/steam-download-region`，Agent 健康探针优先读取该状态文件。
 `STEAM_DOWNLOAD_REGION` 仅保留为旧配置兼容回退。

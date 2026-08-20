@@ -17,6 +17,15 @@ const recordRegionState = callable<any>('record_region_state');
 type Region = { nRegionID: number; strRegionName: string };
 type RegionInfo = { currentRegionId: number | null; regions: Region[] };
 
+function decodeCallableResult<T>(value: T): T {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return value;
+  }
+}
+
 function encodeDownloadRegionSetting(regionId: number): string {
   if (!Number.isInteger(regionId) || regionId < 0 || regionId > MAX_INT32) {
     throw new Error('Download region ID must be an int32');
@@ -70,16 +79,36 @@ async function waitForSteamSettings(expectedRegionId: number | null = null): Pro
   return info;
 }
 
+async function setSteamDownloadRegion(regionId: number, currentRegionId: number | null): Promise<RegionInfo> {
+  const setResult = await (globalThis as any).SteamClient.Settings.SetSetting(
+    encodeDownloadRegionSetting(regionId),
+  );
+  console.info(
+    `[steam-region-bridge] SetSetting target=${regionId} current=${currentRegionId} result=${String(setResult)}`,
+  );
+  if (setResult !== true) {
+    throw new Error(`Steam rejected download region ${regionId}`);
+  }
+
+  const info = await waitForSteamSettings(regionId);
+  console.info(
+    `[steam-region-bridge] SetSetting observed=${String(info.currentRegionId)} target=${regionId}`,
+  );
+  if (info.currentRegionId !== regionId) {
+    throw new Error(`Steam did not apply download region ${regionId}`);
+  }
+  return info;
+}
+
 async function synchronizeConfiguredRegion(): Promise<RegionInfo> {
-  const config = await getBridgeConfig({});
+  const config = decodeCallableResult(await getBridgeConfig({}));
   let info = await waitForSteamSettings();
   const targetRegionId = Number.isInteger(config?.targetRegionId) ? Number(config.targetRegionId) : null;
   if (targetRegionId !== null) {
     const target = info.regions.find((region) => region.nRegionID === targetRegionId);
     if (!target) throw new Error(`Steam download region ${targetRegionId} is not available`);
     if (info.currentRegionId !== targetRegionId) {
-      await (globalThis as any).SteamClient.Settings.SetSetting(encodeDownloadRegionSetting(targetRegionId));
-      info = await waitForSteamSettings(targetRegionId);
+      info = await setSteamDownloadRegion(targetRegionId, info.currentRegionId);
     }
   }
 
@@ -145,7 +174,7 @@ function RegionBridge() {
   const save = async (option: any) => {
     try {
       const nextId = Number(option.data);
-      await (globalThis as any).SteamClient.Settings.SetSetting(encodeDownloadRegionSetting(nextId));
+      await setSteamDownloadRegion(nextId, regionId);
       await synchronizeConfiguredRegionOnce(true);
       refresh();
     } catch (error) {

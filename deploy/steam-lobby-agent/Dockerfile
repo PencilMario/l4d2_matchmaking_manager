@@ -22,6 +22,21 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libssl3t64:i386 \
     && rm -rf /var/lib/apt/lists/*
 
+ARG MILLENNIUM_ARCHIVE_URL=https://github.com/SteamClientHomebrew/Millennium/releases/download/v3.4.1/millennium-v3.4.1-linux-x86_64.tar.gz
+ARG MILLENNIUM_ARCHIVE_SHA256=5f2f6f73915523a7b3f7ecc500dd3e6ed0e5c88a1b1db6584c40f173aa9d13d4
+RUN set -eu \
+    && archive_file="$(mktemp /tmp/millennium-v3.4.1.XXXXXX.tar.gz)" \
+    && extract_directory="$(mktemp -d /tmp/millennium-v3.4.1.XXXXXX)" \
+    && curl --fail --location --retry 3 --output "${archive_file}" "${MILLENNIUM_ARCHIVE_URL}" \
+    && printf '%s  %s\n' "${MILLENNIUM_ARCHIVE_SHA256}" "${archive_file}" | sha256sum --check --status \
+    && tar --extract --gzip --file "${archive_file}" --directory "${extract_directory}" \
+    && test -d "${extract_directory}/usr/lib/millennium" \
+    && install -d -m 0755 /usr/lib/millennium \
+    && cp -a "${extract_directory}/usr/lib/millennium/." /usr/lib/millennium/ \
+    && chmod 0755 /usr/lib/millennium/* \
+    && rm -f "${archive_file}" \
+    && rm -rf "${extract_directory}"
+
 COPY --from=build /out/agent/ /opt/l4d2-agent/
 COPY --from=build /out/probe/ /opt/steam-lobby-probe/
 COPY deploy/steam-lobby-agent/l4d2-lobby-agent.ini /etc/supervisor.d/l4d2-lobby-agent.ini
