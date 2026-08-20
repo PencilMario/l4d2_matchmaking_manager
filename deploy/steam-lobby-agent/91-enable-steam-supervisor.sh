@@ -15,7 +15,6 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     millennium_plugin_directory="${USER_HOME:-/home/default}/.local/share/millennium/plugins/steam-region-bridge"
     millennium_config_directory="${USER_HOME:-/home/default}/.config/millennium"
     millennium_config_file="${millennium_config_directory}/config.json"
-    millennium_region_target_file="${millennium_config_directory}/steam-region-bridge-region"
     millennium_plugin_source="${STEAM_REGION_BRIDGE_SOURCE:-/opt/steam-region-bridge}"
     millennium_archive_url="https://github.com/SteamClientHomebrew/Millennium/releases/download/v3.4.1/millennium-v3.4.1-linux-x86_64.tar.gz"
     millennium_archive_sha256="5f2f6f73915523a7b3f7ecc500dd3e6ed0e5c88a1b1db6584c40f173aa9d13d4"
@@ -97,13 +96,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     install_millennium
     install_steam_region_bridge
 
-    temporary_file="$(mktemp "${millennium_region_target_file}.tmp.XXXXXX")"
-    printf '%s\n' "${steam_download_region_id}" > "${temporary_file}"
-    chown "${PUID:-1000}:${PGID:-1000}" "${temporary_file}"
-    chmod 0600 "${temporary_file}"
-    mv "${temporary_file}" "${millennium_region_target_file}"
-
-    # Retain the environment target for compatibility; Millennium plugins use the account-local file above.
+    # The target is shared by every account through the Agent container environment.
     export STEAM_DOWNLOAD_REGION_ID="${steam_download_region_id}"
     export STEAM_DOWNLOAD_REGION="${legacy_steam_download_region}"
     export STEAM_DOWNLOAD_REGION_STATUS_FILE="${steam_region_status_file}"

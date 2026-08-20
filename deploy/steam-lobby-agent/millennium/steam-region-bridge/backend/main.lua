@@ -33,10 +33,7 @@ local function parse_region_id(value)
 end
 
 local function configured_region_id()
-    local configured_file = home_directory() .. "/.config/millennium/steam-region-bridge-region"
-    local configured_value = utils.read_file(configured_file)
-    return parse_region_id(configured_value and utils.trim(configured_value))
-        or parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION_ID"))
+    return parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION_ID"))
         or parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION"))
 end
 
