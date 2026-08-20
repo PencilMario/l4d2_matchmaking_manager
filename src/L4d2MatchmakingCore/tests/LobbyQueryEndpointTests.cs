@@ -5,6 +5,7 @@ using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Profiles;
+using L4d2MatchmakingCore.Settings;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,18 @@ namespace L4d2MatchmakingCore.Tests;
 [DoNotParallelize]
 public sealed class LobbyQueryEndpointTests
 {
+    [TestMethod]
+    public async Task ProductionServicesRegisterSteamWebApiKeyProviderForLobbyProfileResolution()
+    {
+        using var environment = new TestEnvironment();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+        await using var factory = new QueryFactory(new FakeSelector(agent), new FakeClient(Snapshot()));
+
+        var provider = factory.Services.GetService<ISteamWebApiKeyProvider>();
+
+        Assert.IsNotNull(provider);
+    }
+
     [TestMethod]
     public async Task QueryUsesHealthyAgentWithoutExposingItsIdentity()
     {

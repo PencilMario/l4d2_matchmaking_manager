@@ -29,6 +29,8 @@ builder.Services.AddSingleton<ISecretProtector>(services => services.GetRequired
 builder.Services.AddScoped<TargetServerService>();
 builder.Services.AddScoped<TargetServerObservationService>();
 builder.Services.AddScoped<GlobalSettingsService>();
+builder.Services.AddScoped<ISteamWebApiKeyProvider>(services =>
+    services.GetRequiredService<GlobalSettingsService>());
 builder.Services.AddHttpClient<ISteamProfileService, SteamProfileService>(client =>
 {
     client.BaseAddress = new Uri("https://api.steampowered.com");
