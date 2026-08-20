@@ -94,6 +94,18 @@ export function formatAgentStatus(status?: AgentStatus | string, ready?: boolean
         canEdit: true,
         isQuarantined: false,
       };
+    case 'restarting':
+      return {
+        label: '正在恢复',
+        badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+        dotClass: 'bg-amber-500',
+        canStart: false,
+        canStop: false,
+        canRebuild: false,
+        canDelete: true,
+        canEdit: true,
+        isQuarantined: false,
+      };
     case 'created':
       return {
         label: '已创建',

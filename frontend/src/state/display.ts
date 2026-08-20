@@ -6,7 +6,7 @@ export const observationLabels: Record<TargetServerObservation['status'], string
 };
 
 export const agentStatusLabels: Record<string, string> = {
-  running: '运行中', stopped: '已停止', created: '已创建', quarantined: '已隔离',
+  running: '运行中', restarting: '正在恢复', stopped: '已停止', created: '已创建', quarantined: '已隔离',
 };
 
 export const warmupStateLabels: Record<string, string> = {
@@ -24,6 +24,8 @@ export function labelAgentStatus(agent: WarmupAgent) { return agentStatusLabels[
 
 const errors: Record<string, string> = {
   target_server_drain_failed: '相关暖服任务未能全部停止，操作尚未完成，请检查任务状态后重试。',
+  global_warmup_drain_failed: '暖服和调度仍保持禁用，但有任务未能确认停止，请检查任务状态后重试。',
+  global_warmup_drain_pending: '暖服和调度仍保持禁用，仍有任务未完成停止确认，请处理任务后重试。',
   invalid_target_server_endpoint: '服务器地址格式不正确，请输入主机名或 IPv4 地址加游戏端口。',
   invalid_target_server_configuration: '服务器调度配置无效，请检查各项数值。',
   invalid_rcon_password: 'RCON 密码无效。', rcon_requires_reservation: '只有需要大厅预留的服务器可以配置 RCON 密码。',

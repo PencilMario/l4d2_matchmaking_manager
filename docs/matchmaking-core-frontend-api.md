@@ -50,6 +50,8 @@ GET    /v1/settings/vnc-proxy
 PUT    /v1/settings/vnc-proxy
 GET    /v1/settings/steam-web-api-key
 PUT    /v1/settings/steam-web-api-key
+GET    /v1/settings/warmup-scheduling
+PUT    /v1/settings/warmup-scheduling
 
 GET    /v1/warmups
 GET    /v1/lobbies/{lobbyId}
@@ -587,6 +589,22 @@ Content-Type: application/json; charset=utf-8
 全局设置接口都需要鉴权。旧的 `GET/PUT /v1/settings` 保留给已部署的旧客户端兼容使用；
 新前端必须使用下列两个独立资源，避免保存 VNC 代理时覆盖 Steam Web API Key，或反之。
 
+### 组合设置与兼容 PUT
+
+`GET /v1/settings` 返回完整的非敏感设置快照：
+
+```json
+{
+  "steamProxyUrl": "http://127.0.0.1:7890/",
+  "steamWebApiKeyConfigured": true,
+  "warmupSchedulingEnabled": true,
+  "updatedAt": "2026-08-20T10:00:00+00:00"
+}
+```
+
+旧的 `PUT /v1/settings` 仍可写入 VNC 代理和 Steam Web API Key，但不会修改
+`warmupSchedulingEnabled`。新前端的暖服开关必须使用下面的专用资源。
+
 ### VNC 代理
 
 `GET /v1/settings/vnc-proxy` 返回当前 VNC 代理设置：
@@ -638,6 +656,46 @@ Content-Type: application/json; charset=utf-8
 
 `clear` 为 `true` 时不得同时提交非空 `apiKey`，否则返回
 `400 "steam_web_api_key_update_conflict"`。空白 `apiKey` 且未设置 `clear` 不改变已保存密钥。
+
+### 全局暖服和调度开关
+
+`GET /v1/settings/warmup-scheduling` 返回当前持久化状态：
+
+```json
+{
+  "enabled": true,
+  "updatedAt": "2026-08-20T10:00:00+00:00"
+}
+```
+
+`PUT /v1/settings/warmup-scheduling` 接受：
+
+```json
+{
+  "enabled": false
+}
+```
+
+关闭时 Core 会先持久化 `enabled: false`，再排空全部 `active`、`uncertain` 和
+`restart_pending` 暖服任务。对 `active`/`uncertain` 会调用 Agent 的停止操作；确认停止后
+将任务标记为 `completed` 并释放关联 reservation lease。`restart_pending` 不再发起远程
+停止，直接完成清理。成功停止的 Agent 会通过既有 Steam 恢复流程进入 `restarting`；Core
+不会停止、删除或重建 Warm-up Agent 容器。
+
+禁用状态下调度器的恢复和每五秒 tick 都不会读取 A2S、选择目标或启动新操作。重新提交
+`{"enabled": true}` 只会从已经清空的任务状态恢复调度，不会恢复关闭前的旧任务。
+
+如果任一可停止任务无法确认，接口返回：
+
+```http
+HTTP/1.1 409 Conflict
+Content-Type: application/json; charset=utf-8
+
+"global_warmup_drain_failed"
+```
+
+`global_warmup_drain_pending` 也使用 `409`，表示仍有未确认的任务。两种冲突都会保留
+未确认任务供后续重试，并保持全局开关为禁用；前端应刷新设置、Agent 和暖服快照后再重试。
 
 ## Lobby 查询
 

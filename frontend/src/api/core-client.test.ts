@@ -66,6 +66,24 @@ describe('CoreClient', () => {
     }));
   });
 
+  it('uses the dedicated endpoint for global warmup scheduling', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ enabled: false, updatedAt: '2026-08-20T00:00:00Z' }))
+      .mockResolvedValueOnce(jsonResponse({ enabled: true, updatedAt: '2026-08-20T00:00:01Z' }));
+    const client = new CoreClient(() => 'test-token', fetcher);
+
+    await client.getWarmupScheduling();
+    await client.updateWarmupScheduling({ enabled: true });
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, '/v1/settings/warmup-scheduling', expect.objectContaining({
+      method: 'GET',
+    }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, '/v1/settings/warmup-scheduling', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ enabled: true }),
+    }));
+  });
+
   it('calls the browser fetch with its global context by default', async () => {
     const browserFetch = vi.fn(function (this: typeof globalThis) {
       expect(this).toBe(globalThis);

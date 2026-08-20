@@ -1,21 +1,29 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { ConfirmDialog } from './common/ConfirmDialog';
+import { Switch } from './common/Switch';
+import { describeError } from '../state/display';
 
-type Settings = { steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; updatedAt: string };
+type Settings = { steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; warmupSchedulingEnabled: boolean; updatedAt: string };
 type ProxySettings = { proxyUrl: string | null; updatedAt: string };
 type KeySettings = { configured: boolean; updatedAt: string };
+type WarmupSchedulingSettings = { enabled: boolean; updatedAt: string };
 
 export function GlobalSettingsView({
   load,
   saveProxy,
   saveKey,
+  saveWarmupScheduling,
 }: {
   load: () => Promise<Settings>;
   saveProxy: (input: { proxyUrl: string | null }) => Promise<ProxySettings>;
   saveKey: (input: { apiKey?: string; clear?: boolean }) => Promise<KeySettings>;
+  saveWarmupScheduling: (input: { enabled: boolean }) => Promise<WarmupSchedulingSettings>;
 }) {
   const [proxy, setProxy] = useState('');
   const [steamWebApiKey, setSteamWebApiKey] = useState('');
   const [keyConfigured, setKeyConfigured] = useState(false);
+  const [warmupSchedulingEnabled, setWarmupSchedulingEnabled] = useState(true);
+  const [confirmDisable, setConfirmDisable] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,6 +37,7 @@ export function GlobalSettingsView({
         if (!active) return;
         setProxy(value.steamProxyUrl ?? '');
         setKeyConfigured(value.steamWebApiKeyConfigured);
+        setWarmupSchedulingEnabled(value.warmupSchedulingEnabled);
         setUpdatedAt(value.updatedAt);
       })
       .catch(() => {
@@ -53,7 +62,7 @@ export function GlobalSettingsView({
       setUpdatedAt(value.updatedAt);
       setMessage('VNC 代理已保存。');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '保存 VNC 代理失败。');
+      setError(describeError(caught).message);
     } finally {
       setSaving(false);
     }
@@ -72,7 +81,7 @@ export function GlobalSettingsView({
       setUpdatedAt(value.updatedAt);
       setMessage('Steam Web API Key 已保存。');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '保存 Steam Web API Key 失败。');
+      setError(describeError(caught).message);
     } finally {
       setSaving(false);
     }
@@ -89,10 +98,34 @@ export function GlobalSettingsView({
       setUpdatedAt(value.updatedAt);
       setMessage('Steam Web API Key 已清除。');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '清除 Steam Web API Key 失败。');
+      setError(describeError(caught).message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateWarmupScheduling = async (enabled: boolean) => {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const value = await saveWarmupScheduling({ enabled });
+      setWarmupSchedulingEnabled(value.enabled);
+      setUpdatedAt(value.updatedAt);
+      setMessage(value.enabled ? '暖服和调度已启用。' : '暖服和调度已禁用，当前任务已清空。');
+    } catch (caught) {
+      setError(describeError(caught).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleWarmupScheduling = () => {
+    if (warmupSchedulingEnabled) {
+      setConfirmDisable(true);
+      return;
+    }
+    void updateWarmupScheduling(true);
   };
 
   if (loading) return <section><h1 className="text-xl font-bold text-slate-900">全局设置</h1><p className="mt-4 text-sm text-slate-500">正在读取全局设置</p></section>;
@@ -100,6 +133,16 @@ export function GlobalSettingsView({
   return <section className="space-y-4">
     <h1 className="text-xl font-bold text-slate-900">全局设置</h1>
     <div className="max-w-2xl rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+        <Switch
+          checked={warmupSchedulingEnabled}
+          description="关闭后会停止并清空当前暖服任务，暖服节点容器保持运行；重新开启后从空任务状态恢复调度。"
+          disabled={saving}
+          id="global-warmup-scheduling"
+          label="全局启用暖服和调度"
+          onChange={toggleWarmupScheduling}
+        />
+      </div>
       <h2 className="text-sm font-semibold text-slate-900">Steam 设置</h2>
       <p className="mt-1 text-xs leading-5 text-slate-500">VNC 代理和 Steam Web API Key 分别保存；API Key 仅由控制服务加密保存，用于补全大厅成员的公开资料。</p>
       <form className="space-y-3" onSubmit={submitProxy}>
@@ -123,5 +166,15 @@ export function GlobalSettingsView({
       {message && <p className="text-xs text-emerald-700">{message}</p>}
       {updatedAt && <p className="mt-4 text-[11px] text-slate-400">上次更新：{new Date(updatedAt).toLocaleString('zh-CN', { hour12: false })}</p>}
     </div>
+    <ConfirmDialog
+      confirmLabel="确认禁用"
+      description="控制服务会停止并清空所有当前暖服任务。暖服节点容器不会停止，之后可以重新启用调度。"
+      intent="danger"
+      isLoading={saving}
+      isOpen={confirmDisable}
+      onClose={() => setConfirmDisable(false)}
+      onConfirm={() => { setConfirmDisable(false); void updateWarmupScheduling(false); }}
+      title="确认禁用暖服和调度"
+    />
   </section>;
 }

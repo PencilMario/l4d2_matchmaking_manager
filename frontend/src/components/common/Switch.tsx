@@ -30,6 +30,7 @@ export const Switch: React.FC<SwitchProps> = ({
           type="checkbox"
           checked={checked}
           disabled={disabled}
+          aria-label={label}
           onChange={(e) => onChange(e.target.checked)}
           className="sr-only peer"
         />

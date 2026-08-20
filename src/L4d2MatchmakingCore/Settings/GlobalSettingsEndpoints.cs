@@ -11,6 +11,8 @@ public static class GlobalSettingsEndpoints
         group.MapPut("/vnc-proxy", UpdateVncProxyAsync);
         group.MapGet("/steam-web-api-key", GetSteamWebApiKeyAsync);
         group.MapPut("/steam-web-api-key", UpdateSteamWebApiKeyAsync);
+        group.MapGet("/warmup-scheduling", GetWarmupSchedulingAsync);
+        group.MapPut("/warmup-scheduling", UpdateWarmupSchedulingAsync);
         return endpoints;
     }
 
@@ -68,6 +70,26 @@ public static class GlobalSettingsEndpoints
         catch (ArgumentException exception)
         {
             return Results.BadRequest(exception.Message);
+        }
+    }
+
+    private static Task<WarmupSchedulingSettingsResponse> GetWarmupSchedulingAsync(
+        GlobalSettingsService service,
+        CancellationToken cancellationToken) => service.GetWarmupSchedulingAsync(cancellationToken);
+
+    private static async Task<IResult> UpdateWarmupSchedulingAsync(
+        UpdateWarmupSchedulingRequest request,
+        GlobalSettingsService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Results.Ok(await service.UpdateWarmupSchedulingAsync(request, cancellationToken));
+        }
+        catch (InvalidOperationException exception) when (
+            exception.Message is "global_warmup_drain_failed" or "global_warmup_drain_pending")
+        {
+            return Results.Conflict(exception.Message);
         }
     }
 }

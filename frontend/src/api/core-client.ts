@@ -13,6 +13,8 @@ import type {
   SteamWebApiKeySettingsInput,
   VncProxySettings,
   VncProxySettingsInput,
+  WarmupSchedulingSettings,
+  WarmupSchedulingSettingsInput,
 } from './models';
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -78,6 +80,14 @@ export class CoreClient {
 
   updateSteamWebApiKey(input: SteamWebApiKeySettingsInput) {
     return this.request<SteamWebApiKeySettings>('/v1/settings/steam-web-api-key', { method: 'PUT', body: input });
+  }
+
+  getWarmupScheduling(signal?: AbortSignal) {
+    return this.request<WarmupSchedulingSettings>('/v1/settings/warmup-scheduling', { signal });
+  }
+
+  updateWarmupScheduling(input: WarmupSchedulingSettingsInput) {
+    return this.request<WarmupSchedulingSettings>('/v1/settings/warmup-scheduling', { method: 'PUT', body: input });
   }
 
   queryLobby(lobbyId: string, signal?: AbortSignal) {

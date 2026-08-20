@@ -56,6 +56,7 @@ export interface WarmupAgentInput {
 export interface GlobalSettings {
   steamProxyUrl: string | null;
   steamWebApiKeyConfigured: boolean;
+  warmupSchedulingEnabled: boolean;
   updatedAt: string;
 }
 
@@ -82,6 +83,15 @@ export interface SteamWebApiKeySettings {
 export interface SteamWebApiKeySettingsInput {
   apiKey?: string;
   clear?: boolean;
+}
+
+export interface WarmupSchedulingSettings {
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export interface WarmupSchedulingSettingsInput {
+  enabled: boolean;
 }
 
 export interface WarmupStatus {

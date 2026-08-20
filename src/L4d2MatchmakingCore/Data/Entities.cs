@@ -87,5 +87,6 @@ public sealed class CoreSettings
     public string Name { get; set; } = "global";
     public string? SteamProxyUrl { get; set; }
     public string? SteamWebApiKeyCiphertext { get; set; }
+    public bool WarmupSchedulingEnabled { get; set; } = true;
     public DateTimeOffset UpdatedAt { get; set; }
 }

@@ -8,6 +8,7 @@ public sealed record UpdateGlobalSettingsRequest(
 public sealed record GlobalSettingsResponse(
     string? SteamProxyUrl,
     bool SteamWebApiKeyConfigured,
+    bool WarmupSchedulingEnabled,
     DateTimeOffset UpdatedAt);
 
 public sealed record UpdateVncProxyRequest(string? ProxyUrl = null);
@@ -22,4 +23,10 @@ public sealed record UpdateSteamWebApiKeyRequest(
 
 public sealed record SteamWebApiKeySettingsResponse(
     bool Configured,
+    DateTimeOffset UpdatedAt);
+
+public sealed record UpdateWarmupSchedulingRequest(bool Enabled);
+
+public sealed record WarmupSchedulingSettingsResponse(
+    bool Enabled,
     DateTimeOffset UpdatedAt);
