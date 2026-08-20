@@ -7,11 +7,14 @@ $dockerfile = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Dockerfile
 if ($script -notmatch 'bootstrap_log\.txt' -or
     $script -notmatch 'supervisorctl status steam' -or
     $script -notmatch 'probe/status' -or
+    $script -notmatch "--noproxy '\*'" -or
     $script -notmatch 'while true' -or
     $script -notmatch 'read -r -t 2' -or
     $script -notmatch 'print_state' -or
-    $script -notmatch 'ready=true：允许进入调度候选集') {
-    throw 'The Steam status script must refresh update progress, Steam process status and Agent readiness until dismissed.'
+    $script -notmatch 'ready=true：允许进入调度候选集' -or
+    $script -match 'Steam 进程' -or
+    $script -match 'pgrep') {
+    throw 'The Steam status script must show summary state, bypass the local HTTP proxy for Agent readiness, and omit Steam process details.'
 }
 
 if ($launcher -notmatch '(?m)^Name=Steam 更新状态' -or

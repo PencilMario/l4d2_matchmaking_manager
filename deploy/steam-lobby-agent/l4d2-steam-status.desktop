@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Steam 更新状态
-Comment=查看 Steam 更新、进程和 Agent 就绪状态
+Comment=查看 Steam 更新和 Agent 就绪状态
 Exec=xfce4-terminal --hold --command=/usr/local/bin/l4d2-steam-status
 Icon=steam
 Terminal=false

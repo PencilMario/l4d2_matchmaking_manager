@@ -39,9 +39,7 @@ show_status() {
     printf '%s\n' "${dim}========================================${reset}"
 
     print_section 'Steam 服务'
-    if supervisorctl status steam >/dev/null 2>&1; then
-        steam_status="$(supervisorctl status steam)"
-        printf '%s\n' "${steam_status}"
+    if steam_status="$(supervisorctl status steam 2>/dev/null)"; then
         case "${steam_status}" in
             *RUNNING*) print_state running 'Steam Supervisor 正在运行' ;;
             *) print_state fail 'Steam Supervisor 未运行' ;;
@@ -65,17 +63,9 @@ show_status() {
         print_state waiting '尚未生成 Steam 更新日志'
     fi
 
-    print_section 'Steam 进程'
-    if pgrep -af '/steam|steamwebhelper' >/dev/null 2>&1; then
-        pgrep -af '/steam|steamwebhelper'
-        print_state ok '检测到 Steam 进程'
-    else
-        print_state fail '未检测到 Steam 进程'
-    fi
-
     print_section 'Agent 调度资格'
     if command -v curl >/dev/null 2>&1; then
-        readiness="$(curl --silent --show-error --max-time 3 http://127.0.0.1:8080/v1/probe/status || true)"
+        readiness="$(curl --noproxy '*' --silent --show-error --max-time 3 http://127.0.0.1:8080/v1/probe/status || true)"
         if [ -n "${readiness}" ]; then
             if printf '%s' "${readiness}" | grep -q '"ready":true'; then
                 print_state ok 'ready=true：允许进入调度候选集'
@@ -84,7 +74,6 @@ show_status() {
                 [ -n "${failure}" ] || failure='未通过就绪检查'
                 print_state fail "ready=false：${failure}，不会参与调度"
             fi
-            printf '%s%s%s\n' "${dim}" "${readiness}" "${reset}"
         else
             print_state fail '无法读取 Agent 就绪状态'
         fi
