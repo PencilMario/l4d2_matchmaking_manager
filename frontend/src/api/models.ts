@@ -10,6 +10,7 @@ export interface TargetServer {
   maxConcurrentWarmups: number;
   attemptWindowSeconds: number;
   playerTarget: number;
+  gameMode?: TargetServerGameMode | null;
   enabled: boolean;
   hasRconCredentials: boolean;
   createdAt: string;
@@ -23,9 +24,12 @@ export interface TargetServerInput {
   maxConcurrentWarmups: number | null;
   attemptWindowSeconds: number | null;
   playerTarget: number | null;
+  gameMode?: TargetServerGameMode | null;
   enabled: boolean | null;
   rconPassword: string | null;
 }
+
+export type TargetServerGameMode = 'coop' | 'versus';
 
 export interface TargetServerObservation {
   targetServerId: string;

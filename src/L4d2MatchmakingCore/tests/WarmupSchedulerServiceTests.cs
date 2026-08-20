@@ -133,6 +133,32 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
+    public async Task TickPassesConfiguredGameModeToAgent()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var server = new TargetServer
+        {
+            Id = Guid.NewGuid(),
+            Host = "127.0.0.1",
+            Port = 27015,
+            Enabled = true,
+            RequiresReservation = false,
+            GameMode = "coop",
+            PlayerTarget = 6,
+            AttemptWindowSeconds = 720,
+        };
+        db.AddRange(agent, server);
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual("coop", agents.LastStartRequest?.GameMode);
+    }
+
+    [TestMethod]
     public async Task TickRestartsSteamAndExcludesAgentUntilHealthRecoversAfterAttemptDeadlineExpires()
     {
         await using var db = CreateDb();

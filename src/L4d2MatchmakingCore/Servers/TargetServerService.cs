@@ -22,7 +22,8 @@ public sealed class TargetServerService(
             request.AttemptWindowSeconds,
             request.PlayerTarget,
             request.Enabled,
-            request.RconPassword);
+            request.RconPassword,
+            request.GameMode);
         var now = DateTimeOffset.UtcNow;
         var server = new TargetServer
         {
@@ -35,6 +36,7 @@ public sealed class TargetServerService(
             AttemptWindowSeconds = configuration.AttemptWindowSeconds,
             PlayerTarget = configuration.PlayerTarget,
             Enabled = configuration.Enabled,
+            GameMode = configuration.GameMode,
             RconPasswordCiphertext = ProtectRconPassword(configuration.RconPassword),
             CreatedAt = now,
             UpdatedAt = now,
@@ -79,7 +81,8 @@ public sealed class TargetServerService(
             request.AttemptWindowSeconds,
             request.PlayerTarget,
             request.Enabled,
-            request.RconPassword);
+            request.RconPassword,
+            request.GameMode);
         server.Host = configuration.Address.Host;
         server.Port = configuration.Address.Port;
         server.RequiresReservation = configuration.RequiresReservation;
@@ -88,6 +91,7 @@ public sealed class TargetServerService(
         server.AttemptWindowSeconds = configuration.AttemptWindowSeconds;
         server.PlayerTarget = configuration.PlayerTarget;
         server.Enabled = configuration.Enabled;
+        server.GameMode = configuration.GameMode;
         server.RconPasswordCiphertext = ProtectRconPassword(configuration.RconPassword);
         server.UpdatedAt = DateTimeOffset.UtcNow;
         AddAudit("target_server_updated", server.Id, server.UpdatedAt);
@@ -134,7 +138,8 @@ public sealed class TargetServerService(
         int? attemptWindowSeconds,
         int? playerTarget,
         bool? enabled,
-        string? rconPassword)
+        string? rconPassword,
+        string? gameMode)
     {
         var requestedConcurrency = maxConcurrentWarmups ?? 36;
         var effectiveConcurrency = requiresReservation ? 1 : requestedConcurrency;
@@ -147,6 +152,10 @@ public sealed class TargetServerService(
         if (!requiresReservation && rconPassword is not null)
             throw new ArgumentException("rcon_requires_reservation");
 
+        var normalizedGameMode = string.IsNullOrWhiteSpace(gameMode) ? null : gameMode.Trim();
+        if (normalizedGameMode is not null && normalizedGameMode is not ("coop" or "versus"))
+            throw new ArgumentException("invalid_game_mode");
+
         return new TargetServerConfiguration(
             TargetServerEndpointParser.Parse(endpoint),
             requiresReservation,
@@ -155,7 +164,8 @@ public sealed class TargetServerService(
             effectiveAttemptWindow,
             effectivePlayerTarget,
             enabled ?? true,
-            requiresReservation ? rconPassword : null);
+            requiresReservation ? rconPassword : null,
+            normalizedGameMode);
     }
 
     private static TargetServerResponse ToResponse(TargetServer server) => new(
@@ -169,7 +179,10 @@ public sealed class TargetServerService(
         server.Enabled,
         server.RconPasswordCiphertext is not null,
         server.CreatedAt,
-        server.UpdatedAt);
+        server.UpdatedAt)
+    {
+        GameMode = server.GameMode,
+    };
 
     private string? ProtectRconPassword(string? password)
     {
@@ -195,7 +208,8 @@ public sealed class TargetServerService(
         int AttemptWindowSeconds,
         int PlayerTarget,
         bool Enabled,
-        string? RconPassword);
+        string? RconPassword,
+        string? GameMode);
 }
 
 public sealed class TargetServerDrainException : Exception

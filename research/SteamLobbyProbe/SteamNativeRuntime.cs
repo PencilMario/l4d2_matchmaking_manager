@@ -66,7 +66,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
 
         try
         {
-            var metadata = RealSessionSettings.CreateLobbyMetadata(profile);
+            var metadata = RealSessionSettings.CreateLobbyMetadata(profile, request.GameMode);
             foreach (var pair in metadata)
             {
                 if (!_api.SetLobbyData(_matchmaking, created.LobbyId, pair.Key, pair.Value))

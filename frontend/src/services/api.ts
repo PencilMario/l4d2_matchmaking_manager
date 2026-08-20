@@ -1,4 +1,4 @@
-import type { LobbyLookupResult, SteamDownloadRegion } from '../types';
+import type { LobbyLookupResult, SteamDownloadRegion, TargetServerGameMode } from '../types';
 
 export const AUTH_TOKEN_KEY = 'l4d2_mgmt_access_token';
 let token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
@@ -11,7 +11,7 @@ export function setAuthToken(value: string) {
 export function getAuthToken() { return token; }
 export function setUnauthorizedHandler(handler: () => void) { onUnauthorized = handler; }
 
-type RawServer = { id: string; endpoint: string; requiresReservation: boolean; priority: number; maxConcurrentWarmups: number; attemptWindowSeconds: number; playerTarget: number; enabled: boolean; hasRconCredentials: boolean; createdAt: string; updatedAt: string };
+type RawServer = { id: string; endpoint: string; requiresReservation: boolean; priority: number; maxConcurrentWarmups: number; attemptWindowSeconds: number; playerTarget: number; gameMode: TargetServerGameMode | null; enabled: boolean; hasRconCredentials: boolean; createdAt: string; updatedAt: string };
 type RawObservation = { targetServerId: string; status: string; serverName: string | null; playerCount: number | null; maxPlayers: number | null; observedAt: string | null };
 type RawAgent = { id: string; name: string; status: string; ready?: boolean; downloadRegion: string | null; keepVncAlive: boolean; noVncPort: number; createdAt: string; updatedAt: string };
 type RawSteamDownloadRegion = { id: number; name: string };
@@ -33,7 +33,7 @@ async function request<T = any>(path: string, init: RequestInit = {}) {
 }
 
 function serverInput(data: any) {
-  return { endpoint: data.endpoint, requiresReservation: Boolean(data.requiresReservation), priority: data.priority ?? 0, maxConcurrentWarmups: data.maxConcurrentWarmups ?? 36, attemptWindowSeconds: data.attemptWindowSeconds ?? 720, playerTarget: data.playerTarget ?? 6, enabled: data.enabled ?? true, rconPassword: data.rconPassword || null };
+  return { endpoint: data.endpoint, requiresReservation: Boolean(data.requiresReservation), priority: data.priority ?? 0, maxConcurrentWarmups: data.maxConcurrentWarmups ?? 36, attemptWindowSeconds: data.attemptWindowSeconds ?? 720, playerTarget: data.playerTarget ?? 6, gameMode: data.gameMode || null, enabled: data.enabled ?? true, rconPassword: data.rconPassword || null };
 }
 
 export const ApiService = {

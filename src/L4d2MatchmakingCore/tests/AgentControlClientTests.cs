@@ -70,6 +70,25 @@ public sealed class AgentControlClientTests
     }
 
     [TestMethod]
+    public async Task StartSendsConfiguredGameModeInTheOperationRequest()
+    {
+        var operationId = Guid.NewGuid();
+        var operation = new AgentOperationSnapshot(operationId, "active", null, null, DateTimeOffset.UnixEpoch);
+        var handler = new RecordingHandler(operation, new LobbySnapshot("109775242170052468", "owner", [], new Dictionary<string, string>(), DateTimeOffset.UnixEpoch));
+        using var httpClient = new HttpClient(handler);
+        var client = new AgentControlClient(httpClient);
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+        var request = new AgentOperationRequest(operationId, AgentLobbyMode.Standard, "203.0.113.7", 27015)
+        {
+            GameMode = "coop",
+        };
+
+        await client.StartOperationAsync(agent, request, CancellationToken.None);
+
+        Assert.AreEqual("coop", handler.GameMode);
+    }
+
+    [TestMethod]
     public async Task QueryMapsAgentLobbyDataFailureAndSetsMembershipIntent()
     {
         var lobby = new LobbySnapshot("109775242170052468", "owner", [], new Dictionary<string, string>(), DateTimeOffset.UnixEpoch);
@@ -94,6 +113,7 @@ public sealed class AgentControlClientTests
         public List<string> RequestUris { get; } = [];
         public List<string> Hosts { get; } = [];
         public string? RconPassword { get; private set; }
+        public string? GameMode { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -104,6 +124,7 @@ public sealed class AgentControlClientTests
             {
                 var body = await request.Content!.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken);
                 RconPassword = body.GetProperty("rconPassword").GetString();
+                GameMode = body.GetProperty("gameMode").GetString();
             }
             object payload = request.RequestUri.AbsolutePath switch
             {

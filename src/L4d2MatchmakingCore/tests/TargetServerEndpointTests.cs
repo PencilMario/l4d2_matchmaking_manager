@@ -48,6 +48,71 @@ public sealed class TargetServerEndpointTests
     }
 
     [TestMethod]
+    public async Task ModeAcceptsPresetsPreservesBlankAsNullAndRejectsCustomValues()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new ServerFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+
+        var coop = await client.PostAsJsonAsync("/v1/servers", new
+        {
+            endpoint = "203.0.113.7:27015",
+            requiresReservation = false,
+            gameMode = "coop",
+        });
+        var blank = await client.PostAsJsonAsync("/v1/servers", new
+        {
+            endpoint = "203.0.113.8:27015",
+            requiresReservation = false,
+            gameMode = " ",
+        });
+        var invalid = await client.PostAsJsonAsync("/v1/servers", new
+        {
+            endpoint = "203.0.113.9:27015",
+            requiresReservation = false,
+            gameMode = "deathmatch",
+        });
+        var coopJson = await coop.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var blankJson = await blank.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+
+        Assert.AreEqual(HttpStatusCode.Created, coop.StatusCode);
+        Assert.AreEqual("coop", coopJson.GetProperty("gameMode").GetString());
+        Assert.AreEqual(HttpStatusCode.Created, blank.StatusCode);
+        Assert.AreEqual(System.Text.Json.JsonValueKind.Null, blankJson.GetProperty("gameMode").ValueKind);
+        Assert.AreEqual(HttpStatusCode.BadRequest, invalid.StatusCode);
+        StringAssert.Contains(await invalid.Content.ReadAsStringAsync(), "invalid_game_mode");
+    }
+
+    [TestMethod]
+    public async Task UpdateChangesConfiguredGameMode()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new ServerFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+
+        var created = await client.PostAsJsonAsync("/v1/servers", new
+        {
+            endpoint = "203.0.113.7:27015",
+            requiresReservation = false,
+            gameMode = "coop",
+        });
+        var createdJson = await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var serverId = createdJson.GetProperty("id").GetGuid();
+        var updated = await client.PutAsJsonAsync($"/v1/servers/{serverId}", new
+        {
+            endpoint = "203.0.113.7:27015",
+            requiresReservation = false,
+            gameMode = "versus",
+        });
+        var updatedJson = await updated.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+
+        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
+        Assert.AreEqual("versus", updatedJson.GetProperty("gameMode").GetString());
+    }
+
+    [TestMethod]
     public async Task ReservationServerUsesOneEffectiveWarmupAndRejectsMalformedEndpoint()
     {
         using var environment = new CoreTestEnvironment();

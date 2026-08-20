@@ -14,6 +14,8 @@ export type AttemptPhase =
 
 export type OperationMode = 'standard' | 'direct_lobby' | 'reservation_hold' | string;
 
+export type TargetServerGameMode = 'coop' | 'versus';
+
 export interface SteamDownloadRegion {
   id: number;
   name: string;
@@ -34,6 +36,7 @@ export interface TargetServer {
   activeWarmupsCount: number;
   attemptWindowSeconds: number;
   playerTarget: number;
+  gameMode?: TargetServerGameMode | null;
   hasRconPassword?: boolean;
   createdAt: string;
   updatedAt: string;

@@ -137,6 +137,7 @@ Content-Type: application/json; charset=utf-8
   "maxConcurrentWarmups": 36,
   "attemptWindowSeconds": 720,
   "playerTarget": 6,
+  "gameMode": null,
   "enabled": true,
   "rconPassword": null
 }
@@ -150,6 +151,7 @@ Content-Type: application/json; charset=utf-8
 | `maxConcurrentWarmups` | integer/null | 非预留服务器并发上限，必须大于 `0`；`null` 使用 `36`。预留服务器仍返回 `1`。 |
 | `attemptWindowSeconds` | integer/null | 单次暖服窗口，必须大于 `0`；`null` 使用 `720`。 |
 | `playerTarget` | integer/null | A2S 人数达到此值即停止暖服，必须大于 `0`；`null` 使用 `6`。 |
+| `gameMode` | string/null | 仅允许 `coop`、`versus` 或 `null`；`null`/省略保持现有 versus metadata 默认值。`coop` 创建大厅时使用 `Members:numSlots=4`、`Game:Mode=coop`、`Game:sk_versus=19`。 |
 | `enabled` | boolean/null | 是否参与调度；`null` 使用 `true`。 |
 | `rconPassword` | string/null | 仅预留服务器可写；仅用于 reservation UDP 超时后的 RCON `status` 验证。读取响应永远不会返回它。传 `null` 清除已有凭据。 |
 
@@ -164,6 +166,7 @@ Content-Type: application/json; charset=utf-8
   "maxConcurrentWarmups": 36,
   "attemptWindowSeconds": 720,
   "playerTarget": 6,
+  "gameMode": "coop",
   "enabled": true,
   "hasRconCredentials": false,
   "createdAt": "2026-08-17T12:00:00+00:00",
@@ -242,7 +245,7 @@ HTTP/1.1 201 Created
 Location: /v1/servers/c691ca6a-6c2a-4ece-b7bd-2e951eee7caa
 Content-Type: application/json; charset=utf-8
 
-{"id":"c691ca6a-6c2a-4ece-b7bd-2e951eee7caa","endpoint":"203.0.113.7:27015","requiresReservation":false,"priority":0,"maxConcurrentWarmups":36,"attemptWindowSeconds":720,"playerTarget":6,"enabled":true,"hasRconCredentials":false,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:00:00+00:00"}
+{"id":"c691ca6a-6c2a-4ece-b7bd-2e951eee7caa","endpoint":"203.0.113.7:27015","requiresReservation":false,"priority":0,"maxConcurrentWarmups":36,"attemptWindowSeconds":720,"playerTarget":6,"gameMode":"coop","enabled":true,"hasRconCredentials":false,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:00:00+00:00"}
 ```
 
 典型失败：
@@ -255,7 +258,7 @@ Content-Type: application/json; charset=utf-8
 ```
 
 `400` 还可能返回 `"invalid_target_server_endpoint"`、
-`"invalid_target_server_configuration"`、`"invalid_rcon_password"`、
+`"invalid_target_server_configuration"`、`"invalid_game_mode"`、`"invalid_rcon_password"`、
 `"rcon_encryption_key_not_configured"` 或 `"core_rcon_encryption_key_invalid"`。
 
 ### `GET /v1/servers/{serverId}`
@@ -268,7 +271,7 @@ Content-Type: application/json; charset=utf-8
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 
-{"id":"c691ca6a-6c2a-4ece-b7bd-2e951eee7caa","endpoint":"203.0.113.7:27015","requiresReservation":false,"priority":0,"maxConcurrentWarmups":36,"attemptWindowSeconds":720,"playerTarget":6,"enabled":true,"hasRconCredentials":false,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:00:00+00:00"}
+{"id":"c691ca6a-6c2a-4ece-b7bd-2e951eee7caa","endpoint":"203.0.113.7:27015","requiresReservation":false,"priority":0,"maxConcurrentWarmups":36,"attemptWindowSeconds":720,"playerTarget":6,"gameMode":null,"enabled":true,"hasRconCredentials":false,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:00:00+00:00"}
 ```
 
 不存在时（部署实例已实际采样）：
@@ -305,7 +308,7 @@ Content-Type: application/json
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 
-{"id":"c691ca6a-6c2a-4ece-b7bd-2e951eee7caa","endpoint":"203.0.113.7:27015","requiresReservation":false,"priority":10,"maxConcurrentWarmups":24,"attemptWindowSeconds":720,"playerTarget":6,"enabled":true,"hasRconCredentials":false,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:05:00+00:00"}
+{"id":"c691ca6a-6c2a-4ece-b7bd-2e951eee7caa","endpoint":"203.0.113.7:27015","requiresReservation":false,"priority":10,"maxConcurrentWarmups":24,"attemptWindowSeconds":720,"playerTarget":6,"gameMode":null,"enabled":true,"hasRconCredentials":false,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:05:00+00:00"}
 ```
 
 将 `enabled` 改为 `false` 时，Core 会先禁用服务器并停止它的全部

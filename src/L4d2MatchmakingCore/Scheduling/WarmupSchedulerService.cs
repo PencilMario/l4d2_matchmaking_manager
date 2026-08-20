@@ -503,7 +503,10 @@ public sealed class WarmupSchedulerService(
                 plan.Server.RequiresReservation ? AgentLobbyMode.Reserved : AgentLobbyMode.Standard,
                 plan.Address.ToString(),
                 checked((ushort)plan.Server.Port),
-                rconPassword), cancellationToken);
+                rconPassword)
+            {
+                GameMode = plan.Server.GameMode,
+            }, cancellationToken);
             return new StartResult(plan, start, null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

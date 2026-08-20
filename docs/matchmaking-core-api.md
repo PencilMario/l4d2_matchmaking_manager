@@ -81,6 +81,7 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
   "maxConcurrentWarmups": 36,
   "attemptWindowSeconds": 720,
   "playerTarget": 6,
+  "gameMode": null,
   "enabled": true,
   "rconPassword": "<optional-server-rcon-password>"
 }
@@ -111,7 +112,8 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
 
 `endpoint` 接受 hostname 或 IPv4，省略端口时为 `27015`；不接受 URL、IPv6、凭据或非法
 端口。可选数值传 `null` 时恢复缺省值：优先级 0、非预留并发 36、尝试窗口 720 秒、人数
-目标 6。预留目标的有效并发始终强制为 1。创建成功返回 `201`，读取/更新成功返回 `200`，
+目标 6。`gameMode` 可为 `null`、`coop` 或 `versus`；`null` 保持现有 versus metadata 默认值，其他字符串返回 `400 invalid_game_mode`。
+预留目标的有效并发始终强制为 1。创建成功返回 `201`，读取/更新成功返回 `200`，
 删除成功返回 `204`，非法配置返回 `400`，未知 ID 返回 `404`。
 
 将 `enabled` 更新为 `false` 或删除服务器时，Core 会先持久化禁用状态，再停止该服务器的所有

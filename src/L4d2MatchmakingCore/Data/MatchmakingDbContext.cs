@@ -25,6 +25,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.Property(server => server.PlayerTarget).HasDefaultValue(6);
             entity.Property(server => server.Priority).HasDefaultValue(0);
             entity.Property(server => server.Enabled).HasDefaultValue(true);
+            entity.Property(server => server.GameMode).HasMaxLength(16);
             entity.Property(server => server.RconPasswordCiphertext).HasMaxLength(2048);
         });
 

@@ -105,12 +105,22 @@ internal static class RealSessionSettings
 
     internal static Dictionary<string, string> CreateLobbyMetadata() => CreateLobbyMetadata(HistoricalDefault);
 
-    internal static Dictionary<string, string> CreateLobbyMetadata(CampaignProfile profile)
+    internal static Dictionary<string, string> CreateLobbyMetadata(
+        CampaignProfile profile,
+        string? gameMode = null)
     {
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
         var settings = CreateReservationSettings(profile);
         foreach (var entry in (IReadOnlyList<BinaryKvEntry>)settings.Value)
             AddLobbyMetadata(entry, string.Empty, metadata);
+
+        if (string.Equals(gameMode, "coop", StringComparison.Ordinal))
+        {
+            metadata["Members:numSlots"] = "4";
+            metadata["Game:Mode"] = "coop";
+            metadata["Game:sk_versus"] = "19";
+        }
+
         return metadata;
     }
 

@@ -51,5 +51,28 @@ public sealed class CampaignProfileTests
 
         Assert.AreEqual("L4D2C2", metadata["Game:campaign"]);
         Assert.AreEqual("missions/campaign2.txt", metadata["Game:MissionInfo:MissionFile"]);
+        Assert.AreEqual("8", metadata["Members:numSlots"]);
+        Assert.AreEqual("versus", metadata["Game:Mode"]);
+        Assert.AreEqual("35", metadata["Game:sk_versus"]);
+    }
+
+    [TestMethod]
+    public void CoopMetadataUsesFourSlotsAndCoopSettings()
+    {
+        var metadata = RealSessionSettings.CreateLobbyMetadata(CampaignProfile.Official[1], "coop");
+
+        Assert.AreEqual("4", metadata["Members:numSlots"]);
+        Assert.AreEqual("coop", metadata["Game:Mode"]);
+        Assert.AreEqual("19", metadata["Game:sk_versus"]);
+    }
+
+    [TestMethod]
+    public void ExplicitVersusMetadataKeepsHistoricalSettings()
+    {
+        var metadata = RealSessionSettings.CreateLobbyMetadata(CampaignProfile.Official[1], "versus");
+
+        Assert.AreEqual("8", metadata["Members:numSlots"]);
+        Assert.AreEqual("versus", metadata["Game:Mode"]);
+        Assert.AreEqual("35", metadata["Game:sk_versus"]);
     }
 }

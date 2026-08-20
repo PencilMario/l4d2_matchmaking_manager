@@ -67,11 +67,14 @@ Guard 数据、库路径或原始 Steam 输出。
   "mode": "reserved",
   "ipv4Address": "203.0.113.7",
   "port": 27015,
+  "gameMode": "coop",
   "rconPassword": "<private-core-to-agent-only>"
 }
 ```
 
-`mode` 为 `standard` 或 `reserved`。首次请求返回 `202 Accepted`，同一
+`mode` 为 `standard` 或 `reserved`；`gameMode` 为可选的 `coop`、`versus` 字符串，省略时保持现有 versus metadata。
+`coop` lobby metadata 包含 `Members:numSlots=4`、`Game:Mode=coop`、`Game:sk_versus=19`；reservation settings 二进制 payload 不受该字段影响。
+首次请求返回 `202 Accepted`，同一
 `operationId` 的重试返回 `200 OK` 且不会新建大厅。响应中的操作快照格式为：
 
 ```json

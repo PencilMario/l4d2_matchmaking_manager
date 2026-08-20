@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TargetServer } from '../types';
+import { TargetServer, TargetServerGameMode } from '../types';
 import { Modal } from './common/Modal';
 import { Switch } from './common/Switch';
 import { Key, AlertCircle, Loader2 } from 'lucide-react';
@@ -16,6 +16,7 @@ interface TargetServerModalProps {
     maxConcurrentWarmups: number;
     attemptWindowSeconds: number;
     playerTarget: number;
+    gameMode: TargetServerGameMode | null;
     rconPassword?: string;
     clearRconPassword?: boolean;
   }) => Promise<void>;
@@ -40,6 +41,7 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
   const [maxConcurrentWarmups, setMaxConcurrentWarmups] = useState(36);
   const [attemptWindowSeconds, setAttemptWindowSeconds] = useState(720);
   const [playerTarget, setPlayerTarget] = useState(6);
+  const [gameMode, setGameMode] = useState<TargetServerGameMode | ''>('');
   const [rconPassword, setRconPassword] = useState('');
   const [clearRconPassword, setClearRconPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
       );
       setAttemptWindowSeconds(initialData.attemptWindowSeconds || 720);
       setPlayerTarget(initialData.playerTarget || 6);
+      setGameMode(initialData.gameMode ?? '');
       setRconPassword('');
       setClearRconPassword(false);
     } else {
@@ -67,6 +70,7 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
       setMaxConcurrentWarmups(36);
       setAttemptWindowSeconds(720);
       setPlayerTarget(6);
+      setGameMode('');
       setRconPassword('');
       setClearRconPassword(false);
     }
@@ -101,6 +105,7 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
         maxConcurrentWarmups: requiresReservation ? 1 : Number(maxConcurrentWarmups) || 36,
         attemptWindowSeconds: Number(attemptWindowSeconds) || 720,
         playerTarget: Number(playerTarget) || 6,
+        gameMode: gameMode || null,
         rconPassword: rconPassword ? rconPassword : undefined,
         clearRconPassword,
       });
@@ -166,6 +171,29 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
           />
           <p className="text-[11px] text-slate-500 mt-1">
             支持主机名或 IPv4 加游戏端口（默认 27015）
+          </p>
+        </div>
+
+        {/* Lobby Game Mode */}
+        <div>
+          <label
+            htmlFor="target-game-mode"
+            className="block text-xs font-medium text-slate-700 mb-1"
+          >
+            模式类型
+          </label>
+          <select
+            id="target-game-mode"
+            value={gameMode}
+            onChange={(e) => setGameMode(e.target.value as TargetServerGameMode | '')}
+            className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">未指定（保持默认）</option>
+            <option value="versus">versus</option>
+            <option value="coop">coop</option>
+          </select>
+          <p className="text-[11px] text-slate-500 mt-1">
+            仅可选择预设；未指定时使用现有 versus 大厅 metadata
           </p>
         </div>
 

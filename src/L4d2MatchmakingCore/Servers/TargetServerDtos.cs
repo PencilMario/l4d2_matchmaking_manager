@@ -13,7 +13,8 @@ public sealed record CreateTargetServerRequest(
     int? AttemptWindowSeconds,
     int? PlayerTarget,
     bool? Enabled,
-    string? RconPassword = null);
+    string? RconPassword = null,
+    string? GameMode = null);
 
 public sealed record UpdateTargetServerRequest(
     string Endpoint,
@@ -23,7 +24,8 @@ public sealed record UpdateTargetServerRequest(
     int? AttemptWindowSeconds,
     int? PlayerTarget,
     bool? Enabled,
-    string? RconPassword = null);
+    string? RconPassword = null,
+    string? GameMode = null);
 
 public sealed record TargetServerResponse(
     Guid Id,
@@ -36,4 +38,7 @@ public sealed record TargetServerResponse(
     bool Enabled,
     bool HasRconCredentials,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt)
+{
+    public string? GameMode { get; init; }
+}
