@@ -81,6 +81,90 @@ public sealed class WarmupAttemptDrainServiceTests
         Assert.AreEqual("active", (await db.WarmupAttempts.SingleAsync()).State);
     }
 
+    [TestMethod]
+    public async Task DrainAllStopsEveryCurrentAttemptReleasesLeasesAndRestartsTouchedAgents()
+    {
+        await using var db = CreateDb();
+        var firstAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "first-agent", Status = "running" };
+        var secondAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "second-agent", Status = "running" };
+        var firstTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015 };
+        var secondTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016 };
+        var pendingTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27017 };
+        var activeOperation = Guid.NewGuid();
+        var uncertainOperation = Guid.NewGuid();
+        var pendingOperation = Guid.NewGuid();
+        db.AddRange(
+            firstAgent,
+            secondAgent,
+            firstTarget,
+            secondTarget,
+            pendingTarget,
+            new WarmupAttempt
+            {
+                Id = Guid.NewGuid(),
+                TargetServerId = firstTarget.Id,
+                WarmupAgentId = firstAgent.Id,
+                OperationId = activeOperation,
+                State = "active",
+                StartedAt = DateTimeOffset.UtcNow,
+                ObservedAt = DateTimeOffset.UtcNow,
+            },
+            new WarmupAttempt
+            {
+                Id = Guid.NewGuid(),
+                TargetServerId = secondTarget.Id,
+                WarmupAgentId = secondAgent.Id,
+                OperationId = uncertainOperation,
+                State = "uncertain",
+                StartedAt = DateTimeOffset.UtcNow,
+                ObservedAt = DateTimeOffset.UtcNow,
+            },
+            new WarmupAttempt
+            {
+                Id = Guid.NewGuid(),
+                TargetServerId = pendingTarget.Id,
+                WarmupAgentId = firstAgent.Id,
+                OperationId = pendingOperation,
+                State = "restart_pending",
+                StartedAt = DateTimeOffset.UtcNow,
+                ObservedAt = DateTimeOffset.UtcNow,
+            },
+            new ReservationLease
+            {
+                TargetServerId = firstTarget.Id,
+                OperationId = activeOperation,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10),
+            },
+            new ReservationLease
+            {
+                TargetServerId = secondTarget.Id,
+                OperationId = uncertainOperation,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10),
+            },
+            new ReservationLease
+            {
+                TargetServerId = pendingTarget.Id,
+                OperationId = pendingOperation,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10),
+            });
+        await db.SaveChangesAsync();
+
+        var control = new FakeAgentControlClient();
+        var service = new WarmupAttemptDrainService(db, control);
+        var drainAll = typeof(WarmupAttemptDrainService).GetMethod("DrainAllAsync");
+        Assert.IsNotNull(drainAll);
+
+        var drained = await (Task<bool>)drainAll!.Invoke(service, [CancellationToken.None])!;
+
+        Assert.IsTrue(drained);
+        CollectionAssert.AreEquivalent(new[] { activeOperation, uncertainOperation }, control.StoppedOperations);
+        CollectionAssert.AreEquivalent(new[] { firstAgent.Id, secondAgent.Id }, control.RestartedAgents);
+        Assert.AreEqual(0, await db.WarmupAttempts.CountAsync(attempt => attempt.State == "active" || attempt.State == "uncertain" || attempt.State == "restart_pending"));
+        Assert.IsFalse(await db.ReservationLeases.AnyAsync());
+        Assert.AreEqual("restarting", firstAgent.Status);
+        Assert.AreEqual("restarting", secondAgent.Status);
+    }
+
     private static MatchmakingDbContext CreateDb() => new(new DbContextOptionsBuilder<MatchmakingDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
         .Options);
@@ -88,6 +172,7 @@ public sealed class WarmupAttemptDrainServiceTests
     private sealed class FakeAgentControlClient : IAgentControlClient
     {
         public List<Guid> StoppedOperations { get; } = [];
+        public List<Guid> RestartedAgents { get; } = [];
         public Exception? StopException { get; init; }
 
         public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
@@ -104,6 +189,12 @@ public sealed class WarmupAttemptDrainServiceTests
             if (StopException is not null)
                 return Task.FromException(StopException);
             StoppedOperations.Add(operationId);
+            return Task.CompletedTask;
+        }
+
+        public Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken)
+        {
+            RestartedAgents.Add(agent.Id);
             return Task.CompletedTask;
         }
 

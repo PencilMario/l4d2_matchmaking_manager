@@ -1,22 +1,30 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { Switch } from '../../components/common/Switch';
 import type {
   GlobalSettings,
   SteamWebApiKeySettings,
   SteamWebApiKeySettingsInput,
   VncProxySettings,
   VncProxySettingsInput,
+  WarmupSchedulingSettings,
+  WarmupSchedulingSettingsInput,
 } from '../../api/models';
+import { describeError } from '../../state/display';
 
 type Props = {
   getSettings: () => Promise<GlobalSettings>;
   updateProxy: (input: VncProxySettingsInput) => Promise<VncProxySettings>;
   updateKey: (input: SteamWebApiKeySettingsInput) => Promise<SteamWebApiKeySettings>;
+  updateWarmupScheduling: (input: WarmupSchedulingSettingsInput) => Promise<WarmupSchedulingSettings>;
 };
 
-export function SettingsWorkspace({ getSettings, updateProxy, updateKey }: Props) {
+export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateWarmupScheduling }: Props) {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [proxy, setProxy] = useState('');
   const [steamWebApiKey, setSteamWebApiKey] = useState('');
+  const [warmupSchedulingEnabled, setWarmupSchedulingEnabled] = useState(true);
+  const [confirmDisable, setConfirmDisable] = useState(false);
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -29,6 +37,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey }: Props
         if (!active) return;
         setSettings(value);
         setProxy(value.steamProxyUrl ?? '');
+        setWarmupSchedulingEnabled(value.warmupSchedulingEnabled);
       })
       .catch(() => {
         if (active) setError('读取全局设置失败，请重试。');
@@ -52,7 +61,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey }: Props
       setProxy(value.proxyUrl ?? '');
       setMessage('VNC 代理已保存。');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '保存 VNC 代理失败。');
+      setError(describeError(caught).message);
     } finally {
       setSaving(false);
     }
@@ -70,7 +79,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey }: Props
       setSteamWebApiKey('');
       setMessage('Steam Web API Key 已保存。');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '保存 Steam Web API Key 失败。');
+      setError(describeError(caught).message);
     } finally {
       setSaving(false);
     }
@@ -86,15 +95,49 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey }: Props
       setSteamWebApiKey('');
       setMessage('Steam Web API Key 已清除。');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '清除 Steam Web API Key 失败。');
+      setError(describeError(caught).message);
     } finally {
       setSaving(false);
     }
   };
 
+  const saveWarmupScheduling = async (enabled: boolean) => {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const value = await updateWarmupScheduling({ enabled });
+      setSettings(current => current ? { ...current, warmupSchedulingEnabled: value.enabled, updatedAt: value.updatedAt } : current);
+      setWarmupSchedulingEnabled(value.enabled);
+      setMessage(value.enabled ? '暖服和调度已启用。' : '暖服和调度已禁用，当前任务已清空。');
+    } catch (caught) {
+      setError(describeError(caught).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleWarmupScheduling = () => {
+    if (warmupSchedulingEnabled) {
+      setConfirmDisable(true);
+      return;
+    }
+    void saveWarmupScheduling(true);
+  };
+
   if (busy) return <p className="empty-state">正在读取全局设置</p>;
 
   return <section className="editor-panel settings-panel">
+    <div className="settings-panel__global-toggle">
+      <Switch
+        checked={warmupSchedulingEnabled}
+        description="关闭后会停止并清空当前暖服任务，暖服节点容器保持运行；重新开启后从空任务状态恢复调度。"
+        disabled={saving}
+        id="workspace-global-warmup-scheduling"
+        label="全局启用暖服和调度"
+        onChange={toggleWarmupScheduling}
+      />
+    </div>
     <h2>Steam 设置</h2>
     <p>代理仅用于开启 VNC 服务的暖服节点。Steam Web API Key 仅由控制服务加密保存，用于补全大厅成员的公开资料。</p>
     <form className="form-grid" onSubmit={saveProxy}>
@@ -117,5 +160,15 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey }: Props
     {error && <p className="inline-error form-field--wide">{error}</p>}
     {message && <p className="success-message form-field--wide">{message}</p>}
     {settings && <small className="settings-panel__updated">上次更新：{new Date(settings.updatedAt).toLocaleString('zh-CN', { hour12: false })}</small>}
+    <ConfirmDialog
+      confirmLabel="确认禁用"
+      description="控制服务会停止并清空所有当前暖服任务。暖服节点容器不会停止，之后可以重新启用调度。"
+      intent="danger"
+      isLoading={saving}
+      isOpen={confirmDisable}
+      onClose={() => setConfirmDisable(false)}
+      onConfirm={() => { setConfirmDisable(false); void saveWarmupScheduling(false); }}
+      title="确认禁用暖服和调度"
+    />
   </section>;
 }

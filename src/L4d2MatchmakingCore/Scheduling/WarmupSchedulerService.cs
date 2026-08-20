@@ -18,10 +18,25 @@ public sealed class WarmupSchedulerService(
     ISourceA2sClient? a2s = null,
     WarmupDecisionEngine? engine = null,
     IRconCredentialProtector? rconCredentials = null,
-    CoreOptions? coreOptions = null)
+    CoreOptions? coreOptions = null,
+    WarmupAttemptDrainService? attemptDrain = null,
+    WarmupSchedulingGate? schedulingGate = null)
 {
-    public async Task RecoverAsync(CancellationToken cancellationToken)
+    private readonly WarmupAttemptDrainService? drain = attemptDrain;
+    private readonly WarmupSchedulingGate gate = schedulingGate ?? new();
+
+    public Task RecoverAsync(CancellationToken cancellationToken) =>
+        gate.RunAsync(() => RecoverCoreAsync(cancellationToken), cancellationToken);
+
+    private async Task RecoverCoreAsync(CancellationToken cancellationToken)
     {
+        if (!await IsSchedulingEnabledAsync(cancellationToken))
+        {
+            if (drain is not null)
+                await drain.DrainAllAsync(cancellationToken);
+            return;
+        }
+
         var attempts = await dbContext.WarmupAttempts
             .Where(attempt => attempt.State == "active" || attempt.State == "uncertain")
             .ToListAsync(cancellationToken);
@@ -59,8 +74,13 @@ public sealed class WarmupSchedulerService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task TickAsync(CancellationToken cancellationToken)
+    public Task TickAsync(CancellationToken cancellationToken) =>
+        gate.RunAsync(() => TickCoreAsync(cancellationToken), cancellationToken);
+
+    private async Task TickCoreAsync(CancellationToken cancellationToken)
     {
+        if (!await IsSchedulingEnabledAsync(cancellationToken))
+            return;
         if (await maintenance.IsHeldAsync(cancellationToken))
             return;
         if (selector is null || a2s is null)
@@ -291,6 +311,15 @@ public sealed class WarmupSchedulerService(
             result.Plan.Attempt.ObservedAt = start.Operation.ObservedAt;
         }
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<bool> IsSchedulingEnabledAsync(CancellationToken cancellationToken)
+    {
+        var enabled = await dbContext.CoreSettings
+            .Where(settings => settings.Name == "global")
+            .Select(settings => (bool?)settings.WarmupSchedulingEnabled)
+            .SingleOrDefaultAsync(cancellationToken);
+        return enabled ?? true;
     }
 
     private async Task<PlannedStart?> PlanContinuationStartAsync(

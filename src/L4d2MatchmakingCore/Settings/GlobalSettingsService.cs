@@ -1,5 +1,6 @@
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Servers;
+using L4d2MatchmakingCore.Scheduling;
 using Microsoft.EntityFrameworkCore;
 
 namespace L4d2MatchmakingCore.Settings;
@@ -11,7 +12,9 @@ public interface ISteamWebApiKeyProvider
 
 public sealed class GlobalSettingsService(
     MatchmakingDbContext dbContext,
-    ISecretProtector secretProtector) : ISteamWebApiKeyProvider
+    ISecretProtector secretProtector,
+    WarmupAttemptDrainService attemptDrain,
+    WarmupSchedulingGate schedulingGate) : ISteamWebApiKeyProvider
 {
     public async Task<GlobalSettingsResponse> GetAsync(CancellationToken cancellationToken)
     {
@@ -82,6 +85,59 @@ public sealed class GlobalSettingsService(
             settings.UpdatedAt);
     }
 
+    public async Task<WarmupSchedulingSettingsResponse> GetWarmupSchedulingAsync(
+        CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateAsync(cancellationToken);
+        return new WarmupSchedulingSettingsResponse(settings.WarmupSchedulingEnabled, settings.UpdatedAt);
+    }
+
+    public async Task<WarmupSchedulingSettingsResponse> UpdateWarmupSchedulingAsync(
+        UpdateWarmupSchedulingRequest request,
+        CancellationToken cancellationToken)
+    {
+        WarmupSchedulingSettingsResponse? response = null;
+        InvalidOperationException? failure = null;
+        await schedulingGate.RunAsync(async () =>
+        {
+            var settings = await GetOrCreateAsync(cancellationToken);
+            if (request.Enabled)
+            {
+                var hasPendingAttempts = await dbContext.WarmupAttempts.AnyAsync(
+                    attempt => attempt.State == "active" ||
+                        attempt.State == "uncertain" ||
+                        attempt.State == "restart_pending",
+                    cancellationToken);
+                if (hasPendingAttempts)
+                {
+                    failure = new InvalidOperationException("global_warmup_drain_pending");
+                    return;
+                }
+
+                settings.WarmupSchedulingEnabled = true;
+                settings.UpdatedAt = DateTimeOffset.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                response = new WarmupSchedulingSettingsResponse(settings.WarmupSchedulingEnabled, settings.UpdatedAt);
+                return;
+            }
+
+            settings.WarmupSchedulingEnabled = false;
+            settings.UpdatedAt = DateTimeOffset.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            if (!await attemptDrain.DrainAllAsync(cancellationToken))
+            {
+                failure = new InvalidOperationException("global_warmup_drain_failed");
+                return;
+            }
+
+            response = new WarmupSchedulingSettingsResponse(settings.WarmupSchedulingEnabled, settings.UpdatedAt);
+        }, cancellationToken);
+
+        if (failure is not null)
+            throw failure;
+        return response!;
+    }
+
     public async Task<string?> GetSteamProxyUrlAsync(CancellationToken cancellationToken)
     {
         var settings = await dbContext.CoreSettings.AsNoTracking().SingleOrDefaultAsync(
@@ -122,5 +178,5 @@ public sealed class GlobalSettingsService(
     }
 
     private static GlobalSettingsResponse ToResponse(CoreSettings settings) =>
-        new(settings.SteamProxyUrl, settings.SteamWebApiKeyCiphertext is not null, settings.UpdatedAt);
+        new(settings.SteamProxyUrl, settings.SteamWebApiKeyCiphertext is not null, settings.WarmupSchedulingEnabled, settings.UpdatedAt);
 }

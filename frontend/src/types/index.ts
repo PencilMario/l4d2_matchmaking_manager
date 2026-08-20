@@ -1,6 +1,6 @@
 export type A2sStatus = 'online' | 'unavailable' | 'pending' | 'stale';
 
-export type AgentStatus = 'running' | 'stopped' | 'created' | 'quarantined';
+export type AgentStatus = 'running' | 'restarting' | 'stopped' | 'created' | 'quarantined';
 
 export type AttemptStatus = 'active' | 'uncertain' | 'completed' | 'failed' | 'cancelled' | string;
 

@@ -197,6 +197,31 @@ Agent 身份，也不会创建、加入或离开目标 lobby。
 调度器每五秒最多启动 `CORE_SCHEDULER_MAX_STARTS_PER_TICK` 个操作，默认 `16`。这个值只限制单次
 启动吞吐量；目标服的并发上限、reservation 独占和服务器优先级仍由目标服配置及调度规则决定。
 
+## 全局暖服和调度开关
+
+`GET /v1/settings/warmup-scheduling` 和 `PUT /v1/settings/warmup-scheduling` 使用 Core Bearer
+鉴权。设置持久化在 `CoreSettings`，默认 `enabled: true`；控制服务重启后仍保留禁用状态。
+
+```json
+{
+  "enabled": false
+}
+```
+
+将 `enabled` 设为 `false` 时，Core 先保存禁用状态，再排空所有 `active`、`uncertain` 和
+`restart_pending` 暖服任务。已确认停止的任务变为 `completed`，关联 reservation lease 被移除；
+`restart_pending` 不发起远程停止而直接清理。成功停止的 Agent 会请求既有 Steam 恢复流程并进入
+`restarting`，但 Core 不会调用容器停止、删除或重建操作，节点容器继续运行。
+
+禁用期间，调度器的恢复流程和每五秒 tick 都会直接返回，不执行 A2S 查询、目标选择或新暖服启动。
+再次写入 `{"enabled": true}` 后从空任务状态恢复，不会恢复已经清理的旧任务。
+
+如果任一 `active`/`uncertain` 操作无法确认停止，响应为 `409 "global_warmup_drain_failed"`；
+仍存在未确认任务时启用也返回 `409 "global_warmup_drain_pending"`。冲突不会把未确认任务误标为
+完成，且开关继续保持禁用，调用方可在处理后重试。
+
+旧的组合 `GET/PUT /v1/settings` 继续兼容，但组合 PUT 不会改写该开关，也不执行暖服排空。
+
 ## 调度可见性
 
 调度自动运行，当前管理 API 不提供手工创建 lobby、注入 metadata 或覆盖实时 A2S 观察的接口。

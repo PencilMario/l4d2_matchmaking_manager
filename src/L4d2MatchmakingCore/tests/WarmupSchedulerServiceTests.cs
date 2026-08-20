@@ -49,6 +49,72 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
+    public async Task DisabledGlobalSchedulingSkipsEverySchedulingAction()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent
+        {
+            Id = Guid.NewGuid(),
+            Name = "agent",
+            Status = "running",
+            SteamDataVolumeName = "steam",
+            AccountConfigVolumeName = "config",
+            NoVncPort = 18083,
+        };
+        var server = new TargetServer
+        {
+            Id = Guid.NewGuid(),
+            Host = "127.0.0.1",
+            Port = 27015,
+            Enabled = true,
+        };
+        db.AddRange(
+            agent,
+            server,
+            new CoreSettings { WarmupSchedulingEnabled = false, UpdatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(0, agents.StartCalls);
+        Assert.AreEqual(0, agents.StopCalls);
+    }
+
+    [TestMethod]
+    public async Task SharedSchedulingGateMakesTickWaitForAnInProgressToggle()
+    {
+        await using var db = CreateDb();
+        var gate = new WarmupSchedulingGate();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scheduler = new WarmupSchedulerService(
+            db,
+            new FakeAgents(null),
+            new SharedLibraryMaintenanceService(db),
+            schedulingGate: gate);
+
+        var toggle = gate.RunAsync(async () =>
+        {
+            entered.SetResult();
+            await release.Task;
+        }, CancellationToken.None);
+        await entered.Task;
+
+        var tick = scheduler.TickAsync(CancellationToken.None);
+
+        Assert.IsFalse(tick.IsCompleted);
+        release.SetResult();
+        await Task.WhenAll(toggle, tick);
+    }
+
+    [TestMethod]
     public async Task TickStartsReservedAttemptWithOneLease()
     {
         await using var db = CreateDb();
@@ -609,7 +675,7 @@ public sealed class WarmupSchedulerServiceTests
             .SingleOrDefault(candidate => candidate.GetParameters()
                 .Any(parameter => parameter.ParameterType == typeof(IRconCredentialProtector)));
         Assert.IsNotNull(constructor, "WarmupSchedulerService must receive the credential protector at the Agent request boundary.");
-        return (WarmupSchedulerService)constructor.Invoke([db, agents, maintenance, selector, a2s, null, credentials, null]);
+        return (WarmupSchedulerService)constructor.Invoke([db, agents, maintenance, selector, a2s, null, credentials, null, null, null]);
     }
 
     private static WarmupSchedulerService CreateSchedulerWithOptions(

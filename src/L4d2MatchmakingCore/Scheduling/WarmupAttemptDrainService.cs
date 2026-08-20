@@ -9,6 +9,88 @@ public sealed class WarmupAttemptDrainService(
     MatchmakingDbContext dbContext,
     IAgentControlClient agents)
 {
+    public async Task<bool> DrainAllAsync(CancellationToken cancellationToken)
+    {
+        var attempts = await dbContext.WarmupAttempts
+            .Where(attempt => attempt.State == "active" ||
+                attempt.State == "uncertain" ||
+                attempt.State == "restart_pending")
+            .ToListAsync(cancellationToken);
+        if (attempts.Count == 0)
+            return true;
+
+        var trackedAgents = await dbContext.WarmupAgents
+            .Where(agent => attempts.Select(attempt => attempt.WarmupAgentId).Contains(agent.Id))
+            .ToDictionaryAsync(agent => agent.Id, cancellationToken);
+        var leases = await dbContext.ReservationLeases
+            .Where(lease => attempts.Select(attempt => attempt.TargetServerId).Contains(lease.TargetServerId))
+            .ToDictionaryAsync(lease => lease.TargetServerId, cancellationToken);
+        var agentsToRestart = new Dictionary<Guid, WarmupAgent>();
+        var allConfirmed = true;
+        foreach (var attempt in attempts)
+        {
+            if (attempt.State == "restart_pending")
+            {
+                CompleteAttempt(attempt, leases);
+                continue;
+            }
+
+            if (!trackedAgents.TryGetValue(attempt.WarmupAgentId, out var agent))
+            {
+                allConfirmed = false;
+                AddAudit(attempt, "warmup_attempt_drain_agent_missing");
+                continue;
+            }
+
+            try
+            {
+                await agents.StopOperationAsync(agent, attempt.OperationId, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                allConfirmed = false;
+                QuarantineAgent(agent, attempt.OperationId, "agent_operation_drain_uncertain", DateTimeOffset.UtcNow);
+                continue;
+            }
+
+            CompleteAttempt(attempt, leases);
+            if (agent.Status != "quarantined")
+                agentsToRestart[agent.Id] = agent;
+        }
+
+        foreach (var agent in agentsToRestart.Values)
+        {
+            try
+            {
+                await agents.RestartSteamAsync(agent, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                dbContext.LobbyOperationAudits.Add(new LobbyOperationAudit
+                {
+                    WarmupAgentId = agent.Id,
+                    EventType = "steam_restart_request_failed",
+                    DetailsJson = JsonSerializer.Serialize(new { reason = "global_warmup_disabled" }),
+                    ObservedAt = DateTimeOffset.UtcNow,
+                });
+            }
+
+            agent.Status = "restarting";
+            agent.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return allConfirmed;
+    }
+
     public async Task<bool> DrainAgentAsync(Guid agentId, CancellationToken cancellationToken)
     {
         var attempts = await dbContext.WarmupAttempts
@@ -97,6 +179,16 @@ public sealed class WarmupAttemptDrainService(
             DetailsJson = JsonSerializer.Serialize(new { attempt.OperationId }),
             ObservedAt = DateTimeOffset.UtcNow,
         });
+
+    private void CompleteAttempt(
+        WarmupAttempt attempt,
+        IReadOnlyDictionary<Guid, ReservationLease> leases)
+    {
+        attempt.State = "completed";
+        attempt.CompletedAt = DateTimeOffset.UtcNow;
+        if (leases.TryGetValue(attempt.TargetServerId, out var lease) && lease.OperationId == attempt.OperationId)
+            dbContext.ReservationLeases.Remove(lease);
+    }
 
     private void QuarantineAgent(WarmupAgent agent, Guid operationId, string reason, DateTimeOffset now)
     {
