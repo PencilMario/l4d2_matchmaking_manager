@@ -18,7 +18,19 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        if (TryRunHealthCheck(args, out var healthCheckExitCode))
+        SteamAppConfiguration appConfiguration;
+        try
+        {
+            appConfiguration = SteamAppConfiguration.FromEnvironment();
+            appConfiguration.ApplyToProcess();
+        }
+        catch (InvalidOperationException exception) when (exception.Message == "steam_app_id_invalid")
+        {
+            Console.Error.WriteLine("STEAM_APP_ID must be a non-zero unsigned integer.");
+            return 2;
+        }
+
+        if (TryRunHealthCheck(args, appConfiguration.AppId, out var healthCheckExitCode))
             return healthCheckExitCode;
 
         if (ReservationCommand.TryRun(args, out var reservationExitCode))
@@ -26,7 +38,7 @@ internal static class Program
 
         var dllPath = args.Length > 0
             ? Path.GetFullPath(args[0])
-            : throw new ArgumentException("Pass the full path to L4D2's bin\\steam_api.dll.");
+            : throw new ArgumentException("Pass the full path to the game's bin\\steam_api.dll.");
         var protocolReplyMode = args.Length > 1 && string.Equals(args[1], "protocol-reply", StringComparison.OrdinalIgnoreCase);
         var realProtocolReplyMode = args.Length > 1 && string.Equals(args[1], "protocol-reply-real", StringComparison.OrdinalIgnoreCase);
         if (protocolReplyMode || realProtocolReplyMode)
@@ -125,6 +137,12 @@ internal static class Program
 
             var appId = api.GetUtilsAppId();
             Console.WriteLine($"SteamAPI_Init=true AppID={appId}");
+            if (appId != appConfiguration.AppId)
+            {
+                Console.Error.WriteLine(
+                    $"Steam AppID mismatch: expected {appConfiguration.AppId}, observed {appId}.");
+                return 2;
+            }
             var user = api.SteamUser();
             var ownerSteamId = api.GetSteamId(user);
             Console.WriteLine($"SteamUser BLoggedOn={api.IsLoggedOn(user)} steam_id={ownerSteamId}");
@@ -321,7 +339,7 @@ internal static class Program
         }
     }
 
-    private static bool TryRunHealthCheck(string[] args, out int exitCode)
+    private static bool TryRunHealthCheck(string[] args, uint expectedAppId, out int exitCode)
     {
         exitCode = 0;
         if (args.Length < 2 || !string.Equals(args[1], "health-check", StringComparison.OrdinalIgnoreCase))
@@ -352,7 +370,7 @@ internal static class Program
 
             api.ManualDispatchInit();
             var appId = api.GetUtilsAppId();
-            if (appId != 550)
+            if (appId != expectedAppId)
                 return WriteHealthCheckResult(false, "appid_mismatch", out exitCode, appId);
 
             var user = api.SteamUser();

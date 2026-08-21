@@ -27,10 +27,14 @@ public sealed class SteamSessionActor : ISteamSessionActor
         _thread.Start();
     }
 
-    public static ISteamSessionActor Create(string steamApiLibraryPath) =>
-        new SteamSessionActor(
-            new SteamNativeRuntime(steamApiLibraryPath),
+    public static ISteamSessionActor Create(string steamApiLibraryPath)
+    {
+        var appConfiguration = SteamAppConfiguration.FromEnvironment();
+        appConfiguration.ApplyToProcess();
+        return new SteamSessionActor(
+            new SteamNativeRuntime(steamApiLibraryPath, appConfiguration.AppId),
             new RandomCampaignSelector());
+    }
 
     public Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken) =>
         Enqueue(static actor => actor.ObserveHealth(), cancellationToken);

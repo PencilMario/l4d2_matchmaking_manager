@@ -29,6 +29,18 @@ dotnet publish -c Release -r win-x86 --self-contained true -p:PublishSingleFile=
 .\SteamLobbyProbe.exe 'D:\Steam\steamapps\common\Left 4 Dead 2\bin\steam_api.dll'
 ```
 
+默认预期 AppID 为 `550`。研究其他兼容游戏时，可通过 `STEAM_APP_ID` 指定预期 AppID；
+同时必须让发布目录中的 `steam_appid.txt` 使用相同的值。例如验证 Left 4 Dead（AppID 500）：
+
+```powershell
+Set-Content -LiteralPath .\steam_appid.txt -Value '500' -NoNewline
+$env:STEAM_APP_ID = '500'
+.\SteamLobbyProbe.exe 'E:\SteamLibrary\steamapps\common\left 4 dead\bin\steam_api.dll'
+```
+
+程序会在初始化 Steam API 前同步设置进程级 `SteamAppId` 和 `SteamGameId`，并拒绝实际
+AppID 与 `STEAM_APP_ID` 不一致的会话。不设置该变量时保持原有 L4D2 行为。
+
 默认使用 Steam ManualDispatch 并消费实际回调事件。传入 `private`、`friends`、`public` 或 `invisible` 作为第二个参数以选择大厅类型。仅在进行 ABI/控制诊断时传入 `direct` 作为第三个参数；手动回调路径是该 DLL 的已验证路径。
 
 ## Steam API 参数

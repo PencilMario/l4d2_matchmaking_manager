@@ -3,7 +3,9 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using L4d2Matchmaking.Contracts;
 
-internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNativeRuntime
+internal sealed class SteamNativeRuntime(
+    string steamApiLibraryPath,
+    uint expectedAppId = SteamAppConfiguration.DefaultAppId) : ISteamNativeRuntime
 {
     private const int LobbyTypePublic = 2;
     private const int LobbyEnterCallback = 504;
@@ -27,7 +29,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         try
         {
             EnsureInitialized();
-            if (_api!.GetUtilsAppId() != 550)
+            if (_api!.GetUtilsAppId() != expectedAppId)
                 return new AgentHealthSnapshot(false, "appid_mismatch", DateTimeOffset.UtcNow);
             if (!_api.IsLoggedOn(_user) || _api.GetSteamId(_user) == 0)
                 return new AgentHealthSnapshot(false, "steam_not_logged_on", DateTimeOffset.UtcNow);
