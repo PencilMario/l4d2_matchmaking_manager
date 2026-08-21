@@ -19,6 +19,7 @@ public sealed class SourceA2sClientTests
         Assert.AreEqual("name", info.ServerName);
         Assert.AreEqual(4, info.PlayerCount);
         Assert.AreEqual(8, info.MaxPlayers);
+        Assert.AreEqual(500U, info.AppId);
         Assert.IsTrue(info.ObservedAt > DateTimeOffset.UtcNow.AddSeconds(-2));
         Assert.AreEqual(2, server.RequestCount);
     }
@@ -74,7 +75,7 @@ public sealed class SourceA2sClientTests
 
         private static byte[] InfoResponse(byte players, bool truncateAfterPlayers) =>
             truncateAfterPlayers
-                ? [255, 255, 255, 255, 0x49, 17, .. System.Text.Encoding.UTF8.GetBytes("name\0map\0folder\0game\0"), 38, 2, players]
-                : [255, 255, 255, 255, 0x49, 17, .. System.Text.Encoding.UTF8.GetBytes("name\0map\0folder\0game\0"), 38, 2, players, 8, 0, (byte)'d', (byte)'l', 0, 1, .. System.Text.Encoding.UTF8.GetBytes("2.2.2.2\0"), 0];
+                ? [255, 255, 255, 255, 0x49, 17, .. System.Text.Encoding.UTF8.GetBytes("name\0map\0folder\0game\0"), 244, 1, players]
+                : [255, 255, 255, 255, 0x49, 17, .. System.Text.Encoding.UTF8.GetBytes("name\0map\0folder\0game\0"), 244, 1, players, 8, 0, (byte)'d', (byte)'l', 0, 1, .. System.Text.Encoding.UTF8.GetBytes("1.0.4.7\0"), 0];
     }
 }

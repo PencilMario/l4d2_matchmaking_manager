@@ -14,6 +14,9 @@ public sealed class TargetServerService(
         CreateTargetServerRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.RequiresReservation)
+            throw new ArgumentException("l4d1_reservation_not_supported");
+
         var configuration = Normalize(
             request.Endpoint,
             request.RequiresReservation,
@@ -72,6 +75,8 @@ public sealed class TargetServerService(
             .SingleOrDefaultAsync(candidate => candidate.Id == serverId, cancellationToken);
         if (server is null)
             return null;
+        if (request.RequiresReservation && !server.RequiresReservation)
+            throw new ArgumentException("l4d1_reservation_not_supported");
 
         var configuration = Normalize(
             request.Endpoint,
@@ -141,10 +146,13 @@ public sealed class TargetServerService(
         string? rconPassword,
         string? gameMode)
     {
+        if (requiresReservation && enabled != false)
+            throw new ArgumentException("l4d1_reservation_not_supported");
+
         var requestedConcurrency = maxConcurrentWarmups ?? 36;
         var effectiveConcurrency = requiresReservation ? 1 : requestedConcurrency;
         var effectiveAttemptWindow = attemptWindowSeconds ?? 720;
-        var effectivePlayerTarget = playerTarget ?? 6;
+        var effectivePlayerTarget = playerTarget ?? 4;
         if (requestedConcurrency < 1 || effectiveAttemptWindow < 1 || effectivePlayerTarget < 1)
             throw new ArgumentException("invalid_target_server_configuration");
         if (rconPassword is { Length: 0 })

@@ -15,7 +15,7 @@ public sealed class FileAgentReadinessMarker(string path) : IAgentReadinessMarke
             ".steam",
             "steam",
             "config",
-            "l4d2-agent-ready"));
+            "l4d-agent-ready"));
     }
 
     public async Task MarkReadyAsync(CancellationToken cancellationToken)

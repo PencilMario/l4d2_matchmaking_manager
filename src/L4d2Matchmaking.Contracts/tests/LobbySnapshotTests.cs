@@ -13,7 +13,7 @@ public sealed class LobbySnapshotTests
             "109775242170052468",
             "76561198000000000",
             [new LobbyMemberSnapshot("76561198000000000", "Agent")],
-            new Dictionary<string, string> { ["Game:campaign"] = "L4D2C2" },
+            new Dictionary<string, string> { ["Game:campaign"] = "Farm" },
             DateTimeOffset.UnixEpoch);
 
         var json = JsonSerializer.Serialize(snapshot);

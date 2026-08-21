@@ -35,6 +35,7 @@ internal sealed record L4d2HostSession(
             LobbyId.ConvertToUInt64(),
             OwnerSteamId,
             senderSteamId,
+            null,
             out reply);
     }
 

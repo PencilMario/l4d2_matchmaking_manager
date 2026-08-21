@@ -4,4 +4,5 @@ public sealed record A2sServerInfo(
     string ServerName,
     int PlayerCount,
     int MaxPlayers,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt,
+    uint AppId = 500);

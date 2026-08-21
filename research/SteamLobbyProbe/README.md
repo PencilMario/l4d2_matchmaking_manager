@@ -1,6 +1,6 @@
 # Steam 大厅探测程序
 
-该探测程序用于测试：在不启动游戏客户端的情况下，能否从独立的 x86 进程中创建 Left 4 Dead 系列的 Steam 大厅。
+该探测程序现在是 L4D1 专用入口：在不启动游戏客户端的情况下，用 AppID 500 创建和观察 Steam 大厅。
 
 ## 已验证结果
 
@@ -23,14 +23,13 @@
 dotnet publish -c Release -r win-x86 --self-contained true -p:PublishSingleFile=false -o publish
 ```
 
-从 `publish` 目录运行它，其中 `steam_appid.txt` 包含 `550`：
+从 `publish` 目录运行它，其中 `steam_appid.txt` 包含 `500`：
 
 ```powershell
-.\SteamLobbyProbe.exe 'D:\Steam\steamapps\common\Left 4 Dead 2\bin\steam_api.dll'
+.\SteamLobbyProbe.exe 'E:\SteamLibrary\steamapps\common\Left 4 Dead 2\bin\steam_api.dll'
 ```
 
-默认预期 AppID 为 `550`。研究其他兼容游戏时，可通过 `STEAM_APP_ID` 指定预期 AppID；
-同时必须让发布目录中的 `steam_appid.txt` 使用相同的值。例如验证 Left 4 Dead（AppID 500）：
+默认预期 AppID 为 `500`。`STEAM_APP_ID` 和发布目录中的 `steam_appid.txt` 必须保持为 500：
 
 ```powershell
 Set-Content -LiteralPath .\steam_appid.txt -Value '500' -NoNewline
@@ -39,7 +38,7 @@ $env:STEAM_APP_ID = '500'
 ```
 
 程序会在初始化 Steam API 前同步设置进程级 `SteamAppId` 和 `SteamGameId`，并拒绝实际
-AppID 与 `STEAM_APP_ID` 不一致的会话。不设置该变量时保持原有 L4D2 行为。
+AppID 与 `STEAM_APP_ID` 不一致的会话。不设置该变量时也使用 L4D1 AppID 500。
 
 ### Left 4 Dead 的 Steam API 兼容边界
 
@@ -57,7 +56,7 @@ AppID 500，完成登录检查、Lobby 列表回调、私有 Lobby 创建、meta
 2026-08-21 使用 `list-lobbies` 读取到一个真实 L4D1 公共 Lobby，取得 20 个 metadata 字段；
 其中包括 `Game:campaign=Farm`、`Game:mode=coop`、`Members:numSlots=4`、
 `Game:MissionInfo:DisplayTitle=#L4D360UI_Campaign_Farm` 和 L4D1 商店 URL。Probe 已将这组
-实测字段固化为 AppID 500 研究 profile，并保留原有 AppID 550 profile。
+实测字段固化为本分支唯一的 AppID 500 profile。
 
 随后 Probe 创建一个最多保持 180 秒的 AppID 500 public Lobby，使用上述 20 个字段。一个真实
 外部 L4D1 客户端发现并加入该 Lobby；Probe 依次收到：

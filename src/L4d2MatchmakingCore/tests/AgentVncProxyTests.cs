@@ -31,7 +31,7 @@ public sealed class AgentVncProxyTests
         await proxy.ProxyAsync(context, Guid.Parse("11111111-1111-1111-1111-111111111111"), "vnc.html", CancellationToken.None);
 
         Assert.IsNotNull(handler.Request);
-        Assert.AreEqual("http://l4d2-agent-11111111111111111111111111111111:8083/vnc.html?autoconnect=true", handler.Request.RequestUri?.ToString());
+        Assert.AreEqual("http://l4d-agent-11111111111111111111111111111111:8083/vnc.html?autoconnect=true", handler.Request.RequestUri?.ToString());
         Assert.IsFalse(handler.Request.Headers.Contains("Referer"));
         Assert.AreEqual("/v1/agents/11111111-1111-1111-1111-111111111111/vnc/login", context.Response.Headers.Location);
     }

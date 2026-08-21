@@ -179,8 +179,8 @@ public sealed class SteamSessionActorQueryTests
             if (ThrowAfterJoining && _joined.Contains(lobbyId))
                 throw new SteamRuntimeException("lobby_data_unavailable");
             if (ReadHeldLobbyWithoutMembers && lobbyId == ManagedLobbyId)
-                return Snapshot(lobbyId, "L4D2C1", includeSelf: false);
-            return Snapshot(lobbyId, "L4D2C1", _joined.Contains(lobbyId));
+                return Snapshot(lobbyId, "Farm", includeSelf: false);
+            return Snapshot(lobbyId, "Farm", _joined.Contains(lobbyId));
         }
 
         public NativeLobbyJoinResult JoinLobby(ulong lobbyId)

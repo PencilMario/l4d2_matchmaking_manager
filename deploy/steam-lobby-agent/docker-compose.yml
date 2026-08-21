@@ -3,7 +3,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/steam-lobby-agent/Dockerfile
-    image: l4d2-steam-lobby-agent:local
+    image: l4d-steam-lobby-agent:local
     restart: unless-stopped
     shm_size: 2gb
     environment:
@@ -22,6 +22,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: ""
       LIBGL_ALWAYS_SOFTWARE: "1"
       STEAM_SHARED_LIBRARY_PATH: /mnt/steam-library
+      STEAM_APP_ID: "500"
       STEAM_API_LIBRARY_PATH: ${STEAM_API_LIBRARY_PATH:-}
       STEAM_DOWNLOAD_REGION_ID: ${STEAM_DOWNLOAD_REGION_ID:-}
       STEAM_DOWNLOAD_REGION: ${STEAM_DOWNLOAD_REGION:-}
@@ -36,7 +37,7 @@ services:
       - seccomp=unconfined
     volumes:
       - steam-data:/home/default
-      - agent-config:/var/lib/l4d2-agent
+      - agent-config:/var/lib/l4d-agent
       - type: bind
         source: ${STEAM_SHARED_LIBRARY_HOST_PATH:?Set STEAM_SHARED_LIBRARY_HOST_PATH to the shared steamapps host directory}
         target: /mnt/steam-library

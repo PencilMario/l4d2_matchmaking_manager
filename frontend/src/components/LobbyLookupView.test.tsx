@@ -29,7 +29,7 @@ describe('大厅查询加入 URI', () => {
     fireEvent.click(screen.getByRole('button', { name: '查询大厅' }));
 
     const uri = await screen.findByDisplayValue(
-      'steam://joinlobby/550/109775242226986793/76561199012457364'
+      'steam://joinlobby/500/109775242226986793/76561199012457364'
     );
     expect(uri).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制加入 URI' })).toBeInTheDocument();

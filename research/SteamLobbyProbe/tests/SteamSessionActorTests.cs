@@ -57,7 +57,7 @@ public sealed class SteamSessionActorTests
         public LobbySnapshot ReadLobby(ulong lobbyId) => Track(() =>
         {
             ReadLobbyCalls++;
-            return Snapshot(lobbyId.ToString(), "L4D2C1");
+            return Snapshot(lobbyId.ToString(), "Farm");
         });
 
         public NativeLobbyJoinResult JoinLobby(ulong lobbyId) => NativeLobbyJoinResult.Denied;

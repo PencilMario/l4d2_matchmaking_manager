@@ -6,10 +6,10 @@ namespace SteamLobbyProbe.Tests;
 public sealed class SteamAppConfigurationTests
 {
     [TestMethod]
-    public void MissingAppIdUsesL4d2Default()
+    public void MissingAppIdUsesL4d1Default()
     {
-        Assert.AreEqual(550U, SteamAppConfiguration.ParseAppId(null));
-        Assert.AreEqual(550U, SteamAppConfiguration.ParseAppId(string.Empty));
+        Assert.AreEqual(500U, SteamAppConfiguration.ParseAppId(null));
+        Assert.AreEqual(500U, SteamAppConfiguration.ParseAppId(string.Empty));
     }
 
     [TestMethod]

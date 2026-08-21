@@ -25,6 +25,9 @@ app.MapPost("/v1/operations", async (
     IAgentSteamSessionService service,
     CancellationToken cancellationToken) =>
 {
+    if (request.Mode == AgentLobbyMode.Reserved)
+        return Results.BadRequest("l4d1_reservation_not_supported");
+
     var result = await service.StartAsync(request, cancellationToken);
     return result.AlreadyExists
         ? Results.Ok(result.Operation)

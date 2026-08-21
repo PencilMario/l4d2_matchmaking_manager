@@ -80,7 +80,7 @@ public sealed class TargetServerObservationEndpointTests
         factory.Store.Replace(target.Id, new TargetServerObservation(
             target.Id,
             "online",
-            "L4D2 HK Versus #1",
+            "L4D1 HK Versus #1",
             2,
             12,
             observedAt));
@@ -91,7 +91,7 @@ public sealed class TargetServerObservationEndpointTests
         Assert.IsNotNull(observations);
         Assert.AreEqual(1, observations.Length);
         Assert.AreEqual("online", observations[0].Status);
-        Assert.AreEqual("L4D2 HK Versus #1", observations[0].ServerName);
+        Assert.AreEqual("L4D1 HK Versus #1", observations[0].ServerName);
         Assert.AreEqual(2, observations[0].PlayerCount);
         Assert.AreEqual(12, observations[0].MaxPlayers);
         Assert.AreEqual(observedAt, observations[0].ObservedAt);

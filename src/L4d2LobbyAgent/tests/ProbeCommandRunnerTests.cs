@@ -10,7 +10,7 @@ public sealed class ProbeCommandRunnerTests
     public async Task RunAsyncInvokesTheReadOnlyHealthCommandAndParsesSuccess()
     {
         var launcher = new FakeProcessLauncher(0, """
-            {"ready":true,"failure":null,"checks":{"appId":550,"lobbyCount":3}}
+            {"ready":true,"failure":null,"checks":{"appId":500,"lobbyCount":3}}
             """);
         var runner = new ProbeCommandRunner(
             new ProbeCommandOptions("/opt/probe/SteamLobbyProbe", "/opt/steam/libsteam_api.so", TimeSpan.FromSeconds(5)),
@@ -19,7 +19,7 @@ public sealed class ProbeCommandRunnerTests
         var result = await runner.RunAsync(CancellationToken.None);
 
         Assert.IsTrue(result.Ready);
-        Assert.AreEqual((uint)550, result.AppId);
+        Assert.AreEqual((uint)500, result.AppId);
         Assert.AreEqual((uint)3, result.LobbyCount);
         CollectionAssert.AreEqual(
             new[] { "/opt/steam/libsteam_api.so", "health-check", "--json" },
@@ -33,13 +33,13 @@ public sealed class ProbeCommandRunnerTests
             new ProbeCommandOptions("probe", "steam-api", TimeSpan.FromSeconds(5)),
             new FakeProcessLauncher(0, """
                 ManualCallback id=510 size=4 raw=32000000
-                {"ready":true,"failure":null,"checks":{"appId":550,"lobbyCount":50}}
+                {"ready":true,"failure":null,"checks":{"appId":500,"lobbyCount":50}}
                 """));
 
         var result = await runner.RunAsync(CancellationToken.None);
 
         Assert.IsTrue(result.Ready);
-        Assert.AreEqual((uint)550, result.AppId);
+        Assert.AreEqual((uint)500, result.AppId);
         Assert.AreEqual((uint)50, result.LobbyCount);
     }
 

@@ -13,4 +13,4 @@ services:
 networks:
   matchmaking:
     external: true
-    name: ${CORE_NETWORK:-l4d2-matchmaking}
+    name: ${CORE_NETWORK:-l4d-matchmaking}

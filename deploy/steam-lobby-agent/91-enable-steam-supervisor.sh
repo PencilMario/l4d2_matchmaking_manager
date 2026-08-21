@@ -124,8 +124,8 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     ln -sfn "${millennium_install_directory}/libmillennium_hhx64.so" \
         "${steam_runtime_root}/ubuntu12_64/libmillennium_hhx64.so"
 
-    set_l4d2_update_policy() {
-        manifest="${STEAM_SHARED_LIBRARY_PATH:-}/steamapps/appmanifest_550.acf"
+    set_l4d_update_policy() {
+        manifest="${STEAM_SHARED_LIBRARY_PATH:-}/steamapps/appmanifest_500.acf"
         [ -n "${STEAM_SHARED_LIBRARY_PATH:-}" ] && [ -f "${manifest}" ] || return 0
         sed -i 's|"AutoUpdateBehavior"[[:space:]]*"[^"]*"|"AutoUpdateBehavior" "1"|' "${manifest}"
     }
@@ -153,7 +153,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         esac
 
         loginusers_file="${steam_config_directory}/loginusers.vdf"
-        login_ready_marker="${steam_config_directory}/l4d2-agent-ready"
+        login_ready_marker="${steam_config_directory}/l4d-agent-ready"
         enable_vnc=true
         case "${login_ui_mode}" in
             always)
@@ -192,7 +192,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
             '    "1"' \
             '    {' \
             "        \"path\" \"${STEAM_SHARED_LIBRARY_PATH}\"" \
-            '        "label" "Shared L4D2"' \
+            '        "label" "Shared L4D"' \
             '        "apps" {}' \
             '    }' \
             '}' > "${temporary_file}"
@@ -240,7 +240,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     fi
     chown "${PUID:-1000}:${PGID:-1000}" "${steam_config_file}"
     chmod 0600 "${steam_config_file}"
-    set_l4d2_update_policy
+    set_l4d_update_policy
     configure_steam_ui_mode
 
     sed -i 's|^autostart=.*$|autostart=true|' /etc/supervisor.d/steam.ini

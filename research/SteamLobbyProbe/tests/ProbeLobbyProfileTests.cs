@@ -21,12 +21,11 @@ public sealed class ProbeLobbyProfileTests
     }
 
     [TestMethod]
-    public void ExistingLeft4Dead2ProbeProfileRemainsDefault()
+    public void NonLeft4DeadAppIdIsRejected()
     {
-        var metadata = ProbeLobbyProfile.CreateMetadata(550);
+        var exception = Assert.ThrowsException<InvalidOperationException>(
+            () => ProbeLobbyProfile.CreateMetadata(550));
 
-        Assert.AreEqual(8, ProbeLobbyProfile.GetMemberLimit(550));
-        Assert.AreEqual("c1m1_hotel", metadata["game:map"]);
-        Assert.AreEqual("8", metadata["members:numSlots"]);
+        Assert.AreEqual("left4dead_app_id_required", exception.Message);
     }
 }

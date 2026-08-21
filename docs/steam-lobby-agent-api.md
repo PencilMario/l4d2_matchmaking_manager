@@ -1,7 +1,7 @@
 # Steam Lobby Agent 内部 API
 
 该 API 只供同一 Docker 主机上的 Core 使用。Core 通过专用 Docker 网络中的
-`http://l4d2-agent-<agentIdN>:8080` 访问，不经 SSH、`docker exec` 或宿主机
+`http://l4d-agent-<agentIdN>:8080` 访问，不经 SSH、`docker exec` 或宿主机
 端口转发。Core 创建的 Agent 不发布 8080；首次登录的 noVNC 端口才会按需绑定至
 宿主机回环地址。
 
@@ -14,8 +14,7 @@ Agent 没有 HTTP token。Docker 网络隔离、Core 唯一的 Docker socket 挂
 健康检查、操作、已持有大厅的刷新和任意 lobby 查询都排入同一 Manual Dispatch 命令循环；
 活动操作期间不会启动第二个 Probe 进程。任意 lobby 查询先等待匹配的
 `LobbyDataUpdate_t` 成功回调，绝不把尚未确认的 Steam 缓存当作成功快照。每个新操作由
-Agent 随机挑选一份完整的官方
-C1-C14 campaign profile，Core 不传入或拼接 metadata。
+Agent 使用从真实 AppID 500 Lobby 捕获的 L4D1 `Farm` profile，Core 不传入或拼接 campaign metadata。
 
 Steam API 标识符均作为十进制字符串传输，避免 JavaScript 数值精度丢失。
 
@@ -42,7 +41,7 @@ Steam API 标识符均作为十进制字符串传输，避免 JavaScript 数值�
   "checks": {
     "steamDesktop": "ok",
     "steamApiInit": "ok",
-    "appId": 550,
+    "appId": 500,
     "loggedOn": "ok",
     "manualDispatch": "ok",
     "lobbyListCallback": "ok",
@@ -64,16 +63,16 @@ Guard 数据、库路径或原始 Steam 输出。
 ```json
 {
   "operationId": "2b5baaf4-d85d-4a7d-a515-3bf87ff32036",
-  "mode": "reserved",
+  "mode": "standard",
   "ipv4Address": "203.0.113.7",
   "port": 27015,
   "gameMode": "coop",
-  "rconPassword": "<private-core-to-agent-only>"
+  "rconPassword": null
 }
 ```
 
-`mode` 为 `standard` 或 `reserved`；`gameMode` 为可选的 `coop`、`versus` 字符串，省略时保持现有 versus metadata。
-`coop` lobby metadata 包含 `Members:numSlots=4`、`Game:Mode=coop`、`Game:sk_versus=19`；reservation settings 二进制 payload 不受该字段影响。
+`mode` 当前必须为 `standard`；`reserved` 返回 `400 l4d1_reservation_not_supported`。
+`gameMode` 为可选的 `coop`、`versus` 字符串，省略时默认 `coop`。`coop` 使用 4 个槽位，`versus` 使用 8 个槽位。
 首次请求返回 `202 Accepted`，同一
 `operationId` 的重试返回 `200 OK` 且不会新建大厅。响应中的操作快照格式为：
 
@@ -85,7 +84,7 @@ Guard 数据、库路径或原始 Steam 输出。
     "lobbyId": "109775242170052468",
     "ownerSteamId": "76561198000000000",
     "members": [{"steamId":"76561198000000000","personaName":"Agent"}],
-    "metadata": {"Game:campaign":"L4D2C2", "Game:state":"game"},
+    "metadata": {"Game:campaign":"Farm", "Game:mode":"coop", "Game:state":"lobby"},
     "observedAt": "2026-08-17T12:00:00+00:00",
     "memberDataStatus": "complete"
   },

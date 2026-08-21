@@ -37,7 +37,7 @@ RUN set -eu \
     && rm -f "${archive_file}" \
     && rm -rf "${extract_directory}"
 
-COPY --from=build /out/agent/ /opt/l4d2-agent/
+COPY --from=build /out/agent/ /opt/l4d-agent/
 COPY --from=build /out/probe/ /opt/steam-lobby-probe/
 COPY deploy/steam-lobby-agent/l4d2-lobby-agent.ini /etc/supervisor.d/l4d2-lobby-agent.ini
 COPY deploy/steam-lobby-agent/91-enable-steam-supervisor.sh /etc/cont-init.d/91-enable-steam-supervisor.sh
@@ -47,14 +47,15 @@ COPY deploy/steam-lobby-agent/l4d2-steam-status.desktop /usr/share/applications/
 RUN rm -f /etc/cont-init.d/60-configure_gpu_driver.sh \
     && sed -i 's|if \[\[ ! -f /tmp/\.desktop-apps-updated \]\]; then|if false; then # skip desktop-apps-updated bootstrap|' /usr/bin/start-desktop.sh \
     && sed -i 's/if (!window\.isSecureContext) {/if (false) {/' /opt/frontend/noVNC/core/rfb.js \
-    && chmod +x /etc/cont-init.d/91-enable-steam-supervisor.sh /usr/local/bin/l4d2-steam-status /opt/l4d2-agent/L4d2LobbyAgent /opt/steam-lobby-probe/SteamLobbyProbe \
+    && chmod +x /etc/cont-init.d/91-enable-steam-supervisor.sh /usr/local/bin/l4d2-steam-status /opt/l4d-agent/L4d2LobbyAgent /opt/steam-lobby-probe/SteamLobbyProbe \
     && chmod 0755 /opt/steam-region-bridge \
-    && mkdir -p /var/lib/l4d2-agent \
-    && chmod 0750 /var/lib/l4d2-agent
+    && mkdir -p /var/lib/l4d-agent \
+    && chmod 0750 /var/lib/l4d-agent
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
     STEAM_LOBBY_PROBE_PATH=/opt/steam-lobby-probe/SteamLobbyProbe \
     PROBE_TIMEOUT_SECONDS=10 \
+    STEAM_APP_ID=500 \
     STEAM_REGION_BRIDGE_SOURCE=/opt/steam-region-bridge \
     STEAM_DOWNLOAD_REGION_STATUS_FILE=/home/default/.steam/steam/config/steam-download-region
 

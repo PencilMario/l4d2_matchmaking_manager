@@ -2,7 +2,7 @@ using System.Globalization;
 
 internal sealed record SteamAppConfiguration(uint AppId)
 {
-    internal const uint DefaultAppId = 550;
+    internal const uint DefaultAppId = 500;
     internal const string AppIdEnvironmentVariable = "STEAM_APP_ID";
 
     internal static SteamAppConfiguration FromEnvironment() =>

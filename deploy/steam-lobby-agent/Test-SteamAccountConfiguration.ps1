@@ -5,22 +5,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$manifest = Join-Path $SharedLibraryPath 'steamapps/appmanifest_550.acf'
+$manifest = Join-Path $SharedLibraryPath 'steamapps/appmanifest_500.acf'
 if (-not (Test-Path -LiteralPath $manifest)) {
-    throw "Missing AppID 550 fixture: $manifest"
+    throw "Missing AppID 500 fixture: $manifest"
 }
 
 $fixture = Get-Content -Raw -LiteralPath $manifest
 if ($fixture -notmatch '"AutoUpdateBehavior"\s+"0"') {
-    throw 'The fixture must model Steam default AppID 550 automatic updates.'
+    throw 'The fixture must model Steam default AppID 500 automatic updates.'
 }
 
 $initializer = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '91-enable-steam-supervisor.sh')
-if ($initializer -notmatch 'set_l4d2_update_policy' -or
+if ($initializer -notmatch 'set_l4d_update_policy' -or
     $initializer -notmatch '"AutoUpdateBehavior" "1"' -or
     $initializer -notmatch 'STEAM_DOWNLOAD_REGION_ID' -or
     $initializer -notmatch 'steam_download_region_id') {
-    throw 'The initializer must set AppID 550 to update-on-launch and pass the optional region target to Millennium.'
+    throw 'The initializer must set AppID 500 to update-on-launch and pass the optional region target to Millennium.'
 }
 
 if ($initializer -match 'set_download_region' -or $initializer -match '"DownloadRegion"') {
@@ -63,7 +63,7 @@ if (-not [regex]::IsMatch(
     throw 'The initializer must keep VNC for an unconfigured auto account and disable it after login or in never mode.'
 }
 
-if ($initializer -notmatch 'l4d2-agent-ready' -or
+if ($initializer -notmatch 'l4d-agent-ready' -or
     $initializer -notmatch 'login_ready_marker' -or
     $initializer -notmatch '\[ -f "\$\{login_ready_marker\}" \]') {
     throw 'The initializer must use the account-local Agent readiness marker when Steam does not write MostRecent.'

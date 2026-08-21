@@ -27,7 +27,7 @@ export const LobbyLookupView: React.FC = () => {
   const [uriCopied, setUriCopied] = useState(false);
 
   const joinUri = result?.ownerSteamId
-    ? `steam://joinlobby/550/${result.lobbyId}/${result.ownerSteamId}`
+    ? `steam://joinlobby/500/${result.lobbyId}/${result.ownerSteamId}`
     : null;
 
   const copyJoinUri = async () => {

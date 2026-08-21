@@ -81,6 +81,8 @@ internal static class Program
 
         var serverMode = args.Length > 1 && string.Equals(args[1], "server", StringComparison.OrdinalIgnoreCase);
         var reservedServerMode = args.Length > 1 && string.Equals(args[1], "server-reserved", StringComparison.OrdinalIgnoreCase);
+        if (reservedServerMode)
+            throw new InvalidOperationException("l4d1_reservation_not_supported");
         if (serverMode && args.Length < 3)
             throw new ArgumentException("Server mode requires an IPv4 endpoint in the form ip:port.");
         if (reservedServerMode && args.Length < 3)
@@ -276,7 +278,7 @@ internal static class Program
                     pipe,
                     useManualDispatch,
                     keepaliveSeconds,
-                    new ServerLobbyContext(result.LobbyId, ownerSteamId, endpoint, serverGameState, LobbySettingsProfile.Legacy));
+                    new ServerLobbyContext(result.LobbyId, ownerSteamId, endpoint, serverGameState, LobbySettingsProfile.Real));
             }
             else if (reservedServerMode)
             {
@@ -493,22 +495,16 @@ internal static class Program
     private static Dictionary<string, string> BuildServerLobbyData(
         ServerEndpoint endpoint,
         ulong lobbyId,
-        string gameState) => new()
+        string gameState)
     {
-        ["game:mode"] = "versus",
-        ["game:map"] = "c2m1_highway",
-        ["game:state"] = gameState,
-        ["system:network"] = "LIVE",
-        ["system:access"] = "public",
-        ["options:server"] = "dedicated",
-        ["server:adronline"] = endpoint.ConnectString,
-        ["server:adrlocal"] = endpoint.ConnectString,
-        ["server:connectstring"] = endpoint.ConnectString,
-        ["server:reservationid"] = lobbyId.ToString(CultureInfo.InvariantCulture),
-        ["members:numSlots"] = "8",
-        ["members:numPlayers"] = "1",
-        ["members:numMachines"] = "1",
-    };
+        var metadata = RealSessionSettings.CreateLobbyMetadata();
+        metadata["Game:state"] = gameState;
+        metadata["server:adronline"] = endpoint.ConnectString;
+        metadata["server:adrlocal"] = endpoint.ConnectString;
+        metadata["server:connectstring"] = endpoint.ConnectString;
+        metadata["server:reservationid"] = lobbyId.ToString(CultureInfo.InvariantCulture);
+        return metadata;
+    }
 
     private static int RunProtocolReply(string[] args, bool realProfile)
     {
@@ -533,6 +529,7 @@ internal static class Program
                 lobbyId,
                 ownerSteamId,
                 requesterSteamId,
+                null,
                 out var reply)
             : LobbyJoinProtocol.TryCreateReply(
                 request,
@@ -862,6 +859,7 @@ internal static class Program
                 context.LobbyId,
                 context.OwnerSteamId,
                 requesterSteamId,
+                null,
                 out reply);
         }
 

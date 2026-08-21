@@ -102,7 +102,7 @@ public sealed class AgentControlClient(HttpClient httpClient) : IAgentControlCli
             ?? throw new InvalidDataException("agent_response_body_missing");
 
     private static Uri UriFor(WarmupAgent agent, string path) =>
-        new($"http://l4d2-agent-{agent.Id:N}:8080{path}", UriKind.Absolute);
+        new($"http://l4d-agent-{agent.Id:N}:8080{path}", UriKind.Absolute);
 }
 
 public sealed class AgentLobbyQueryException(string code) : HttpRequestException(code)

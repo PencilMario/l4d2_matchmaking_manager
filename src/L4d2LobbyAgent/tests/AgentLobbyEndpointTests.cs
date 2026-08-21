@@ -39,6 +39,25 @@ public sealed class AgentLobbyEndpointTests
     }
 
     [TestMethod]
+    public async Task ReservedOperationIsRejectedBeforeSteamIsCalled()
+    {
+        var service = new FakeSessionService();
+        await using var factory = new AgentFactory(service);
+        using var client = factory.CreateClient();
+        var request = new AgentOperationRequest(
+            Guid.NewGuid(),
+            AgentLobbyMode.Reserved,
+            "203.0.113.7",
+            27015);
+
+        var response = await client.PostAsJsonAsync("/v1/operations", request);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+        StringAssert.Contains(await response.Content.ReadAsStringAsync(), "l4d1_reservation_not_supported");
+        Assert.AreEqual(0, service.StartCalls);
+    }
+
+    [TestMethod]
     public async Task QueryReturnsExplicitServiceUnavailableWhenLobbyDataIsNotConfirmed()
     {
         var service = new FakeSessionService
@@ -174,7 +193,7 @@ public sealed class AgentLobbyEndpointTests
             lobbyId,
             "76561198000000000",
             [new LobbyMemberSnapshot("76561198000000000", "Agent")],
-            new Dictionary<string, string> { ["Game:campaign"] = "L4D2C2" },
+            new Dictionary<string, string> { ["Game:campaign"] = "Farm" },
             DateTimeOffset.UtcNow);
     }
 }

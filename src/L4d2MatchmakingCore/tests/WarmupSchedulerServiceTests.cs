@@ -115,7 +115,7 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
-    public async Task TickStartsReservedAttemptWithOneLease()
+    public async Task TickSkipsLegacyReservedTargets()
     {
         await using var db = CreateDb();
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
@@ -127,9 +127,9 @@ public sealed class WarmupSchedulerServiceTests
 
         await scheduler.TickAsync(CancellationToken.None);
 
-        Assert.AreEqual(1, agents.StartCalls);
-        Assert.IsTrue(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id));
-        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.TargetServerId == server.Id && attempt.State == "active"));
+        Assert.AreEqual(0, agents.StartCalls);
+        Assert.IsFalse(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id));
+        Assert.IsFalse(await db.WarmupAttempts.AnyAsync(attempt => attempt.TargetServerId == server.Id));
     }
 
     [TestMethod]
@@ -450,7 +450,7 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
-    public async Task TickPassesDecryptedRconPasswordOnlyInTheReservedAgentRequest()
+    public async Task TickNeverDecryptsCredentialsForLegacyReservedTargets()
     {
         await using var db = CreateDb();
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
@@ -473,10 +473,8 @@ public sealed class WarmupSchedulerServiceTests
 
         await scheduler.TickAsync(CancellationToken.None);
 
-        Assert.AreEqual("encrypted-rcon-password", credentials.LastCiphertext);
-        Assert.IsNotNull(agents.LastStartRequest);
-        Assert.AreEqual("decrypted-rcon-password", agents.LastStartRequest.RconPassword);
-        Assert.AreEqual(AgentLobbyMode.Reserved, agents.LastStartRequest.Mode);
+        Assert.IsNull(credentials.LastCiphertext);
+        Assert.IsNull(agents.LastStartRequest);
     }
 
     [TestMethod]
@@ -687,11 +685,11 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
-    public async Task StartFailureQuarantinesAgentAndPreservesReservationExclusion()
+    public async Task StandardStartFailureQuarantinesAgentWithoutReservationLease()
     {
         await using var db = CreateDb();
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
-        var server = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = true, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var server = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
         db.AddRange(agent, server);
         await db.SaveChangesAsync();
         var agents = new FakeAgents(null, throwOnGetOperation: true, throwOnStart: true);
@@ -702,8 +700,7 @@ public sealed class WarmupSchedulerServiceTests
         var uncertainAttempt = await db.WarmupAttempts.SingleAsync();
         Assert.AreEqual("uncertain", uncertainAttempt.State);
         Assert.AreEqual("quarantined", agent.Status);
-        var lease = await db.ReservationLeases.SingleAsync();
-        Assert.AreEqual(uncertainAttempt.OperationId, lease.OperationId);
+        Assert.IsFalse(await db.ReservationLeases.AnyAsync());
 
         await scheduler.TickAsync(CancellationToken.None);
 

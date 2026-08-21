@@ -13,7 +13,7 @@ volume，但共享同一个宿主机游戏库，并在容器中挂载为 `/mnt/s
 从仓库根目录执行：
 
 ```sh
-docker build -f deploy/steam-lobby-agent/Dockerfile -t l4d2-steam-lobby-agent:local .
+docker build -f deploy/steam-lobby-agent/Dockerfile -t l4d-steam-lobby-agent:local .
 ```
 
 Core 默认使用该 tag；通过 `CORE_AGENT_IMAGE` 可改用受控的私有镜像 tag。
@@ -39,8 +39,8 @@ Steam 登录和 Steam Guard。
 `download_region`，不会编辑 `config.vdf`；实际区域 ID 写入账号私有的
 `~/.steam/steam/config/steam-download-region`，Agent 健康探针优先读取该状态文件。
 `STEAM_DOWNLOAD_REGION` 仅保留为旧配置兼容回退。
-共享 AppID 550 manifest 会设置 `AutoUpdateBehavior=1`，即仅游戏启动时更新；暖服 Agent
-不会启动 L4D2 客户端。这是本部署的自动更新边界：它关闭的是 L4D2 的后台/常规更新，不
+共享 AppID 500 manifest 会设置 `AutoUpdateBehavior=1`，即仅游戏启动时更新；暖服 Agent
+不会启动 L4D1 客户端。这是本部署的自动更新边界：它关闭的是 L4D1 的后台/常规更新，不
 保证或阻止 Steam 客户端自身的 bootstrap 更新。后者没有可跨 Steam 版本验证的稳定配置，
 且客户端更新可能影响 Steam API 兼容性；如需限制它，必须在实际 Ubuntu Steam 客户端上
 另行验证后再作为运维策略实施。

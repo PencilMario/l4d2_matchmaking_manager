@@ -32,7 +32,7 @@ export function LobbyQueryView({ queryLobby }: LobbyQueryViewProps) {
   const [stale, setStale] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const joinUri = result?.ownerSteamId ? `steam://joinlobby/550/${result.lobbyId}/${result.ownerSteamId}` : null;
+  const joinUri = result?.ownerSteamId ? `steam://joinlobby/500/${result.lobbyId}/${result.ownerSteamId}` : null;
   const copyJoinUri = async () => {
     if (!joinUri) return;
     await navigator.clipboard.writeText(joinUri);

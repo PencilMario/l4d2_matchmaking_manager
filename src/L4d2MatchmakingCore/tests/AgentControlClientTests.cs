@@ -46,7 +46,7 @@ public sealed class AgentControlClientTests
                 $"GET /v1/lobbies/{lobby.LobbyId}",
             },
             handler.Requests);
-        Assert.IsTrue(handler.Hosts.All(host => host == $"l4d2-agent-{agent.Id:N}:8080"));
+        Assert.IsTrue(handler.Hosts.All(host => host == $"l4d-agent-{agent.Id:N}:8080"));
     }
 
     [TestMethod]

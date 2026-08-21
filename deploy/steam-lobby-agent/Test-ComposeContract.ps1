@@ -163,5 +163,5 @@ if ($compose -match 'steam-data:/home/steam') {
 }
 
 if ($compose -match 'left4dead2') {
-    throw 'The compose service must not start the L4D2 client.'
+    throw 'The compose service must not start the L4D1 client.'
 }

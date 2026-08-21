@@ -62,10 +62,11 @@ public sealed class SourceA2sClient(TimeSpan timeout) : ISourceA2sClient
         ReadCString(packet, ref offset);
         if (offset + 4 > packet.Length)
             throw new InvalidDataException("a2s_truncated_info_response");
+        var appId = BitConverter.ToUInt16(packet[offset..]);
         offset += 2;
         var playerCount = packet[offset++];
         var maxPlayers = packet[offset];
-        return new A2sServerInfo(serverName, playerCount, maxPlayers, DateTimeOffset.UtcNow);
+        return new A2sServerInfo(serverName, playerCount, maxPlayers, DateTimeOffset.UtcNow, appId);
     }
 
     private static string ReadCString(ReadOnlySpan<byte> packet, ref int offset)

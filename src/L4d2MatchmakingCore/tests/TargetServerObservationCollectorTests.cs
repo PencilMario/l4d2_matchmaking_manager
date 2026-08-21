@@ -26,7 +26,7 @@ public sealed class TargetServerObservationCollectorTests
         var observation = store.Get(target.Id);
         Assert.IsNotNull(observation);
         Assert.AreEqual("online", observation.Status);
-        Assert.AreEqual("L4D2 test server", observation.ServerName);
+        Assert.AreEqual("L4D1 test server", observation.ServerName);
         Assert.AreEqual(2, observation.PlayerCount);
         Assert.AreEqual(12, observation.MaxPlayers);
         Assert.IsTrue(observation.ObservedAt > DateTimeOffset.UtcNow.AddSeconds(-2));
@@ -89,6 +89,19 @@ public sealed class TargetServerObservationCollectorTests
         Assert.IsNotNull(observation.ObservedAt);
     }
 
+    [TestMethod]
+    public async Task RefreshOnceAsyncRejectsNonL4d1Servers()
+    {
+        var target = CreateTarget("127.0.0.1", 27015);
+        using var services = await CreateServicesAsync(target);
+        var store = new TargetServerObservationStore();
+        var collector = CreateCollector(services, store, new FakeA2s { AppId = 550 });
+
+        await collector.RefreshOnceAsync(CancellationToken.None);
+
+        Assert.AreEqual("unavailable", store.Get(target.Id)?.Status);
+    }
+
     private static TargetServerObservationCollector CreateCollector(
         ServiceProvider services,
         TargetServerObservationStore store,
@@ -122,6 +135,7 @@ public sealed class TargetServerObservationCollectorTests
     private sealed class FakeA2s : ISourceA2sClient
     {
         public bool FailDefaultEndpoint { get; set; }
+        public uint AppId { get; set; } = 500;
         public int Calls { get; private set; }
 
         public Task<A2sServerInfo> GetInfoAsync(IPEndPoint endpoint, CancellationToken cancellationToken)
@@ -132,7 +146,7 @@ public sealed class TargetServerObservationCollectorTests
                 27016 => Task.FromException<A2sServerInfo>(new TimeoutException("a2s_query_timeout")),
                 27018 => Task.FromException<A2sServerInfo>(new InvalidDataException("a2s_invalid_info_response")),
                 _ when FailDefaultEndpoint => Task.FromException<A2sServerInfo>(new TimeoutException("a2s_query_timeout")),
-                _ => Task.FromResult(new A2sServerInfo("L4D2 test server", 2, 12, DateTimeOffset.UtcNow)),
+                _ => Task.FromResult(new A2sServerInfo("L4D1 test server", 2, 12, DateTimeOffset.UtcNow, AppId)),
             };
         }
     }

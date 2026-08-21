@@ -32,7 +32,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, initialError }) =
   };
 
   const handleUsePreset = () => {
-    setToken('l4d2-adm-secret');
+    setToken('l4d-adm-secret');
     setErrorMessage(null);
   };
 
@@ -45,7 +45,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, initialError }) =
             <ShieldCheck className="w-6 h-6" />
           </div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-            L4D2 匹配管理
+            L4D1 匹配管理
           </h1>
           <p className="text-xs text-slate-500">
             请输入控制服务访问令牌以进入管理后台

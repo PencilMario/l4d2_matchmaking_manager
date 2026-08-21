@@ -392,7 +392,7 @@ public sealed class WarmupSchedulerService(
         Dictionary<int, Guid> plannedCursorTargets,
         CancellationToken cancellationToken)
     {
-        var candidates = targetServers.ToList();
+        var candidates = targetServers.Where(server => !server.RequiresReservation).ToList();
         while (true)
         {
             var priority = candidates
@@ -456,7 +456,7 @@ public sealed class WarmupSchedulerService(
         {
             return null;
         }
-        if (info.PlayerCount >= server.PlayerTarget || (server.RequiresReservation && info.PlayerCount > 0))
+        if (info.AppId != 500 || info.PlayerCount >= server.PlayerTarget || (server.RequiresReservation && info.PlayerCount > 0))
             return null;
 
         var now = DateTimeOffset.UtcNow;

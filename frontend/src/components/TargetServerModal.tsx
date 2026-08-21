@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TargetServer, TargetServerGameMode } from '../types';
 import { Modal } from './common/Modal';
 import { Switch } from './common/Switch';
-import { Key, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 interface TargetServerModalProps {
   isOpen: boolean;
@@ -35,57 +35,36 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
 
   const [endpoint, setEndpoint] = useState('');
   const [name, setName] = useState('');
-  const [requiresReservation, setRequiresReservation] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [priority, setPriority] = useState(0);
   const [maxConcurrentWarmups, setMaxConcurrentWarmups] = useState(36);
   const [attemptWindowSeconds, setAttemptWindowSeconds] = useState(720);
-  const [playerTarget, setPlayerTarget] = useState(6);
+  const [playerTarget, setPlayerTarget] = useState(4);
   const [gameMode, setGameMode] = useState<TargetServerGameMode | ''>('');
-  const [rconPassword, setRconPassword] = useState('');
-  const [clearRconPassword, setClearRconPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialData) {
       setEndpoint(initialData.endpoint || '');
       setName(initialData.name || '');
-      setRequiresReservation(Boolean(initialData.requiresReservation));
       setEnabled(Boolean(initialData.enabled));
       setPriority(initialData.priority || 0);
-      setMaxConcurrentWarmups(
-        initialData.requiresReservation ? 1 : initialData.maxConcurrentWarmups || 36
-      );
+      setMaxConcurrentWarmups(initialData.maxConcurrentWarmups || 36);
       setAttemptWindowSeconds(initialData.attemptWindowSeconds || 720);
-      setPlayerTarget(initialData.playerTarget || 6);
+      setPlayerTarget(initialData.playerTarget || 4);
       setGameMode(initialData.gameMode ?? '');
-      setRconPassword('');
-      setClearRconPassword(false);
     } else {
       setEndpoint('');
       setName('');
-      setRequiresReservation(false);
       setEnabled(true);
       setPriority(0);
       setMaxConcurrentWarmups(36);
       setAttemptWindowSeconds(720);
-      setPlayerTarget(6);
+      setPlayerTarget(4);
       setGameMode('');
-      setRconPassword('');
-      setClearRconPassword(false);
     }
     setError(null);
   }, [initialData, isOpen]);
-
-  // When requiresReservation toggles, fix maxConcurrentWarmups
-  const handleReservationChange = (checked: boolean) => {
-    setRequiresReservation(checked);
-    if (checked) {
-      setMaxConcurrentWarmups(1);
-    } else if (maxConcurrentWarmups === 1) {
-      setMaxConcurrentWarmups(36);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,15 +78,13 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
       await onSubmit({
         endpoint: endpoint.trim(),
         name: name.trim() || undefined,
-        requiresReservation,
+        requiresReservation: false,
         enabled,
         priority: Number(priority) || 0,
-        maxConcurrentWarmups: requiresReservation ? 1 : Number(maxConcurrentWarmups) || 36,
+        maxConcurrentWarmups: Number(maxConcurrentWarmups) || 36,
         attemptWindowSeconds: Number(attemptWindowSeconds) || 720,
-        playerTarget: Number(playerTarget) || 6,
+        playerTarget: Number(playerTarget) || 4,
         gameMode: gameMode || null,
-        rconPassword: rconPassword ? rconPassword : undefined,
-        clearRconPassword,
       });
     } catch (err: any) {
       setError(err?.message || '保存服务器配置失败');
@@ -188,12 +165,12 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
             onChange={(e) => setGameMode(e.target.value as TargetServerGameMode | '')}
             className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">未指定（保持默认）</option>
+            <option value="">未指定（默认 coop）</option>
             <option value="versus">versus</option>
             <option value="coop">coop</option>
           </select>
           <p className="text-[11px] text-slate-500 mt-1">
-            仅可选择预设；未指定时使用现有 versus 大厅 metadata
+            仅可选择预设；未指定时使用已验证的 L4D1 coop 大厅 metadata
           </p>
         </div>
 
@@ -228,13 +205,7 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
             description="允许控制服务为此服务器派发暖服任务"
           />
 
-          <Switch
-            id="target-reservation-switch"
-            checked={requiresReservation}
-            onChange={handleReservationChange}
-            label="需要大厅预留"
-            description="预留服务器最大并发暖服数固定为 1"
-          />
+          <div className="text-xs text-slate-600"><b className="block text-slate-800">L4D1 标准大厅</b><span>预约握手尚未真机验证，当前版本已禁用</span></div>
         </div>
 
         {/* Priority & Concurrent */}
@@ -270,7 +241,6 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
               type="number"
               min={1}
               max={100}
-              disabled={requiresReservation}
               value={maxConcurrentWarmups}
               onChange={(e) =>
                 setMaxConcurrentWarmups(Math.max(1, parseInt(e.target.value, 10) || 1))
@@ -278,9 +248,7 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
               className="w-full px-3 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              {requiresReservation
-                ? '预留服务器已锁定为 1'
-                : '普通服务器默认 36 并发'}
+              普通服务器默认 36 并发
             </p>
           </div>
         </div>
@@ -337,55 +305,6 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
           </div>
         </div>
 
-        {/* RCON Password */}
-        <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="target-rcon"
-              className="text-xs font-medium text-slate-700 flex items-center gap-1.5"
-            >
-              <Key className="w-3.5 h-3.5 text-slate-500" />
-              <span>RCON 管理密码</span>
-            </label>
-            {initialData?.hasRconPassword && !clearRconPassword && (
-              <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                当前状态：已配置凭据
-              </span>
-            )}
-          </div>
-
-          <input
-            id="target-rcon"
-            type="password"
-            value={rconPassword}
-            onChange={(e) => {
-              setRconPassword(e.target.value);
-              if (clearRconPassword) setClearRconPassword(false);
-            }}
-            placeholder={
-              initialData?.hasRconPassword && !clearRconPassword
-                ? '不修改请留空（只写不回填）'
-                : '请输入服务器 RCON 密码'
-            }
-            className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-          />
-
-          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
-            <span>密码为只写存储，不会从控制服务明文返回</span>
-            {initialData?.hasRconPassword && (
-              <button
-                type="button"
-                onClick={() => {
-                  setClearRconPassword(!clearRconPassword);
-                  setRconPassword('');
-                }}
-                className="text-red-600 hover:text-red-700 hover:underline"
-              >
-                {clearRconPassword ? '取消清除凭据' : '清空已有凭据'}
-              </button>
-            )}
-          </div>
-        </div>
       </form>
     </Modal>
   );

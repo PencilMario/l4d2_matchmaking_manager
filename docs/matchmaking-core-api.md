@@ -1,6 +1,6 @@
 # Matchmaking Core 运维与 API
 
-Core 是单 Docker 主机上的 L4D2 暖服控制面。它管理 PostgreSQL 配置、创建带独立账号卷
+Core 是单 Docker 主机上的 L4D1（AppID 500）暖服控制面。它管理 PostgreSQL 配置、创建带独立账号卷
 的 Agent 容器、以 A2S 和 Agent 实时观察执行调度，并代理任意 Steam lobby 的只读查询。
 Core API 与动态 noVNC 端口都只绑定宿主机 `127.0.0.1`。
 
@@ -12,37 +12,37 @@ Core API 与动态 noVNC 端口都只绑定宿主机 `127.0.0.1`。
 先从仓库根目录构建 Agent 镜像：
 
 ```sh
-docker build -f deploy/steam-lobby-agent/Dockerfile -t l4d2-steam-lobby-agent:local .
+docker build -f deploy/steam-lobby-agent/Dockerfile -t l4d-steam-lobby-agent:local .
 ```
 
 创建由所有 Agent 共享的宿主机游戏库目录，并创建只含 Core Bearer token 的文件：
 
 ```sh
-sudo install -d -o 1000 -g 1000 -m 0750 /mnt/storage/l4d2-steam-library
-openssl rand -hex 32 | sudo tee /etc/l4d2-matchmaking-core-token >/dev/null
-sudo chmod 0600 /etc/l4d2-matchmaking-core-token
-openssl rand -base64 32 | sudo tee /etc/l4d2-matchmaking-core-rcon-key >/dev/null
-sudo chmod 0600 /etc/l4d2-matchmaking-core-rcon-key
+sudo install -d -o 1000 -g 1000 -m 0750 /mnt/storage/l4d-steam-library
+openssl rand -hex 32 | sudo tee /etc/l4d-matchmaking-core-token >/dev/null
+sudo chmod 0600 /etc/l4d-matchmaking-core-token
+openssl rand -base64 32 | sudo tee /etc/l4d-matchmaking-core-rcon-key >/dev/null
+sudo chmod 0600 /etc/l4d-matchmaking-core-rcon-key
 ```
 
 进入 `deploy/matchmaking-core`，从 `.env.example` 创建 `.env`，至少填写：
 
 ```dotenv
-CORE_API_TOKEN_FILE_HOST=/etc/l4d2-matchmaking-core-token
-CORE_RCON_ENCRYPTION_KEY_FILE_HOST=/etc/l4d2-matchmaking-core-rcon-key
+CORE_API_TOKEN_FILE_HOST=/etc/l4d-matchmaking-core-token
+CORE_RCON_ENCRYPTION_KEY_FILE_HOST=/etc/l4d-matchmaking-core-rcon-key
 POSTGRES_PASSWORD=<unique-postgresql-password>
-CORE_SHARED_LIBRARY_HOST_PATH=/mnt/storage/l4d2-steam-library
+CORE_SHARED_LIBRARY_HOST_PATH=/mnt/storage/l4d-steam-library
 CORE_AGENT_STEAM_API_LIBRARY_PATH=<container-visible-path-to-libsteam_api.so>
 CORE_AGENT_STEAM_LOGIN_UI_MODE=auto
 CORE_SCHEDULER_MAX_STARTS_PER_TICK=16
-CORE_IMAGE=l4d2-matchmaking-core:local
-CORE_AGENT_IMAGE=l4d2-steam-lobby-agent:local
-CORE_AGENT_NETWORK=l4d2-matchmaking
+CORE_IMAGE=l4d-matchmaking-core:local
+CORE_AGENT_IMAGE=l4d-steam-lobby-agent:local
+CORE_AGENT_NETWORK=l4d-matchmaking
 ```
 
 `CORE_AGENT_STEAM_API_LIBRARY_PATH` 必须是 Agent 容器内的路径，且共享库前缀固定为
-`/mnt/steam-library`。首次安装 AppID 550 前可以填写预期路径；完成下载后，在宿主机
-执行 `find /mnt/storage/l4d2-steam-library -name libsteam_api.so -type f`，将相对路径映射
+`/mnt/steam-library`。首次安装 AppID 500 前可以填写预期路径；完成下载后，在宿主机
+执行 `find /mnt/storage/l4d-steam-library -name libsteam_api.so -type f`，将相对路径映射
 为 `/mnt/steam-library/...` 后更新 `.env`。重启 Core 并重建该 Agent，使新路径生效。
 
 ```sh
@@ -54,7 +54,7 @@ Core 自动应用数据库迁移。Core 是唯一挂载 `/var/run/docker.sock` �
 没有宿主机端口。不要把 Core API、Agent HTTP 或 noVNC 映射到公网。远程管理使用私有
 SSH 端口转发，例如 `ssh -L 18080:127.0.0.1:18080 <host>`。
 
-首次创建 Agent 后，通过其 `noVncPort` 完成 Steam 登录；在 Steam UI 中安装 AppID 550
+首次创建 Agent 后，通过其 `noVncPort` 完成 Steam 登录；在 Steam UI 中安装 AppID 500
 及所需共享运行时。不要让多个 Agent 同时安装、校验、更新或卸载共享游戏库。
 
 ## 鉴权
@@ -76,16 +76,19 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
 ```json
 {
   "endpoint": "example.org:27015",
-  "requiresReservation": true,
+  "requiresReservation": false,
   "priority": 0,
   "maxConcurrentWarmups": 36,
   "attemptWindowSeconds": 720,
-  "playerTarget": 6,
-  "gameMode": null,
+  "playerTarget": 4,
+  "gameMode": "coop",
   "enabled": true,
-  "rconPassword": "<optional-server-rcon-password>"
+  "rconPassword": null
 }
 ```
+
+L4D1 专用版只接受 `requiresReservation=false`。传入 `true` 会返回
+`400 l4d1_reservation_not_supported`；这是为了避免复用未经 L4D1 真机验证的 L4D2 握手。
 
 `GET /v1/servers/observations` 是认证的只读展示模型。它返回每一台已配置 Target Server
 的最新内存态 A2S 观察结果，不写 PostgreSQL，也不会在 HTTP 请求中直接发出 UDP 查询。实现时该
@@ -95,7 +98,7 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
 {
   "targetServerId": "c691ca6a-6c2a-4ece-b7bd-2e951eee7caa",
   "status": "online",
-  "serverName": "L4D2 HK Versus #1",
+  "serverName": "L4D1 Server #1",
   "playerCount": 2,
   "maxPlayers": 12,
   "observedAt": "2026-08-18T12:00:05+00:00"
@@ -181,7 +184,7 @@ Agent，使其回到静默小内存模式。
   "lobbyId":"109775242170052468",
   "ownerSteamId":"76561198000000000",
   "members":[{"steamId":"76561198000000000","personaName":"Agent"}],
-  "metadata":{"Game:campaign":"L4D2C2","Game:state":"game"},
+  "metadata":{"Game:campaign":"Farm","Game:mode":"coop","Game:state":"lobby"},
   "observedAt":"2026-08-17T12:00:00+00:00"
 }
 ```

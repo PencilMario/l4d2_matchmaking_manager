@@ -2,12 +2,14 @@ internal sealed class ActiveLobbyJoinDataResponder
 {
     private readonly ulong _ownerSteamId;
     private readonly string _connectString;
+    private readonly string? _gameMode;
 
-    internal ActiveLobbyJoinDataResponder(ulong lobbyId, ulong ownerSteamId, string connectString)
+    internal ActiveLobbyJoinDataResponder(ulong lobbyId, ulong ownerSteamId, string connectString, string? gameMode = null)
     {
         LobbyId = lobbyId;
         _ownerSteamId = ownerSteamId;
         _connectString = connectString;
+        _gameMode = gameMode;
     }
 
     internal ulong LobbyId { get; }
@@ -26,6 +28,7 @@ internal sealed class ActiveLobbyJoinDataResponder
                 LobbyId,
                 _ownerSteamId,
                 senderSteamId,
+                _gameMode,
                 out reply);
     }
 }

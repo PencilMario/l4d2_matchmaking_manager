@@ -3,10 +3,14 @@ using static BinaryKeyValues;
 
 internal static class RealSessionSettings
 {
-    internal const int NumSlots = 8;
-    private static readonly CampaignProfile HistoricalDefault = CampaignProfile.Official[1];
+    internal const int CoopNumSlots = 4;
+    internal const int VersusNumSlots = 8;
+    private static readonly CampaignProfile DefaultProfile = CampaignProfile.Official[0];
 
-    internal static BinaryKvEntry CreateReservationSettings() => CreateReservationSettings(HistoricalDefault);
+    internal static int GetNumSlots(string? gameMode) =>
+        string.Equals(gameMode, "versus", StringComparison.Ordinal) ? VersusNumSlots : CoopNumSlots;
+
+    internal static BinaryKvEntry CreateReservationSettings() => CreateReservationSettings(DefaultProfile);
 
     internal static BinaryKvEntry CreateReservationSettings(CampaignProfile profile) =>
         Object("Settings",
@@ -14,18 +18,20 @@ internal static class RealSessionSettings
             Object("Members",
                 Int32("numMachines", 1),
                 Int32("numPlayers", 1),
-                Int32("numSlots", NumSlots)),
+                Int32("numSlots", CoopNumSlots)),
             Object("Options",
-                String("Server", "official")),
+                String("createreason", "searchempty"),
+                String("Server", "dedicated")),
             CreateSystemSettings());
 
     internal static BinaryKvEntry CreateReplySettings(
         IReadOnlyList<SessionMachine> machines,
         string connectString,
-        ulong lobbyId)
+        ulong lobbyId,
+        string? gameMode = null)
     {
-        if (machines.Count is < 1 or > NumSlots)
-            throw new ArgumentException($"Reply must contain between 1 and {NumSlots} machines.", nameof(machines));
+        if (machines.Count is < 1 or > VersusNumSlots)
+            throw new ArgumentException($"Reply must contain between 1 and {VersusNumSlots} machines.", nameof(machines));
         if (string.IsNullOrWhiteSpace(connectString))
             throw new ArgumentException("Reply connect string must not be empty.", nameof(connectString));
         if (lobbyId == 0)
@@ -35,7 +41,7 @@ internal static class RealSessionSettings
         {
             Int32("numMachines", machines.Count),
             Int32("numPlayers", machines.Count),
-            Int32("numSlots", NumSlots),
+            Int32("numSlots", GetNumSlots(gameMode)),
         };
         for (var index = 0; index < machines.Count; index++)
         {
@@ -55,9 +61,9 @@ internal static class RealSessionSettings
         }
 
         return Object("Settings",
-            CreateGameSettings(HistoricalDefault),
+            CreateGameSettings(DefaultProfile, gameMode, "game"),
             Object("Members", memberChildren.ToArray()),
-            Object("Options", String("Server", "official")),
+            Object("Options", String("Server", "dedicated")),
             CreateSystemSettings(),
             Object("Server",
                 String("adronline", connectString),
@@ -66,36 +72,29 @@ internal static class RealSessionSettings
                 UInt64("reservationid", lobbyId)));
     }
 
-    internal static byte[] EncodeReservationSettings() => EncodeReservationSettings(HistoricalDefault);
+    internal static byte[] EncodeReservationSettings() => EncodeReservationSettings(DefaultProfile);
 
     internal static byte[] EncodeReservationSettings(CampaignProfile profile) =>
         BinaryKeyValues.EncodeLittleEndian(CreateReservationSettings(profile));
 
-    private static BinaryKvEntry CreateGameSettings(CampaignProfile profile) =>
+    private static BinaryKvEntry CreateGameSettings(
+        CampaignProfile profile,
+        string? gameMode = null,
+        string gameState = "lobby") =>
         Object("Game",
             String("campaign", profile.CampaignId),
             Int32("chapter", 1),
-            String("difficulty", "normal"),
+            String("difficulty", "Impossible"),
             Int32("dlcrequired", 0),
             Int32("maxrounds", 3),
             Object("MissionInfo",
-                Int32("addon", 0),
                 String("Author", profile.Author),
-                Int32("builtin", 1),
+                Int32("BuiltIn", 1),
                 String("DisplayTitle", profile.DisplayTitle),
-                Int32("InfectedOnly", 0),
-                String("MissionFile", profile.MissionFile),
-                Int32("SurvivorSet", profile.SurvivorSet),
                 Int32("Version", 1),
-                String("Website", "http://store.steampowered.com"),
-                Int32("workshopid", 0)),
-            String("Mode", "versus"),
-            Object("ModeInfo",
-                Int32("addon", 0),
-                Int32("workshopid", 0)),
-            Int32("sk_versus", 35),
-            String("state", "game"),
-            Int32("vanilla", 1));
+                String("Website", "http://store.steampowered.com/app/500/")),
+            String("mode", string.Equals(gameMode, "versus", StringComparison.Ordinal) ? "versus" : "coop"),
+            String("state", gameState));
 
     private static BinaryKvEntry CreateSystemSettings() =>
         Object("System",
@@ -103,7 +102,7 @@ internal static class RealSessionSettings
             String("lock", string.Empty),
             String("network", "LIVE"));
 
-    internal static Dictionary<string, string> CreateLobbyMetadata() => CreateLobbyMetadata(HistoricalDefault);
+    internal static Dictionary<string, string> CreateLobbyMetadata() => CreateLobbyMetadata(DefaultProfile);
 
     internal static Dictionary<string, string> CreateLobbyMetadata(
         CampaignProfile profile,
@@ -114,12 +113,9 @@ internal static class RealSessionSettings
         foreach (var entry in (IReadOnlyList<BinaryKvEntry>)settings.Value)
             AddLobbyMetadata(entry, string.Empty, metadata);
 
-        if (string.Equals(gameMode, "coop", StringComparison.Ordinal))
-        {
-            metadata["Members:numSlots"] = "4";
-            metadata["Game:Mode"] = "coop";
-            metadata["Game:sk_versus"] = "19";
-        }
+        var normalizedMode = string.Equals(gameMode, "versus", StringComparison.Ordinal) ? "versus" : "coop";
+        metadata["Members:numSlots"] = GetNumSlots(normalizedMode).ToString(CultureInfo.InvariantCulture);
+        metadata["Game:mode"] = normalizedMode;
 
         return metadata;
     }

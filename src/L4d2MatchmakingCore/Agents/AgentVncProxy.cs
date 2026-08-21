@@ -16,7 +16,7 @@ public interface IAgentVncProxyTargetResolver
 public sealed class AgentVncProxyTargetResolver : IAgentVncProxyTargetResolver
 {
     public Uri Resolve(Guid agentId, string path, string scheme, QueryString query) =>
-        new UriBuilder(scheme, $"l4d2-agent-{agentId:N}", 8083, "/" + path.TrimStart('/'))
+        new UriBuilder(scheme, $"l4d-agent-{agentId:N}", 8083, "/" + path.TrimStart('/'))
         {
             Query = query.Value?.TrimStart('?'),
         }.Uri;

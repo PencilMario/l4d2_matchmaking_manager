@@ -43,7 +43,7 @@ public sealed class TargetServerEndpointTests
         Assert.AreEqual(0, server.Priority);
         Assert.AreEqual(36, server.MaxConcurrentWarmups);
         Assert.AreEqual(720, server.AttemptWindowSeconds);
-        Assert.AreEqual(6, server.PlayerTarget);
+        Assert.AreEqual(4, server.PlayerTarget);
         Assert.IsTrue(server.Enabled);
     }
 
@@ -113,7 +113,7 @@ public sealed class TargetServerEndpointTests
     }
 
     [TestMethod]
-    public async Task ReservationServerUsesOneEffectiveWarmupAndRejectsMalformedEndpoint()
+    public async Task ReservationServerIsRejectedAndMalformedEndpointIsRejected()
     {
         using var environment = new CoreTestEnvironment();
         await using var factory = new ServerFactory();
@@ -136,13 +136,18 @@ public sealed class TargetServerEndpointTests
             600,
             8,
             null));
-        var server = await reserved.Content.ReadFromJsonAsync<TargetServerResponse>();
+        var standard = await client.PostAsJsonAsync("/v1/servers", new CreateTargetServerRequest(
+            "203.0.113.8:28015", false, null, null, null, null, null));
+        var standardServer = await standard.Content.ReadFromJsonAsync<TargetServerResponse>();
+        Assert.IsNotNull(standardServer);
+        var converted = await client.PutAsJsonAsync($"/v1/servers/{standardServer.Id}", new UpdateTargetServerRequest(
+            standardServer.Endpoint, true, null, null, null, null, false));
 
         Assert.AreEqual(HttpStatusCode.BadRequest, malformed.StatusCode);
-        Assert.AreEqual(HttpStatusCode.Created, reserved.StatusCode);
-        Assert.IsNotNull(server);
-        Assert.AreEqual(1, server.MaxConcurrentWarmups);
-        Assert.AreEqual(5, server.Priority);
+        Assert.AreEqual(HttpStatusCode.BadRequest, reserved.StatusCode);
+        StringAssert.Contains(await reserved.Content.ReadAsStringAsync(), "l4d1_reservation_not_supported");
+        Assert.AreEqual(HttpStatusCode.BadRequest, converted.StatusCode);
+        StringAssert.Contains(await converted.Content.ReadAsStringAsync(), "l4d1_reservation_not_supported");
     }
 
     [TestMethod]
@@ -205,88 +210,30 @@ public sealed class TargetServerEndpointTests
     }
 
     [TestMethod]
-    public async Task RconPasswordIsRedactedAndCanBeCleared()
+    public async Task ReservationAndRconConfigurationAreRejected()
     {
         using var environment = new CoreTestEnvironment();
         await using var factory = new ServerFactory();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
 
-        var created = await client.PostAsJsonAsync("/v1/servers", new
+        var reserved = await client.PostAsJsonAsync("/v1/servers", new
         {
             endpoint = "203.0.113.7:27083",
             requiresReservation = true,
             rconPassword = "not-returned-to-clients",
         });
-        var createdJson = await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-        var serverId = createdJson.GetProperty("id").GetGuid();
-
-        var updated = await client.PutAsJsonAsync($"/v1/servers/{serverId}", new
+        var standardWithRcon = await client.PostAsJsonAsync("/v1/servers", new
         {
             endpoint = "203.0.113.7:27083",
-            requiresReservation = true,
-            priority = 0,
-            maxConcurrentWarmups = 36,
-            attemptWindowSeconds = 720,
-            playerTarget = 6,
-            enabled = true,
-            rconPassword = (string?)null,
+            requiresReservation = false,
+            rconPassword = "not-accepted",
         });
-        var updatedJson = await updated.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
 
-        Assert.AreEqual(HttpStatusCode.Created, created.StatusCode);
-        Assert.IsTrue(createdJson.GetProperty("hasRconCredentials").GetBoolean());
-        Assert.IsFalse(createdJson.TryGetProperty("rconPassword", out _));
-        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
-        Assert.IsFalse(updatedJson.GetProperty("hasRconCredentials").GetBoolean());
-    }
-
-    [TestMethod]
-    public async Task NormalTargetRejectsRconPasswordAndClearsItWhenLeavingReservationMode()
-    {
-        using var environment = new CoreTestEnvironment();
-        await using var factory = new ServerFactory();
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
-
-        var normal = await client.PostAsJsonAsync("/v1/servers", new CreateTargetServerRequest(
-            "203.0.113.7:27083",
-            false,
-            null,
-            null,
-            null,
-            null,
-            null,
-            "must-not-be-accepted"));
-        var reserved = await client.PostAsJsonAsync("/v1/servers", new CreateTargetServerRequest(
-            "203.0.113.7:27083",
-            true,
-            null,
-            null,
-            null,
-            null,
-            null,
-            "credential-to-clear"));
-        var reservedServer = await reserved.Content.ReadFromJsonAsync<TargetServerResponse>();
-        Assert.IsNotNull(reservedServer);
-
-        var converted = await client.PutAsJsonAsync($"/v1/servers/{reservedServer.Id}", new UpdateTargetServerRequest(
-            "203.0.113.7:27083",
-            false,
-            null,
-            null,
-            null,
-            null,
-            null));
-        var convertedServer = await converted.Content.ReadFromJsonAsync<TargetServerResponse>();
-
-        Assert.AreEqual(HttpStatusCode.BadRequest, normal.StatusCode);
-        StringAssert.Contains(await normal.Content.ReadAsStringAsync(), "rcon_requires_reservation");
-        Assert.AreEqual(HttpStatusCode.Created, reserved.StatusCode);
-        Assert.IsTrue(reservedServer.HasRconCredentials);
-        Assert.AreEqual(HttpStatusCode.OK, converted.StatusCode);
-        Assert.IsNotNull(convertedServer);
-        Assert.IsFalse(convertedServer.HasRconCredentials);
+        Assert.AreEqual(HttpStatusCode.BadRequest, reserved.StatusCode);
+        StringAssert.Contains(await reserved.Content.ReadAsStringAsync(), "l4d1_reservation_not_supported");
+        Assert.AreEqual(HttpStatusCode.BadRequest, standardWithRcon.StatusCode);
+        StringAssert.Contains(await standardWithRcon.Content.ReadAsStringAsync(), "rcon_requires_reservation");
     }
 
     [TestMethod]

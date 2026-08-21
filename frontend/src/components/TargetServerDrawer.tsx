@@ -173,15 +173,15 @@ export const TargetServerDrawer: React.FC<TargetServerDrawerProps> = ({
           </div>
 
           <div>
-            <span className="text-slate-500 block mb-0.5">需要大厅预留</span>
+            <span className="text-slate-500 block mb-0.5">大厅类型</span>
             <span className="font-medium text-slate-800">
-              {server.requiresReservation ? '是 (预留专线)' : '否 (常规匹配)'}
+              {server.requiresReservation ? '旧版预约配置（不会调度）' : 'L4D1 标准大厅'}
             </span>
           </div>
 
           <div>
             <span className="text-slate-500 block mb-0.5">模式类型</span>
-            <span className="font-medium text-slate-800">{server.gameMode || '未指定（默认 versus）'}</span>
+            <span className="font-medium text-slate-800">{server.gameMode || '未指定（默认 coop）'}</span>
           </div>
 
           <div>

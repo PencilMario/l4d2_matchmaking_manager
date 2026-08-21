@@ -2,10 +2,17 @@ internal static class ProbeLobbyProfile
 {
     internal const uint Left4DeadAppId = 500;
 
-    internal static int GetMemberLimit(uint appId) => appId == Left4DeadAppId ? 4 : 8;
+    internal static int GetMemberLimit(uint appId)
+    {
+        EnsureLeft4Dead(appId);
+        return 4;
+    }
 
-    internal static Dictionary<string, string> CreateMetadata(uint appId) =>
-        appId == Left4DeadAppId ? CreateLeft4DeadMetadata() : CreateLeft4Dead2Metadata();
+    internal static Dictionary<string, string> CreateMetadata(uint appId)
+    {
+        EnsureLeft4Dead(appId);
+        return CreateLeft4DeadMetadata();
+    }
 
     private static Dictionary<string, string> CreateLeft4DeadMetadata() => new(StringComparer.Ordinal)
     {
@@ -31,16 +38,9 @@ internal static class ProbeLobbyProfile
         ["System:network"] = "LIVE",
     };
 
-    private static Dictionary<string, string> CreateLeft4Dead2Metadata() => new(StringComparer.Ordinal)
+    private static void EnsureLeft4Dead(uint appId)
     {
-        ["game:mode"] = "coop",
-        ["game:map"] = "c1m1_hotel",
-        ["game:state"] = "lobby",
-        ["system:network"] = "LIVE",
-        ["system:access"] = "public",
-        ["options:server"] = "listen",
-        ["members:numSlots"] = "8",
-        ["members:numPlayers"] = "1",
-        ["members:numMachines"] = "1",
-    };
+        if (appId != Left4DeadAppId)
+            throw new InvalidOperationException("left4dead_app_id_required");
+    }
 }

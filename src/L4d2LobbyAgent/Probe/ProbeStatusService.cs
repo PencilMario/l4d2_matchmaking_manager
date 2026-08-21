@@ -59,7 +59,7 @@ public sealed class ProbeStatusService(
     private static uint? GetAppId(AgentHealthSnapshot health) =>
         health.Failure is "steam_api_load_failed" or "steam_api_init_failed" or "appid_mismatch"
             ? null
-            : 550;
+            : 500;
 
     private static string GetLoggedOnCheck(AgentHealthSnapshot health) => health.Failure switch
     {

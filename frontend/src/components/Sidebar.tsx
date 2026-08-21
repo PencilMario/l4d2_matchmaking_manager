@@ -66,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
         <div className="flex flex-col min-w-0">
           <span className="text-sm font-semibold text-white tracking-tight truncate">
-            L4D2 匹配管理
+            L4D1 匹配管理
           </span>
           <span className="text-[10px] text-slate-400 font-mono leading-none">
             控制台工作台

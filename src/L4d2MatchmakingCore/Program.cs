@@ -38,7 +38,7 @@ builder.Services.AddHttpClient<ISteamProfileService, SteamProfileService>(client
 });
 builder.Services.AddSingleton<WarmupSchedulingGate>();
 var agentContainerOptions = builder.Environment.IsEnvironment("Testing")
-    ? new AgentContainerOptions("l4d2-steam-lobby-agent:local", "/mnt/steam-library", "l4d2-matchmaking", 18083, 18183, "/mnt/steam-library/libsteam_api.so")
+    ? new AgentContainerOptions("l4d-steam-lobby-agent:local", "/mnt/steam-library", "l4d-matchmaking", 18083, 18183, "/mnt/steam-library/libsteam_api.so")
     : AgentContainerOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(agentContainerOptions);
 builder.Services.AddSingleton<IAgentContainerRuntime, DockerAgentContainerRuntime>();

@@ -356,7 +356,7 @@ public sealed class LobbyQueryEndpointTests
         "109775242170052468",
         "76561198000000000",
         [],
-        new Dictionary<string, string> { ["Game:campaign"] = "L4D2C1" },
+        new Dictionary<string, string> { ["Game:campaign"] = "Farm" },
         DateTimeOffset.UnixEpoch,
         status);
 

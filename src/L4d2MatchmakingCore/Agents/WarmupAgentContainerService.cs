@@ -36,6 +36,7 @@ public sealed class WarmupAgentContainerService(
             "NVIDIA_VISIBLE_DEVICES=",
             "LIBGL_ALWAYS_SOFTWARE=1",
             "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
+            "STEAM_APP_ID=500",
             "STEAM_API_LIBRARY_PATH=" + options.SteamApiLibraryPath,
             "STEAM_DOWNLOAD_REGION_ID=" + LegacySteamRegionId(agent.DownloadRegion),
             "STEAM_DOWNLOAD_REGION=" + (agent.DownloadRegion ?? string.Empty),
@@ -51,17 +52,17 @@ public sealed class WarmupAgentContainerService(
             }
         }
         var containerId = await runtime.CreateAsync(new ManagedAgentContainerDefinition(
-            $"l4d2-agent-{agent.Id:N}",
+            $"l4d-agent-{agent.Id:N}",
             options.Image,
             new Dictionary<string, string>
             {
-                ["com.l4d2.matchmaking.managed"] = "true",
-                ["com.l4d2.matchmaking.agent-id"] = agent.Id.ToString(),
+                ["com.l4d.matchmaking.managed"] = "true",
+                ["com.l4d.matchmaking.agent-id"] = agent.Id.ToString(),
             },
             [agent.SteamDataVolumeName, agent.AccountConfigVolumeName],
             [
                 new AgentVolumeMount(agent.SteamDataVolumeName, "/home/default"),
-                new AgentVolumeMount(agent.AccountConfigVolumeName, "/var/lib/l4d2-agent"),
+                new AgentVolumeMount(agent.AccountConfigVolumeName, "/var/lib/l4d-agent"),
             ],
             [new AgentBindMount(options.SharedLibraryHostPath, "/mnt/steam-library")],
             [8083],
@@ -99,7 +100,7 @@ public sealed class WarmupAgentContainerService(
         runtime.StopVncAsync(agent.ContainerId ?? throw new InvalidOperationException("agent_container_not_created"), cancellationToken);
 
     public Task DeleteAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
-        runtime.DeleteAsync(agent.ContainerId ?? $"l4d2-agent-{agent.Id:N}", false, cancellationToken);
+        runtime.DeleteAsync(agent.ContainerId ?? $"l4d-agent-{agent.Id:N}", false, cancellationToken);
 
     private static string LegacySteamRegionId(string? value) => value?.Trim().ToLowerInvariant() switch
     {

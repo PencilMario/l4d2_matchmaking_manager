@@ -141,7 +141,7 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
     {
         var container = await _client.Containers.InspectContainerAsync(containerId, cancellationToken);
         if (container.Config.Labels is null ||
-            !container.Config.Labels.TryGetValue("com.l4d2.matchmaking.managed", out var managed) ||
+            !container.Config.Labels.TryGetValue("com.l4d.matchmaking.managed", out var managed) ||
             !string.Equals(managed, "true", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("unmanaged_agent_container");

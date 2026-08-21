@@ -167,7 +167,7 @@ public static class WarmupAgentEndpoints
         await proxy.ProxyAsync(context, agentId, path ?? string.Empty, proxyCancellation.Token);
     }
 
-    private static string CookieName(Guid agentId) => $"l4d2_vnc_{agentId:N}";
+    private static string CookieName(Guid agentId) => $"l4d_vnc_{agentId:N}";
 
     private static string RemoveSessionQuery(HttpContext context)
     {

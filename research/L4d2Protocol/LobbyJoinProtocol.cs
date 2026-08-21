@@ -88,6 +88,7 @@ internal static class LobbyJoinProtocol
         ulong lobbyId,
         ulong ownerSteamId,
         ulong requesterSteamId,
+        string? gameMode,
         out byte[] reply)
     {
         reply = Array.Empty<byte>();
@@ -117,7 +118,7 @@ internal static class LobbyJoinProtocol
         BinaryKvEntry settings;
         try
         {
-            settings = RealSessionSettings.CreateReplySettings(machines, connectString, lobbyId);
+            settings = RealSessionSettings.CreateReplySettings(machines, connectString, lobbyId, gameMode);
         }
         catch (ArgumentException)
         {

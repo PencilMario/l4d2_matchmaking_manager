@@ -12,7 +12,7 @@ public sealed class DockerAgentContainerRuntimeTests
     {
         var runtime = new FakeRuntime();
         var options = new AgentContainerOptions(
-            "l4d2-steam-lobby-agent:local",
+            "l4d-steam-lobby-agent:local",
             "/srv/steam-library",
             "matchmaking-network",
             18083,
@@ -24,14 +24,14 @@ public sealed class DockerAgentContainerRuntimeTests
         await service.CreateAsync(agent, CancellationToken.None);
 
         Assert.IsNotNull(runtime.Definition);
-        Assert.AreEqual("l4d2-steam-lobby-agent:local", runtime.Definition.Image);
+        Assert.AreEqual("l4d-steam-lobby-agent:local", runtime.Definition.Image);
         Assert.AreEqual("127.0.0.1", runtime.Definition.NoVncBinding.HostIp);
         CollectionAssert.DoesNotContain(runtime.Definition.PublishedContainerPorts.ToList(), 8080);
         CollectionAssert.Contains(runtime.Definition.VolumeNames.ToList(), "steam-data-" + agent.Id.ToString("N"));
         CollectionAssert.Contains(runtime.Definition.VolumeNames.ToList(), "agent-config-" + agent.Id.ToString("N"));
         Assert.IsTrue(runtime.Definition.BindMounts.Any(mount =>
             mount.Source == options.SharedLibraryHostPath && mount.Target == "/mnt/steam-library"));
-        Assert.AreEqual("true", runtime.Definition.Labels["com.l4d2.matchmaking.managed"]);
+        Assert.AreEqual("true", runtime.Definition.Labels["com.l4d.matchmaking.managed"]);
     }
 
     [TestMethod]
@@ -56,7 +56,7 @@ public sealed class DockerAgentContainerRuntimeTests
             "network",
             18083,
             18183,
-            "/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so");
+            "/mnt/steam-library/ubuntu12_64/libsteam_api.so");
         var service = new WarmupAgentContainerService(runtime, options);
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083, KeepVncAlive = true };
 
@@ -80,7 +80,8 @@ public sealed class DockerAgentContainerRuntimeTests
                 "NVIDIA_VISIBLE_DEVICES=",
                 "LIBGL_ALWAYS_SOFTWARE=1",
                 "STEAM_SHARED_LIBRARY_PATH=/mnt/steam-library",
-                "STEAM_API_LIBRARY_PATH=/mnt/steam-library/steamapps/common/Left 4 Dead 2/bin/linux64/libsteam_api.so",
+                "STEAM_APP_ID=500",
+                "STEAM_API_LIBRARY_PATH=/mnt/steam-library/ubuntu12_64/libsteam_api.so",
                 "STEAM_DOWNLOAD_REGION_ID=",
                 "STEAM_DOWNLOAD_REGION=",
                 "STEAM_DOWNLOAD_REGION_STATUS_FILE=/home/default/.steam/steam/config/steam-download-region",
