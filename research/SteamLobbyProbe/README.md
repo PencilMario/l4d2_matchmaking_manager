@@ -54,6 +54,12 @@ AppID 500，完成登录检查、Lobby 列表回调、私有 Lobby 创建、meta
 
 默认使用 Steam ManualDispatch 并消费实际回调事件。传入 `private`、`friends`、`public` 或 `invisible` 作为第二个参数以选择大厅类型。仅在进行 ABI/控制诊断时传入 `direct` 作为第三个参数；手动回调路径是该 DLL 的已验证路径。
 
+只读列出当前 AppID 可搜索到的 Lobby ID、owner、成员数和完整 metadata：
+
+```powershell
+.\SteamLobbyProbe.exe <steam_api.dll> list-lobbies
+```
+
 ## Steam API 参数
 
 `ISteamMatchmaking::CreateLobby` 接受：

@@ -67,6 +67,7 @@ internal static class Program
             throw new ArgumentOutOfRangeException(nameof(leaveSettleSeconds), "Settle seconds must be non-negative.");
 
         var createLobbyHoldMode = args.Length > 1 && string.Equals(args[1], "create-lobby-hold", StringComparison.OrdinalIgnoreCase);
+        var listLobbiesMode = args.Length > 1 && string.Equals(args[1], "list-lobbies", StringComparison.OrdinalIgnoreCase);
 
         var joinLobbyHoldMode = args.Length > 1 && string.Equals(args[1], "join-lobby-hold", StringComparison.OrdinalIgnoreCase);
         if (joinLobbyHoldMode && args.Length < 3)
@@ -88,6 +89,8 @@ internal static class Program
         var endpoint = serverMode || reservedServerMode ? ParseServerEndpoint(args[2]) : default;
         var lobbyType = serverMode || reservedServerMode
             ? (args.Length > 3 ? ParseLobbyType(args[3]) : LobbyTypePublic)
+            : listLobbiesMode
+                ? LobbyTypePrivate
             : createLobbyHoldMode
                 ? (args.Length > 2 ? ParseLobbyType(args[2]) : LobbyTypePrivate)
             : transferOwnerMode
@@ -107,7 +110,7 @@ internal static class Program
             : reservedServerMode
                 ? "game"
                 : "lobby";
-        var useManualDispatch = serverMode || reservedServerMode || transferOwnerMode || leaveLobbyMode || createLobbyHoldMode || joinLobbyHoldMode ||
+        var useManualDispatch = serverMode || reservedServerMode || transferOwnerMode || leaveLobbyMode || createLobbyHoldMode || joinLobbyHoldMode || listLobbiesMode ||
             args.Length <= 2 ||
             !string.Equals(args[2], "direct", StringComparison.OrdinalIgnoreCase);
         var appRoot = AppContext.BaseDirectory;
@@ -213,8 +216,15 @@ internal static class Program
             var lobbyCount = listResult.Raw.Length >= 4 ? BitConverter.ToUInt32(listResult.Raw, 0) : 0;
             Console.WriteLine($"LobbyMatchList ok={listResult.Ok} failed={listResult.Failed} count={lobbyCount}");
 
-            var call = api.CreateLobby(matchmaking, lobbyType, 8);
-            Console.WriteLine($"CreateLobby call={call} type={lobbyType} max_members=8");
+            if (listLobbiesMode)
+            {
+                LogLobbyList(api, matchmaking, lobbyCount);
+                return listResult.Ok && !listResult.Failed ? 0 : 3;
+            }
+
+            var maxMembers = ProbeLobbyProfile.GetMemberLimit(appId);
+            var call = api.CreateLobby(matchmaking, lobbyType, maxMembers);
+            Console.WriteLine($"CreateLobby call={call} type={lobbyType} max_members={maxMembers}");
 
             var result = useManualDispatch
                 ? WaitForLobbyCreatedManual(api, pipe, utils, call)
@@ -234,7 +244,7 @@ internal static class Program
                 ? RealSessionSettings.CreateLobbyMetadata(campaignProfile!)
                 : serverMode
                     ? BuildServerLobbyData(endpoint, result.LobbyId, serverGameState)
-                    : BuildProbeLobbyData();
+                    : ProbeLobbyProfile.CreateMetadata(appId);
 
             foreach (var pair in values)
             {
@@ -457,18 +467,28 @@ internal static class Program
         return true;
     }
 
-    private static Dictionary<string, string> BuildProbeLobbyData() => new()
+    private static void LogLobbyList(SteamApi api, nint matchmaking, uint lobbyCount)
     {
-        ["game:mode"] = "coop",
-        ["game:map"] = "c1m1_hotel",
-        ["game:state"] = "lobby",
-        ["system:network"] = "LIVE",
-        ["system:access"] = "public",
-        ["options:server"] = "listen",
-        ["members:numSlots"] = "8",
-        ["members:numPlayers"] = "1",
-        ["members:numMachines"] = "1",
-    };
+        for (var index = 0U; index < lobbyCount; index++)
+        {
+            var lobbyId = api.GetLobbyByIndex(matchmaking, checked((int)index));
+            if (lobbyId == 0)
+            {
+                Console.WriteLine($"Lobby index={index} id=0");
+                continue;
+            }
+
+            Console.WriteLine(
+                $"Lobby index={index} id={lobbyId} owner={api.GetLobbyOwner(matchmaking, lobbyId)} " +
+                $"members={api.GetNumLobbyMembers(matchmaking, lobbyId)} metadata={api.GetLobbyDataCount(matchmaking, lobbyId)}");
+            var metadataCount = api.GetLobbyDataCount(matchmaking, lobbyId);
+            for (var metadataIndex = 0; metadataIndex < metadataCount; metadataIndex++)
+            {
+                if (api.GetLobbyDataByIndex(matchmaking, lobbyId, metadataIndex, out var key, out var value))
+                    Console.WriteLine($"LobbyData id={lobbyId} key={key} value={value}");
+            }
+        }
+    }
 
     private static Dictionary<string, string> BuildServerLobbyData(
         ServerEndpoint endpoint,
@@ -1066,6 +1086,7 @@ internal static class Program
         private readonly SteamApiUserLoggedOn _isLoggedOn;
         private readonly SteamApiUserSteamId _getSteamId;
         private readonly SteamApiRequestLobbyList _requestLobbyList;
+        private readonly SteamApiGetLobbyByIndex _getLobbyByIndex;
         private readonly SteamApiCreateLobby _createLobby;
         private readonly SteamApiJoinLobby _joinLobby;
         private readonly SteamApiIsApiCallCompleted _isApiCallCompleted;
@@ -1112,6 +1133,7 @@ internal static class Program
             _isLoggedOn = Get<SteamApiUserLoggedOn>(module, "SteamAPI_ISteamUser_BLoggedOn");
             _getSteamId = Get<SteamApiUserSteamId>(module, "SteamAPI_ISteamUser_GetSteamID");
             _requestLobbyList = Get<SteamApiRequestLobbyList>(module, "SteamAPI_ISteamMatchmaking_RequestLobbyList");
+            _getLobbyByIndex = Get<SteamApiGetLobbyByIndex>(module, "SteamAPI_ISteamMatchmaking_GetLobbyByIndex");
             _createLobby = Get<SteamApiCreateLobby>(module, "SteamAPI_ISteamMatchmaking_CreateLobby");
             _joinLobby = Get<SteamApiJoinLobby>(module, "SteamAPI_ISteamMatchmaking_JoinLobby");
             _isApiCallCompleted = Get<SteamApiIsApiCallCompleted>(module, "SteamAPI_ISteamUtils_IsAPICallCompleted");
@@ -1165,6 +1187,7 @@ internal static class Program
         public bool IsLoggedOn(nint self) => _isLoggedOn(self) != 0;
         public ulong GetSteamId(nint self) => _getSteamId(self);
         public ulong RequestLobbyList(nint self) => _requestLobbyList(self);
+        public ulong GetLobbyByIndex(nint self, int index) => _getLobbyByIndex(self, index);
         public ulong CreateLobby(nint self, int type, int maxMembers) => _createLobby(self, type, maxMembers);
         public ulong JoinLobby(nint self, ulong lobbyId) => _joinLobby(self, lobbyId);
         public bool IsApiCallCompleted(nint utils, ulong call, ref byte failed) => _isApiCallCompleted(utils, call, ref failed) != 0;
@@ -1285,6 +1308,7 @@ internal static class Program
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte SteamApiUserLoggedOn(nint self);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate ulong SteamApiUserSteamId(nint self);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate ulong SteamApiRequestLobbyList(nint self);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate ulong SteamApiGetLobbyByIndex(nint self, int index);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate ulong SteamApiCreateLobby(nint self, int lobbyType, int maxMembers);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate ulong SteamApiJoinLobby(nint self, ulong lobbyId);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte SteamApiIsApiCallCompleted(nint self, ulong call, ref byte failed);
