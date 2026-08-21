@@ -359,6 +359,13 @@ internal static class Program
         }
         catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException)
         {
+            if (string.Equals(
+                    Environment.GetEnvironmentVariable("STEAM_PROBE_DIAGNOSTICS"),
+                    "1",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(ex);
+            }
             return WriteHealthCheckResult(false, "steam_api_load_failed", out exitCode);
         }
 
