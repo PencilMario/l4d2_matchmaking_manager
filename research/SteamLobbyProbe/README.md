@@ -52,6 +52,25 @@ AppID 500，完成登录检查、Lobby 列表回调、私有 Lobby 创建、meta
 因此 Windows L4D1 研究使用兼容的新版 x86 Steam API 库，不使用 L4D1 自带的旧 DLL。这个
 边界与 Linux Agent 使用 Steam Runtime 64 位 API 库、而非游戏自带 32 位库的部署原则一致。
 
+### AppID 500 真实 Lobby 验证
+
+2026-08-21 使用 `list-lobbies` 读取到一个真实 L4D1 公共 Lobby，取得 20 个 metadata 字段；
+其中包括 `Game:campaign=Farm`、`Game:mode=coop`、`Members:numSlots=4`、
+`Game:MissionInfo:DisplayTitle=#L4D360UI_Campaign_Farm` 和 L4D1 商店 URL。Probe 已将这组
+实测字段固化为 AppID 500 研究 profile，并保留原有 AppID 550 profile。
+
+随后 Probe 创建一个最多保持 180 秒的 AppID 500 public Lobby，使用上述 20 个字段。一个真实
+外部 L4D1 客户端发现并加入该 Lobby；Probe 依次收到：
+
+- `LobbyChatUpdate` entered（状态 `0x00000001`）；
+- `LobbyChatMsg` / `SysSession::RequestJoinData`，请求内含客户端机器与成员设置；
+- 客户端在未收到 ReplyJoinData 后离开，`LobbyChatUpdate` 状态为 `0x00000002`；
+- 180 秒到期后 Probe 正常 `LeaveLobby`。
+
+该结果证明 L4D1 客户端能够发现并进入 Probe 创建的 AppID 500 Lobby，并会启动 Source
+`SysSession::RequestJoinData` 协议；它尚不证明 ReplyJoinData、服务器连接或 reservation 已适配
+L4D1。验证记录不保存外部客户端的 SteamID、昵称或原始身份 payload。
+
 默认使用 Steam ManualDispatch 并消费实际回调事件。传入 `private`、`friends`、`public` 或 `invisible` 作为第二个参数以选择大厅类型。仅在进行 ABI/控制诊断时传入 `direct` 作为第三个参数；手动回调路径是该 DLL 的已验证路径。
 
 只读列出当前 AppID 可搜索到的 Lobby ID、owner、成员数和完整 metadata：
