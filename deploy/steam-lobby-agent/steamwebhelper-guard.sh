@@ -7,6 +7,7 @@ backup_path="${user_home}/.steam/ubuntu12_64/steamwebhelper_sniper_wrap.sh.valve
 shim_path="${STEAM_WEBHELPER_GUARD_SHIM_SOURCE:-/usr/local/lib/steamwebhelper-guard-shim.sh}"
 probe_url="${STEAM_WEBHELPER_GUARD_PROBE_URL:-http://127.0.0.1:8080/v1/probe/status}"
 poll_seconds="${STEAM_WEBHELPER_GUARD_POLL_SECONDS:-15}"
+grace_seconds="${STEAM_WEBHELPER_GUARD_GRACE_SECONDS:-60}"
 
 log() {
     printf '%s steamwebhelper-guard: %s\n' "$(date -Iseconds)" "$*"
@@ -33,14 +34,29 @@ replace_with_guard_shim() {
     mv -f "${temporary_file}" "${wrapper_path}"
 }
 
+agent_is_ready() {
+    curl --noproxy '*' --fail --silent --show-error --max-time 3 "${probe_url}" |
+        jq -e '.ready == true' >/dev/null 2>&1
+}
+
 wait_for_agent_ready() {
+    while ! agent_is_ready; do
+        sleep 2
+    done
+}
+
+wait_for_stable_agent_ready() {
     while true; do
-        if curl --noproxy '*' --fail --silent --show-error --max-time 3 "${probe_url}" |
-            jq -e '.ready == true' >/dev/null 2>&1; then
+        wait_for_agent_ready
+        log "Agent is ready; waiting ${grace_seconds} seconds before blocking Chromium helpers"
+        sleep "${grace_seconds}"
+
+        if agent_is_ready; then
+            log "Agent stayed ready through the Chromium helper grace period"
             return 0
         fi
 
-        sleep 2
+        log "Agent readiness dropped during the grace period; waiting again"
     done
 }
 
@@ -69,7 +85,7 @@ ensure_guard_shim() {
     log "installed lightweight wrapper shim"
 }
 
-wait_for_agent_ready
+wait_for_stable_agent_ready
 
 while true; do
     if ! ensure_guard_shim; then

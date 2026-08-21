@@ -28,7 +28,12 @@ if ($initializer -notmatch 'set_steam_webhelper_guard_autostart' -or
 
 if ($initializer -notmatch 'restore_steam_webhelper_wrapper' -or
     $initializer -notmatch 'steamwebhelper_sniper_wrap\.sh\.valve-original') {
-    throw 'The initializer must restore the Valve wrapper before VNC or first-login Steam startup.'
+    throw 'The initializer must retain the original Valve wrapper for Steam startup.'
+}
+
+if ($initializer -notmatch '(?s)restore_steam_webhelper_wrapper\s*\n\s*sed -i "s\|\^command' -or
+    $initializer -match 'if \[ "\$\{enable_steam_webhelper_guard\}" = false \]; then\s*restore_steam_webhelper_wrapper') {
+    throw 'The initializer must restore the Valve wrapper before every Steam startup, including no-VNC guard mode.'
 }
 
 $alwaysBlock = [regex]::Match($initializer, "(?s)always\)\s*steam_arguments=''.*?;;").Value
@@ -48,6 +53,19 @@ if ($guard -notmatch 'http://127\.0\.0\.1:8080/v1/probe/status' -or
     $guard -notmatch "jq -e '\.ready == true'" -or
     $guard -notmatch 'while true') {
     throw 'The guard must wait until the local Agent readiness probe reports ready.'
+}
+
+if ($guard -notmatch 'STEAM_WEBHELPER_GUARD_GRACE_SECONDS:-60') {
+    throw 'The guard must default to a 60-second post-readiness grace period.'
+}
+
+if ($guard -notmatch 'agent_is_ready\(\)' -or
+    $guard -notmatch 'wait_for_stable_agent_ready\(\)' -or
+    $guard -notmatch 'wait_for_agent_ready' -or
+    $guard -notmatch 'sleep "\$\{grace_seconds\}"' -or
+    $guard -notmatch 'if agent_is_ready; then' -or
+    $guard -notmatch 'wait_for_stable_agent_ready\s*\n\s*while true') {
+    throw 'The guard must wait through the grace period and recheck readiness before installing the shim.'
 }
 
 if ($guard -notmatch 'steamwebhelper_sniper_wrap\.sh\.valve-original' -or

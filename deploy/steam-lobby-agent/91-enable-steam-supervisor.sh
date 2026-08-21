@@ -260,13 +260,11 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
                 ;;
         esac
 
+        restore_steam_webhelper_wrapper
         sed -i "s|^command=.*$|command=/usr/games/steam ${steam_arguments}|" /etc/supervisor.d/steam.ini
         set_vnc_autostart "${enable_vnc}"
         set_desktop_autostart "${enable_vnc}"
         set_steam_webhelper_guard_autostart "${enable_steam_webhelper_guard}"
-        if [ "${enable_steam_webhelper_guard}" = false ]; then
-            restore_steam_webhelper_wrapper
-        fi
     }
 
     if [ -n "${STEAM_SHARED_LIBRARY_PATH:-}" ]; then
