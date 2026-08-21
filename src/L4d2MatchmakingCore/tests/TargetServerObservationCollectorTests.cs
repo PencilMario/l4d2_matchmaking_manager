@@ -90,7 +90,7 @@ public sealed class TargetServerObservationCollectorTests
     }
 
     [TestMethod]
-    public async Task RefreshOnceAsyncRejectsNonL4d1Servers()
+    public async Task RefreshOnceAsyncDoesNotRejectServersByAppId()
     {
         var target = CreateTarget("127.0.0.1", 27015);
         using var services = await CreateServicesAsync(target);
@@ -99,7 +99,7 @@ public sealed class TargetServerObservationCollectorTests
 
         await collector.RefreshOnceAsync(CancellationToken.None);
 
-        Assert.AreEqual("unavailable", store.Get(target.Id)?.Status);
+        Assert.AreEqual("online", store.Get(target.Id)?.Status);
     }
 
     private static TargetServerObservationCollector CreateCollector(

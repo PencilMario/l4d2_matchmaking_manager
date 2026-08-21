@@ -39,7 +39,7 @@ public sealed class AgentLobbyEndpointTests
     }
 
     [TestMethod]
-    public async Task ReservedOperationIsRejectedBeforeSteamIsCalled()
+    public async Task ReservedOperationIsAcceptedAndPassedToSteamService()
     {
         var service = new FakeSessionService();
         await using var factory = new AgentFactory(service);
@@ -52,9 +52,8 @@ public sealed class AgentLobbyEndpointTests
 
         var response = await client.PostAsJsonAsync("/v1/operations", request);
 
-        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
-        StringAssert.Contains(await response.Content.ReadAsStringAsync(), "l4d1_reservation_not_supported");
-        Assert.AreEqual(0, service.StartCalls);
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.AreEqual(1, service.StartCalls);
     }
 
     [TestMethod]

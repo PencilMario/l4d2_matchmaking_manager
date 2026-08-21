@@ -40,11 +40,6 @@ public sealed class TargetServerObservationCollector(
                     }
 
                     var info = await a2s.GetInfoAsync(endpoint, token);
-                    if (info.AppId != 500)
-                    {
-                        store.Replace(target.Id, Unavailable(target.Id));
-                        return;
-                    }
                     store.Replace(target.Id, new TargetServerObservation(
                         target.Id,
                         "online",

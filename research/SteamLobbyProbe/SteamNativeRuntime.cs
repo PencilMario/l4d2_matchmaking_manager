@@ -58,8 +58,6 @@ internal sealed class SteamNativeRuntime(
     public LobbySnapshot CreateLobby(AgentOperationRequest request, CampaignProfile profile)
     {
         EnsureInitialized();
-        if (request.Mode == AgentLobbyMode.Reserved)
-            throw new SteamRuntimeException("l4d1_reservation_not_supported");
         if (!IPAddress.TryParse(request.Ipv4Address, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
             throw new SteamRuntimeException("invalid_target_endpoint");
         if (request.Port == 0)
@@ -88,6 +86,24 @@ internal sealed class SteamNativeRuntime(
                 ((uint)bytes[2] << 8) |
                 bytes[3];
             _api.SetLobbyGameServer(_matchmaking, created.LobbyId, hostOrderIp, request.Port, 0);
+
+            if (request.Mode == AgentLobbyMode.Reserved)
+            {
+                var reservationResult = ReservationCommand.RunLive(
+                    new IPEndPoint(address, request.Port),
+                    created.LobbyId,
+                    RealSessionSettings.EncodeReservationSettings(profile),
+                    5000,
+                    ReservationProtocol.DefaultHostVersion);
+                if (!ReservationResultVerifier.IsAccepted(
+                        reservationResult,
+                        new IPEndPoint(address, request.Port),
+                        created.LobbyId,
+                        request.RconPassword,
+                        static (endpoint, password, lobbyId) =>
+                            SourceRconClient.VerifyReservation(endpoint, password, lobbyId, TimeSpan.FromSeconds(3))))
+                    throw new SteamRuntimeException("reservation_failed");
+            }
 
             var lobby = ReadLobby(created.LobbyId);
             var ownerSteamId = _api.GetSteamId(_user);

@@ -151,7 +151,7 @@ Content-Type: application/json; charset=utf-8
 | `maxConcurrentWarmups` | integer/null | 非预留服务器并发上限，必须大于 `0`；`null` 使用 `36`。预留服务器仍返回 `1`。 |
 | `attemptWindowSeconds` | integer/null | 单次暖服窗口，必须大于 `0`；`null` 使用 `720`。 |
 | `playerTarget` | integer/null | A2S 人数达到此值即停止暖服，必须大于 `0`；`null` 使用 `6`。 |
-| `gameMode` | string/null | 仅允许 `coop`、`versus` 或 `null`；`null`/省略保持现有 versus metadata 默认值。`coop` 创建大厅时使用 `Members:numSlots=4`、`Game:Mode=coop`、`Game:sk_versus=19`。 |
+| `gameMode` | string/null | 仅允许 `coop`、`versus` 或 `null`；`null`/省略使用已验证的 coop metadata 默认值。`coop` 创建大厅时使用 `Members:numSlots=4`、`Game:Mode=coop`、`Game:sk_versus=19`。 |
 | `enabled` | boolean/null | 是否参与调度；`null` 使用 `true`。 |
 | `rconPassword` | string/null | 仅预留服务器可写；仅用于 reservation UDP 超时后的 RCON `status` 验证。读取响应永远不会返回它。传 `null` 清除已有凭据。 |
 

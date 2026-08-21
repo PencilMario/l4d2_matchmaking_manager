@@ -1,4 +1,4 @@
-# L4D1 Matchmaking Manager Frontend
+# L4D Matchmaking Manager Frontend
 
 Desktop-only React management workspace for the Core Controller. Supported viewports begin at `1280x720`; no mobile layout is provided.
 

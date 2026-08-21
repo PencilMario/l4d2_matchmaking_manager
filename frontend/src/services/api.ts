@@ -33,7 +33,7 @@ async function request<T = any>(path: string, init: RequestInit = {}) {
 }
 
 function serverInput(data: any) {
-  return { endpoint: data.endpoint, requiresReservation: false, priority: data.priority ?? 0, maxConcurrentWarmups: data.maxConcurrentWarmups ?? 36, attemptWindowSeconds: data.attemptWindowSeconds ?? 720, playerTarget: data.playerTarget ?? 4, gameMode: data.gameMode || null, enabled: data.enabled ?? true, rconPassword: null };
+  return { endpoint: data.endpoint, requiresReservation: Boolean(data.requiresReservation), priority: data.priority ?? 0, maxConcurrentWarmups: data.maxConcurrentWarmups ?? 36, attemptWindowSeconds: data.attemptWindowSeconds ?? 720, playerTarget: data.playerTarget ?? 6, gameMode: data.gameMode || null, enabled: data.enabled ?? true, rconPassword: data.rconPassword || null };
 }
 
 export const ApiService = {

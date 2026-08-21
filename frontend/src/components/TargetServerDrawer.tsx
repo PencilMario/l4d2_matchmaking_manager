@@ -175,7 +175,7 @@ export const TargetServerDrawer: React.FC<TargetServerDrawerProps> = ({
           <div>
             <span className="text-slate-500 block mb-0.5">大厅类型</span>
             <span className="font-medium text-slate-800">
-              {server.requiresReservation ? '旧版预约配置（不会调度）' : 'L4D1 标准大厅'}
+              {server.requiresReservation ? '需要大厅预留' : '常规匹配'}
             </span>
           </div>
 

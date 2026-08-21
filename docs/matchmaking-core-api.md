@@ -1,6 +1,6 @@
 # Matchmaking Core 运维与 API
 
-Core 是单 Docker 主机上的 L4D1（AppID 500）暖服控制面。它管理 PostgreSQL 配置、创建带独立账号卷
+Core 是单 Docker 主机上的 L4D（AppID 500）暖服控制面。它管理 PostgreSQL 配置、创建带独立账号卷
 的 Agent 容器、以 A2S 和 Agent 实时观察执行调度，并代理任意 Steam lobby 的只读查询。
 Core API 与动态 noVNC 端口都只绑定宿主机 `127.0.0.1`。
 
@@ -80,15 +80,15 @@ Steam 凭据、Steam Guard 数据、Docker socket 或原始 Steam 日志。
   "priority": 0,
   "maxConcurrentWarmups": 36,
   "attemptWindowSeconds": 720,
-  "playerTarget": 4,
+  "playerTarget": 6,
   "gameMode": "coop",
   "enabled": true,
   "rconPassword": null
 }
 ```
 
-L4D1 专用版只接受 `requiresReservation=false`。传入 `true` 会返回
-`400 l4d1_reservation_not_supported`；这是为了避免复用未经 L4D1 真机验证的 L4D2 握手。
+`requiresReservation=true` 会启用预留流程并把有效并发固定为 1。该 reservation/RCON 路径
+保留可用，但尚未在 L4D AppID 500 服务器上完成真机验证。
 
 `GET /v1/servers/observations` 是认证的只读展示模型。它返回每一台已配置 Target Server
 的最新内存态 A2S 观察结果，不写 PostgreSQL，也不会在 HTTP 请求中直接发出 UDP 查询。实现时该
@@ -98,7 +98,7 @@ L4D1 专用版只接受 `requiresReservation=false`。传入 `true` 会返回
 {
   "targetServerId": "c691ca6a-6c2a-4ece-b7bd-2e951eee7caa",
   "status": "online",
-  "serverName": "L4D1 Server #1",
+  "serverName": "L4D Server #1",
   "playerCount": 2,
   "maxPlayers": 12,
   "observedAt": "2026-08-18T12:00:05+00:00"
@@ -115,7 +115,7 @@ L4D1 专用版只接受 `requiresReservation=false`。传入 `true` 会返回
 
 `endpoint` 接受 hostname 或 IPv4，省略端口时为 `27015`；不接受 URL、IPv6、凭据或非法
 端口。可选数值传 `null` 时恢复缺省值：优先级 0、非预留并发 36、尝试窗口 720 秒、人数
-目标 6。`gameMode` 可为 `null`、`coop` 或 `versus`；`null` 保持现有 versus metadata 默认值，其他字符串返回 `400 invalid_game_mode`。
+目标 6。`gameMode` 可为 `null`、`coop` 或 `versus`；`null` 使用已验证的 coop metadata 默认值，其他字符串返回 `400 invalid_game_mode`。
 预留目标的有效并发始终强制为 1。创建成功返回 `201`，读取/更新成功返回 `200`，
 删除成功返回 `204`，非法配置返回 `400`，未知 ID 返回 `404`。
 

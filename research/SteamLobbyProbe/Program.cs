@@ -81,8 +81,6 @@ internal static class Program
 
         var serverMode = args.Length > 1 && string.Equals(args[1], "server", StringComparison.OrdinalIgnoreCase);
         var reservedServerMode = args.Length > 1 && string.Equals(args[1], "server-reserved", StringComparison.OrdinalIgnoreCase);
-        if (reservedServerMode)
-            throw new InvalidOperationException("l4d1_reservation_not_supported");
         if (serverMode && args.Length < 3)
             throw new ArgumentException("Server mode requires an IPv4 endpoint in the form ip:port.");
         if (reservedServerMode && args.Length < 3)
