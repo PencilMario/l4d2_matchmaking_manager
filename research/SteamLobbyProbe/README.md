@@ -1,6 +1,6 @@
 # Steam 大厅探测程序
 
-该探测程序用于测试：在不启动 `left4dead2.exe` 的情况下，能否从独立的 x86 进程中创建 Left 4 Dead 2 的 Steam 大厅。
+该探测程序用于测试：在不启动游戏客户端的情况下，能否从独立的 x86 进程中创建 Left 4 Dead 系列的 Steam 大厅。
 
 ## 已验证结果
 
@@ -35,11 +35,22 @@ dotnet publish -c Release -r win-x86 --self-contained true -p:PublishSingleFile=
 ```powershell
 Set-Content -LiteralPath .\steam_appid.txt -Value '500' -NoNewline
 $env:STEAM_APP_ID = '500'
-.\SteamLobbyProbe.exe 'E:\SteamLibrary\steamapps\common\left 4 dead\bin\steam_api.dll'
+.\SteamLobbyProbe.exe 'E:\SteamLibrary\steamapps\common\Left 4 Dead 2\bin\steam_api.dll'
 ```
 
 程序会在初始化 Steam API 前同步设置进程级 `SteamAppId` 和 `SteamGameId`，并拒绝实际
 AppID 与 `STEAM_APP_ID` 不一致的会话。不设置该变量时保持原有 L4D2 行为。
+
+### Left 4 Dead 的 Steam API 兼容边界
+
+2026-08-21 在 Windows x86 实测中，Left 4 Dead 自带的 `bin\steam_api.dll` 只导出旧式
+`SteamMatchmaking`、`SteamUtils`、`SteamUser` 对象入口和 `SteamAPI_RunCallbacks`；它不导出
+ManualDispatch 系列或 `SteamAPI_ISteam*` 扁平函数，不能被当前 Probe 安全加载。Left 4 Dead 2
+自带的新版 x86 `steam_api.dll` 在 `STEAM_APP_ID=500`、`steam_appid.txt=500` 时成功初始化为
+AppID 500，完成登录检查、Lobby 列表回调、私有 Lobby 创建、metadata 写入/读回和正常离开。
+
+因此 Windows L4D1 研究使用兼容的新版 x86 Steam API 库，不使用 L4D1 自带的旧 DLL。这个
+边界与 Linux Agent 使用 Steam Runtime 64 位 API 库、而非游戏自带 32 位库的部署原则一致。
 
 默认使用 Steam ManualDispatch 并消费实际回调事件。传入 `private`、`friends`、`public` 或 `invisible` 作为第二个参数以选择大厅类型。仅在进行 ABI/控制诊断时传入 `direct` 作为第三个参数；手动回调路径是该 DLL 的已验证路径。
 

@@ -38,7 +38,7 @@ internal static class Program
 
         var dllPath = args.Length > 0
             ? Path.GetFullPath(args[0])
-            : throw new ArgumentException("Pass the full path to the game's bin\\steam_api.dll.");
+            : throw new ArgumentException("Pass the full path to a compatible steam_api.dll.");
         var protocolReplyMode = args.Length > 1 && string.Equals(args[1], "protocol-reply", StringComparison.OrdinalIgnoreCase);
         var realProtocolReplyMode = args.Length > 1 && string.Equals(args[1], "protocol-reply-real", StringComparison.OrdinalIgnoreCase);
         if (protocolReplyMode || realProtocolReplyMode)
