@@ -806,14 +806,14 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
-    public async Task ActiveA2sFailureKeepsReservationLease()
+    public async Task ActiveA2sFailureStopsOperationAndReleasesReservationLease()
     {
         await using var db = CreateDb();
         var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
         var server = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = true, PlayerTarget = 6, AttemptWindowSeconds = 720 };
         var operation = Guid.NewGuid();
         db.AddRange(agent, server,
-            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = server.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "reserved", State = "active", StartedAt = DateTimeOffset.UtcNow, ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow, ExternalMemberIdsJson = "[]" },
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = server.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "reserved", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" },
             new ReservationLease { TargetServerId = server.Id, OperationId = operation, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10) });
         await db.SaveChangesAsync();
         var agents = new FakeAgents(new AgentOperationSnapshot(operation, "active", new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow), null, DateTimeOffset.UtcNow));
@@ -822,8 +822,165 @@ public sealed class WarmupSchedulerServiceTests
         await scheduler.TickAsync(CancellationToken.None);
 
         Assert.AreEqual("running", agent.Status);
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == operation && attempt.State == "completed"));
+        Assert.IsFalse(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id && lease.OperationId == operation));
+        Assert.AreEqual(1, agents.StopCalls);
+    }
+
+    [TestMethod]
+    public async Task ActiveA2sFailureBeforeAttemptDeadlineKeepsOperationAndLease()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var server = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = true, PlayerTarget = 6, AttemptWindowSeconds = 60 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, server,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = server.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "reserved", State = "active", StartedAt = DateTimeOffset.UtcNow.AddSeconds(-5), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddSeconds(-5), ExternalMemberIdsJson = "[]" },
+            new ReservationLease { TargetServerId = server.Id, OperationId = operation, ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(55) });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s(failingPorts: new HashSet<int> { server.Port }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(0, agents.StopCalls);
         Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == operation && attempt.State == "active"));
         Assert.IsTrue(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == server.Id && lease.OperationId == operation));
+    }
+
+    [TestMethod]
+    public async Task A2sUnavailableTargetReleasesAttemptWhenOperationObservationFails()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null, throwOnGetOperationIds: new HashSet<Guid> { operation });
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s(failingPorts: new HashSet<int> { target.Port }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual("running", agent.Status);
+        Assert.AreEqual(1, agents.StopCalls);
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == operation && attempt.State == "completed"));
+    }
+
+    [TestMethod]
+    public async Task A2sUnavailableTargetStopFailureQuarantinesAgentAndKeepsAttempt()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = true, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var operation = Guid.NewGuid();
+        db.AddRange(agent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = operation, Mode = "reserved", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" },
+            new ReservationLease { TargetServerId = target.Id, OperationId = operation, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10) });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null, throwOnStop: true);
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s(failingPorts: new HashSet<int> { target.Port }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual("quarantined", agent.Status);
+        Assert.AreEqual(1, agents.StopCalls);
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == operation && attempt.State == "active"));
+        Assert.IsTrue(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == target.Id && lease.OperationId == operation));
+    }
+
+    [TestMethod]
+    public async Task A2sUnavailableTargetKeepsLeaseWhenAnotherAttemptStopFails()
+    {
+        await using var db = CreateDb();
+        var firstAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "first-agent", Status = "running", SteamDataVolumeName = "steam-1", AccountConfigVolumeName = "config-1", NoVncPort = 18083 };
+        var secondAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "second-agent", Status = "running", SteamDataVolumeName = "steam-2", AccountConfigVolumeName = "config-2", NoVncPort = 18085 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = true, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var firstOperation = Guid.NewGuid();
+        var secondOperation = Guid.NewGuid();
+        db.AddRange(firstAgent, secondAgent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = firstAgent.Id, OperationId = firstOperation, Mode = "reserved", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" },
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = secondAgent.Id, OperationId = secondOperation, Mode = "reserved", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" },
+            new ReservationLease { TargetServerId = target.Id, OperationId = firstOperation, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10) });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(
+            new AgentOperationSnapshot(firstOperation, "active", new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow), null, DateTimeOffset.UtcNow),
+            throwOnStopIds: new HashSet<Guid> { secondOperation });
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new BatchSelector([firstAgent, secondAgent]), new FakeA2s(failingPorts: new HashSet<int> { target.Port }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(2, agents.StopCalls);
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == firstOperation && attempt.State == "completed"));
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == secondOperation && attempt.State == "active"));
+        Assert.IsTrue(await db.ReservationLeases.AnyAsync(lease => lease.TargetServerId == target.Id && lease.OperationId == firstOperation));
+    }
+
+    [TestMethod]
+    public async Task A2sUnavailableTargetDropsRestartPendingAttemptWithoutRestoringIt()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var oldOperation = Guid.NewGuid();
+        db.AddRange(agent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = oldOperation, Mode = "standard", State = "restart_pending", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-5), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow, ExternalMemberIdsJson = "[]" });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s(failingPorts: new HashSet<int> { target.Port }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.OperationId == oldOperation && attempt.State == "completed"));
+        Assert.AreEqual(0, agents.StartCalls);
+    }
+
+    [TestMethod]
+    public async Task ActiveA2sFailureReleasesEveryAttemptForTheUnavailableTarget()
+    {
+        await using var db = CreateDb();
+        var firstAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "first-agent", Status = "running", SteamDataVolumeName = "steam-1", AccountConfigVolumeName = "config-1", NoVncPort = 18083 };
+        var secondAgent = new WarmupAgent { Id = Guid.NewGuid(), Name = "second-agent", Status = "running", SteamDataVolumeName = "steam-2", AccountConfigVolumeName = "config-2", NoVncPort = 18085 };
+        var unavailableTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 10 };
+        var nextTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 0 };
+        var firstOperation = Guid.NewGuid();
+        var secondOperation = Guid.NewGuid();
+        db.AddRange(firstAgent, secondAgent, unavailableTarget, nextTarget,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = unavailableTarget.Id, WarmupAgentId = firstAgent.Id, OperationId = firstOperation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" },
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = unavailableTarget.Id, WarmupAgentId = secondAgent.Id, OperationId = secondOperation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(firstOperation, "active", new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow), null, DateTimeOffset.UtcNow));
+        var scheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new BatchSelector([firstAgent, secondAgent]), new FakeA2s(failingPorts: new HashSet<int> { unavailableTarget.Port }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(2, agents.StopCalls);
+        Assert.AreEqual(2, await db.WarmupAttempts.CountAsync(attempt => attempt.TargetServerId == unavailableTarget.Id && attempt.State == "completed"));
+        Assert.IsTrue(await db.WarmupAttempts.AnyAsync(attempt => attempt.TargetServerId == nextTarget.Id));
+    }
+
+    [TestMethod]
+    public async Task A2sUnavailableTargetCanBeScheduledAgainAfterItRecoversWithoutRestoringOldAttempt()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, PlayerTarget = 6, AttemptWindowSeconds = 720 };
+        var oldOperation = Guid.NewGuid();
+        db.AddRange(agent, target,
+            new WarmupAttempt { Id = Guid.NewGuid(), TargetServerId = target.Id, WarmupAgentId = agent.Id, OperationId = oldOperation, Mode = "standard", State = "active", StartedAt = DateTimeOffset.UtcNow.AddMinutes(-20), ObservedAt = DateTimeOffset.UtcNow, Phase = "awaiting_first_member", LobbyReadyAt = DateTimeOffset.UtcNow.AddMinutes(-20), ExternalMemberIdsJson = "[]" });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(new AgentOperationSnapshot(oldOperation, "active", new LobbySnapshot("109775242170052468", "owner", [new LobbyMemberSnapshot("owner", null)], new Dictionary<string, string>(), DateTimeOffset.UtcNow), null, DateTimeOffset.UtcNow));
+        var unavailableScheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s(failingPorts: new HashSet<int> { target.Port }));
+
+        await unavailableScheduler.TickAsync(CancellationToken.None);
+
+        var recoveredScheduler = new WarmupSchedulerService(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s());
+        await recoveredScheduler.TickAsync(CancellationToken.None);
+
+        var newAttempt = await db.WarmupAttempts.SingleAsync(attempt => attempt.TargetServerId == target.Id && attempt.State != "completed");
+        Assert.AreNotEqual(oldOperation, newAttempt.OperationId);
+        Assert.AreEqual(1, agents.StartCalls);
     }
 
     [TestMethod]
@@ -963,7 +1120,9 @@ public sealed class WarmupSchedulerServiceTests
         bool throwOnGetOperation = false,
         bool throwOnStart = false,
         bool throwOnStop = false,
-        bool throwOnRestart = false) : IAgentControlClient
+        bool throwOnRestart = false,
+        IReadOnlySet<Guid>? throwOnGetOperationIds = null,
+        IReadOnlySet<Guid>? throwOnStopIds = null) : IAgentControlClient
     {
         private int _startCalls;
         private int _stopCalls;
@@ -985,13 +1144,13 @@ public sealed class WarmupSchedulerServiceTests
                 : Task.FromResult(new AgentOperationStartResult(new AgentOperationSnapshot(request.OperationId, "active", null, null, DateTimeOffset.UtcNow), false));
         }
         public Task<AgentOperationSnapshot?> GetOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken) =>
-            throwOnGetOperation
+            throwOnGetOperation || throwOnGetOperationIds?.Contains(operationId) == true
                 ? Task.FromException<AgentOperationSnapshot?>(new HttpRequestException("agent_unavailable"))
                 : Task.FromResult(snapshot);
         public Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _stopCalls);
-            return throwOnStop
+            return throwOnStop || throwOnStopIds?.Contains(operationId) == true
                 ? Task.FromException(new HttpRequestException("agent_unavailable"))
                 : Task.CompletedTask;
         }

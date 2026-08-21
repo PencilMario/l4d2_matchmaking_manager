@@ -50,6 +50,23 @@ public sealed class AgentControlClientTests
     }
 
     [TestMethod]
+    public async Task StopTreatsMissingOperationAsAlreadyStopped()
+    {
+        var operationId = Guid.NewGuid();
+        var handler = new RecordingHandler(
+            new AgentOperationSnapshot(operationId, "active", null, null, DateTimeOffset.UnixEpoch),
+            new LobbySnapshot("109775242170052468", "owner", [], new Dictionary<string, string>(), DateTimeOffset.UnixEpoch),
+            stopNotFound: true);
+        using var httpClient = new HttpClient(handler);
+        var client = new AgentControlClient(httpClient);
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+
+        await client.StopOperationAsync(agent, operationId, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { $"DELETE /v1/operations/{operationId}" }, handler.Requests);
+    }
+
+    [TestMethod]
     public async Task StartSendsRconPasswordOnlyInThePrivateOperationRequest()
     {
         var operationId = Guid.NewGuid();
@@ -107,7 +124,11 @@ public sealed class AgentControlClientTests
         Assert.AreEqual($"/v1/lobbies/{lobby.LobbyId}?includeMembers=false", handler.RequestUris.Single());
     }
 
-    private sealed class RecordingHandler(AgentOperationSnapshot operation, LobbySnapshot lobby, string? lobbyFailure = null) : HttpMessageHandler
+    private sealed class RecordingHandler(
+        AgentOperationSnapshot operation,
+        LobbySnapshot lobby,
+        string? lobbyFailure = null,
+        bool stopNotFound = false) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
         public List<string> RequestUris { get; } = [];
@@ -140,6 +161,8 @@ public sealed class AgentControlClientTests
                 statusCode = HttpStatusCode.ServiceUnavailable;
                 payload = lobbyFailure;
             }
+            if (request.Method == HttpMethod.Delete && request.RequestUri.AbsolutePath.StartsWith("/v1/operations/", StringComparison.Ordinal) && stopNotFound)
+                statusCode = HttpStatusCode.NotFound;
             return new HttpResponseMessage(statusCode)
             {
                 Content = JsonContent.Create(payload),

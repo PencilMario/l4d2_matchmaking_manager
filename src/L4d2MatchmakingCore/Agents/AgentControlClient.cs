@@ -59,6 +59,8 @@ public sealed class AgentControlClient(HttpClient httpClient) : IAgentControlCli
     public async Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
     {
         using var response = await httpClient.DeleteAsync(UriFor(agent, $"/v1/operations/{operationId}"), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return;
         response.EnsureSuccessStatusCode();
     }
 
