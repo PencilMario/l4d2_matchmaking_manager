@@ -59,6 +59,22 @@ if ($guard -notmatch 'STEAM_WEBHELPER_GUARD_GRACE_SECONDS:-60') {
     throw 'The guard must default to a 60-second post-readiness grace period.'
 }
 
+if ($guard -notmatch 'STEAM_CEF_GUARD_APPLIED_MARKER' -or
+    $guard -notmatch 'date \+%s%3N' -or
+    $guard -notmatch 'mark_guard_applied' -or
+    $guard -notmatch '(?s)pkill -TERM -x steamwebhelper.*mark_guard_applied') {
+    throw 'The guard must persist the timestamp after the Chromium shim becomes active.'
+}
+
+if ($guard -notmatch '(?s)if is_guard_shim; then.*?if \[ ! -f "\$\{applied_marker\}" \].*?guard_replaced=true') {
+    throw 'An already-installed Chromium shim without a marker must start a fresh guard timestamp.'
+}
+
+if ($initializer -notmatch 'l4d2-cef-guard-applied' -or
+    $initializer -notmatch 'clear_steam_cef_guard_marker') {
+    throw 'The initializer must clear stale CEF guard state before each Steam startup.'
+}
+
 if ($guard -notmatch 'agent_is_ready\(\)' -or
     $guard -notmatch 'wait_for_stable_agent_ready\(\)' -or
     $guard -notmatch 'wait_for_agent_ready' -or

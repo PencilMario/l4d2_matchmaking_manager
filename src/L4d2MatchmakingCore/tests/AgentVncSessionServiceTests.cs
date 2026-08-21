@@ -161,6 +161,12 @@ public sealed class AgentVncSessionServiceTests
         public Task<string> CreateAsync(ManagedAgentContainerDefinition definition, CancellationToken cancellationToken) =>
             Task.FromResult("container-id");
 
+        public Task<long> GetMemoryLimitAsync(string containerId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task UpdateMemoryLimitAsync(string containerId, long memoryLimitBytes, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task StartAsync(string containerId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StopAsync(string containerId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task DeleteAsync(string containerId, bool deleteVolumes, CancellationToken cancellationToken) => Task.CompletedTask;

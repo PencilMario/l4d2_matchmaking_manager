@@ -4,6 +4,8 @@ public interface IAgentContainerRuntime
 {
     Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken);
     Task<string> CreateAsync(ManagedAgentContainerDefinition definition, CancellationToken cancellationToken);
+    Task<long> GetMemoryLimitAsync(string containerId, CancellationToken cancellationToken);
+    Task UpdateMemoryLimitAsync(string containerId, long memoryLimitBytes, CancellationToken cancellationToken);
     Task StartAsync(string containerId, CancellationToken cancellationToken);
     Task StopAsync(string containerId, CancellationToken cancellationToken);
     Task DeleteAsync(string containerId, bool deleteVolumes, CancellationToken cancellationToken);

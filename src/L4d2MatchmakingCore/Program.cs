@@ -48,6 +48,7 @@ builder.Services.AddHttpClient("agent-vnc", client => client.Timeout = Timeout.I
 builder.Services.AddSingleton<IAgentVncProxyTargetResolver, AgentVncProxyTargetResolver>();
 builder.Services.AddSingleton<IAgentVncProxy, AgentVncProxy>();
 builder.Services.AddScoped<WarmupAgentContainerService>();
+builder.Services.AddScoped<AgentMemoryLimitService>();
 builder.Services.AddScoped<WarmupAgentService>();
 builder.Services.AddHttpClient<IAgentControlClient, AgentControlClient>();
 builder.Services.AddScoped<IHealthyAgentSelector, HealthyAgentSelector>();
@@ -62,6 +63,7 @@ builder.Services.AddScoped<WarmupAttemptDrainService>();
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHostedService<AgentVncSessionCleanupService>();
+    builder.Services.AddHostedService<AgentMemoryLimitBackgroundService>();
     builder.Services.AddHostedService<WarmupSchedulerBackgroundService>();
     builder.Services.AddHostedService<TargetServerObservationCollector>();
 }

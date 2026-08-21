@@ -49,6 +49,40 @@ public sealed class ProbeStatusServiceTests
     }
 
     [TestMethod]
+    public async Task GetAsyncIncludesTheCefGuardAppliedTimestamp()
+    {
+        var appliedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var service = new ProbeStatusService(
+            new FixedFakeSessionService(new AgentHealthSnapshot(true, null, DateTimeOffset.UtcNow)),
+            new FakeDesktopDetector(true),
+            cefGuardStatusReader: new FixedCefGuardStatusReader(appliedAt));
+
+        var result = await service.GetAsync(CancellationToken.None);
+
+        Assert.AreEqual(appliedAt, result.CefGuardAppliedAt);
+    }
+
+    [TestMethod]
+    public void FileCefGuardStatusReaderReadsMillisecondMarkersAndLegacySecondMarkers()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "l4d2-cef-marker-" + Guid.NewGuid().ToString("N"));
+        var expected = DateTimeOffset.UtcNow.AddMilliseconds(-123);
+
+        try
+        {
+            File.WriteAllText(path, expected.ToUnixTimeMilliseconds().ToString());
+            Assert.AreEqual(expected.ToUnixTimeMilliseconds(), new FileCefGuardStatusReader(path).ReadAppliedAt()?.ToUnixTimeMilliseconds());
+
+            File.WriteAllText(path, expected.ToUnixTimeSeconds().ToString());
+            Assert.AreEqual(expected.ToUnixTimeSeconds(), new FileCefGuardStatusReader(path).ReadAppliedAt()?.ToUnixTimeSeconds());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
     public void SteamDownloadRegionReaderPrefersTheMillenniumStateFile()
     {
         var directory = Path.Combine(Path.GetTempPath(), "l4d2-region-reader-" + Guid.NewGuid().ToString("N"));
@@ -191,5 +225,10 @@ public sealed class ProbeStatusServiceTests
     private sealed class FixedDownloadRegionReader(string? region) : ISteamDownloadRegionReader
     {
         public string? Read() => region;
+    }
+
+    private sealed class FixedCefGuardStatusReader(DateTimeOffset? appliedAt) : ICefGuardStatusReader
+    {
+        public DateTimeOffset? ReadAppliedAt() => appliedAt;
     }
 }

@@ -71,6 +71,24 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
         return response.ID;
     }
 
+    public async Task<long> GetMemoryLimitAsync(string containerId, CancellationToken cancellationToken)
+    {
+        var container = await InspectManagedAsync(containerId, cancellationToken);
+        return container.HostConfig?.Memory ?? 0;
+    }
+
+    public async Task UpdateMemoryLimitAsync(string containerId, long memoryLimitBytes, CancellationToken cancellationToken)
+    {
+        if (memoryLimitBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(memoryLimitBytes));
+
+        await EnsureManagedAsync(containerId, cancellationToken);
+        await _client.Containers.UpdateContainerAsync(containerId, new ContainerUpdateParameters
+        {
+            Memory = memoryLimitBytes,
+        }, cancellationToken);
+    }
+
     public async Task StartAsync(string containerId, CancellationToken cancellationToken)
     {
         await EnsureManagedAsync(containerId, cancellationToken);
@@ -140,6 +158,11 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
 
     private async Task EnsureManagedAsync(string containerId, CancellationToken cancellationToken)
     {
+        await InspectManagedAsync(containerId, cancellationToken);
+    }
+
+    private async Task<ContainerInspectResponse> InspectManagedAsync(string containerId, CancellationToken cancellationToken)
+    {
         var container = await _client.Containers.InspectContainerAsync(containerId, cancellationToken);
         if (container.Config.Labels is null ||
             !container.Config.Labels.TryGetValue("com.l4d2.matchmaking.managed", out var managed) ||
@@ -147,6 +170,8 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
         {
             throw new InvalidOperationException("unmanaged_agent_container");
         }
+
+        return container;
     }
 
     public void Dispose() => _client.Dispose();

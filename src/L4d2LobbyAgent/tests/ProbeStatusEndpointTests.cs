@@ -67,9 +67,11 @@ public sealed class ProbeStatusEndpointTests
                 services.RemoveAll<IAgentSteamSessionService>();
                 services.RemoveAll<ISteamDesktopDetector>();
                 services.RemoveAll<IAgentReadinessMarker>();
+                services.RemoveAll<ICefGuardStatusReader>();
                 services.AddSingleton(sessionService);
                 services.AddSingleton<ISteamDesktopDetector>(new FakeDesktopDetector(desktopRunning));
                 services.AddSingleton<IAgentReadinessMarker>(new FakeReadinessMarker());
+                services.AddSingleton<ICefGuardStatusReader>(new FixedCefGuardStatusReader(null));
             });
         }
     }
@@ -99,5 +101,10 @@ public sealed class ProbeStatusEndpointTests
     private sealed class FakeReadinessMarker : IAgentReadinessMarker
     {
         public Task MarkReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class FixedCefGuardStatusReader(DateTimeOffset? appliedAt) : ICefGuardStatusReader
+    {
+        public DateTimeOffset? ReadAppliedAt() => appliedAt;
     }
 }

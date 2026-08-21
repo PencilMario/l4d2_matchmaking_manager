@@ -9,6 +9,7 @@ builder.Services.AddSingleton<IAgentSteamSessionService, AgentSteamSessionServic
 builder.Services.AddSingleton<ISteamDesktopController, SupervisorSteamDesktopController>();
 builder.Services.AddSingleton<ISteamDesktopDetector, SteamDesktopDetector>();
 builder.Services.AddSingleton<ISteamDownloadRegionReader>(_ => SteamDownloadRegionReader.FromEnvironment());
+builder.Services.AddSingleton<ICefGuardStatusReader>(_ => FileCefGuardStatusReader.FromEnvironment());
 builder.Services.AddSingleton<IAgentReadinessMarker>(_ => FileAgentReadinessMarker.FromEnvironment());
 builder.Services.AddSingleton<ProbeStatusService>();
 

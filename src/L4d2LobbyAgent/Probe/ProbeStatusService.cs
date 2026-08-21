@@ -6,10 +6,12 @@ public sealed class ProbeStatusService(
     IAgentSteamSessionService sessionService,
     ISteamDesktopDetector desktopDetector,
     IAgentReadinessMarker? readinessMarker = null,
-    ISteamDownloadRegionReader? regionReader = null)
+    ISteamDownloadRegionReader? regionReader = null,
+    ICefGuardStatusReader? cefGuardStatusReader = null)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly ISteamDownloadRegionReader regionReader = regionReader ?? SteamDownloadRegionReader.FromEnvironment();
+    private readonly ICefGuardStatusReader cefGuardStatusReader = cefGuardStatusReader ?? FileCefGuardStatusReader.FromEnvironment();
 
     public async Task<ProbeStatusResponse> GetAsync(CancellationToken cancellationToken)
     {
@@ -35,7 +37,8 @@ public sealed class ProbeStatusService(
                     GetLoggedOnCheck(health),
                     health.Ready ? "ok" : "failed",
                     null),
-                this.regionReader.Read());
+                this.regionReader.Read(),
+                this.cefGuardStatusReader.ReadAppliedAt());
         }
         finally
         {

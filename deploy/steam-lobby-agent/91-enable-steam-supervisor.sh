@@ -12,6 +12,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     library_file="${library_directory}/libraryfolders.vdf"
     steam_config_directory="${steam_root}/config"
     steam_config_file="${steam_config_directory}/config.vdf"
+    steam_cef_guard_applied_marker="${STEAM_CEF_GUARD_APPLIED_MARKER:-${steam_config_directory}/l4d2-cef-guard-applied}"
     steam_region_status_file="${STEAM_DOWNLOAD_REGION_STATUS_FILE:-${steam_config_directory}/steam-download-region}"
     steam_download_region_id="${STEAM_DOWNLOAD_REGION_ID:-}"
     legacy_steam_download_region="${STEAM_DOWNLOAD_REGION:-}"
@@ -224,6 +225,10 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         mv -f "${temporary_file}" "${steam_webhelper_wrapper}"
     }
 
+    clear_steam_cef_guard_marker() {
+        rm -f "${steam_cef_guard_applied_marker}"
+    }
+
     configure_steam_ui_mode() {
         login_ui_mode="${STEAM_LOGIN_UI_MODE:-auto}"
         steam_no_vnc_arguments='-silent -no-browser -dev -console -nofriendsui -no-dwrite -nointro -nobigpicture -nofasthtml -nocrashmonitor -noshaders -no-shared-textures -disablehighdpi -cef-single-process -cef-in-process-gpu -single_core -cef-disable-d3d11 -cef-disable-sandbox -disable-winh264 -cef-force-32bit -no-cef-sandbox -vrdisable -cef-disable-breakpad'
@@ -260,6 +265,7 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
                 ;;
         esac
 
+        clear_steam_cef_guard_marker
         restore_steam_webhelper_wrapper
         sed -i "s|^command=.*$|command=/usr/games/steam ${steam_arguments}|" /etc/supervisor.d/steam.ini
         set_vnc_autostart "${enable_vnc}"

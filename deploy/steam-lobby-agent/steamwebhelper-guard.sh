@@ -8,6 +8,7 @@ shim_path="${STEAM_WEBHELPER_GUARD_SHIM_SOURCE:-/usr/local/lib/steamwebhelper-gu
 probe_url="${STEAM_WEBHELPER_GUARD_PROBE_URL:-http://127.0.0.1:8080/v1/probe/status}"
 poll_seconds="${STEAM_WEBHELPER_GUARD_POLL_SECONDS:-15}"
 grace_seconds="${STEAM_WEBHELPER_GUARD_GRACE_SECONDS:-60}"
+applied_marker="${STEAM_CEF_GUARD_APPLIED_MARKER:-${user_home}/.steam/steam/config/l4d2-cef-guard-applied}"
 
 log() {
     printf '%s steamwebhelper-guard: %s\n' "$(date -Iseconds)" "$*"
@@ -32,6 +33,15 @@ replace_with_guard_shim() {
     cp --preserve=mode "${shim_path}" "${temporary_file}"
     chmod 0700 "${temporary_file}"
     mv -f "${temporary_file}" "${wrapper_path}"
+}
+
+mark_guard_applied() {
+    marker_directory="$(dirname "${applied_marker}")"
+    install -d -m 0700 "${marker_directory}"
+    temporary_file="$(mktemp "${applied_marker}.tmp.XXXXXX")"
+    printf '%s\n' "$(date +%s%3N)" > "${temporary_file}"
+    chmod 0600 "${temporary_file}"
+    mv -f "${temporary_file}" "${applied_marker}"
 }
 
 agent_is_ready() {
@@ -72,6 +82,9 @@ ensure_guard_shim() {
         return 1
     fi
     if is_guard_shim; then
+        if [ ! -f "${applied_marker}" ]; then
+            guard_replaced=true
+        fi
         return 0
     fi
     if ! is_valve_wrapper "${wrapper_path}"; then
@@ -94,6 +107,7 @@ while true; do
 
     if [ "${guard_replaced}" = true ]; then
         pkill -TERM -x steamwebhelper || true
+        mark_guard_applied
         log "terminated existing Chromium helper processes"
     fi
 

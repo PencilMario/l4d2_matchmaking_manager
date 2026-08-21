@@ -161,6 +161,12 @@ public sealed class DockerAgentContainerRuntimeTests
             return Task.FromResult("container-id");
         }
 
+        public Task<long> GetMemoryLimitAsync(string containerId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task UpdateMemoryLimitAsync(string containerId, long memoryLimitBytes, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<int>>(new HashSet<int>());
 

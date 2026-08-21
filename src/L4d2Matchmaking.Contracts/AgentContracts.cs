@@ -50,4 +50,5 @@ public sealed record AgentHealthSnapshot(
     bool Ready,
     string? Failure,
     DateTimeOffset ObservedAt,
-    string? CurrentDownloadRegion = null);
+    string? CurrentDownloadRegion = null,
+    DateTimeOffset? CefGuardAppliedAt = null);

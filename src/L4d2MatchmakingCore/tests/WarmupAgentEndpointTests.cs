@@ -362,6 +362,12 @@ public sealed class WarmupAgentEndpointTests
             return $"container-{CreateCalls}";
         }
 
+        public Task<long> GetMemoryLimitAsync(string containerId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task UpdateMemoryLimitAsync(string containerId, long memoryLimitBytes, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task StartAsync(string containerId, CancellationToken cancellationToken)
         {
             StartCalls++;

@@ -24,6 +24,49 @@ public interface ISteamDownloadRegionReader
     string? Read();
 }
 
+public interface ICefGuardStatusReader
+{
+    DateTimeOffset? ReadAppliedAt();
+}
+
+public sealed class FileCefGuardStatusReader(string path) : ICefGuardStatusReader
+{
+    public static FileCefGuardStatusReader FromEnvironment()
+    {
+        var homeDirectory = Environment.GetEnvironmentVariable("USER_HOME")
+            ?? Environment.GetEnvironmentVariable("HOME")
+            ?? "/home/default";
+        return new FileCefGuardStatusReader(Environment.GetEnvironmentVariable("STEAM_CEF_GUARD_APPLIED_MARKER")
+            ?? Path.Combine(homeDirectory, ".steam", "steam", "config", "l4d2-cef-guard-applied"));
+    }
+
+    public DateTimeOffset? ReadAppliedAt()
+    {
+        try
+        {
+            var value = File.ReadAllText(path).Trim();
+            if (!long.TryParse(value, out var unixTimestamp))
+                return null;
+
+            return unixTimestamp >= 100_000_000_000L || unixTimestamp <= -100_000_000_000L
+                ? DateTimeOffset.FromUnixTimeMilliseconds(unixTimestamp)
+                : DateTimeOffset.FromUnixTimeSeconds(unixTimestamp);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+}
+
 public sealed class SteamDownloadRegionReader : ISteamDownloadRegionReader
 {
     private static readonly System.Text.RegularExpressions.Regex RegionEntry = new(
@@ -143,4 +186,5 @@ public sealed record ProbeStatusResponse(
     string? Failure,
     DateTimeOffset ObservedAt,
     ProbeChecks Checks,
-    string? CurrentDownloadRegion = null);
+    string? CurrentDownloadRegion = null,
+    DateTimeOffset? CefGuardAppliedAt = null);
