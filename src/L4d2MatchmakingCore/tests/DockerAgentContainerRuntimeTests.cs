@@ -25,6 +25,7 @@ public sealed class DockerAgentContainerRuntimeTests
 
         Assert.IsNotNull(runtime.Definition);
         Assert.AreEqual("l4d2-steam-lobby-agent:local", runtime.Definition.Image);
+        Assert.AreEqual(1536L * 1024 * 1024, runtime.Definition.MemoryLimitBytes);
         Assert.AreEqual("127.0.0.1", runtime.Definition.NoVncBinding.HostIp);
         CollectionAssert.DoesNotContain(runtime.Definition.PublishedContainerPorts.ToList(), 8080);
         CollectionAssert.Contains(runtime.Definition.VolumeNames.ToList(), "steam-data-" + agent.Id.ToString("N"));
@@ -87,6 +88,7 @@ public sealed class DockerAgentContainerRuntimeTests
             },
             runtime.Definition.Environment.ToArray());
         Assert.AreEqual(2L * 1024 * 1024 * 1024, runtime.Definition.SharedMemoryBytes);
+        Assert.AreEqual(3L * 1024 * 1024 * 1024, runtime.Definition.MemoryLimitBytes);
         Assert.AreEqual("unless-stopped", runtime.Definition.RestartPolicy);
         CollectionAssert.AreEquivalent(
             new[] { "apparmor=unconfined", "seccomp=unconfined" },

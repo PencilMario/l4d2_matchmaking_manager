@@ -21,6 +21,10 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
     millennium_config_file="${millennium_config_directory}/config.json"
     millennium_region_target_file="${millennium_config_directory}/steam-region-bridge-region"
     millennium_plugin_source="${STEAM_REGION_BRIDGE_SOURCE:-/opt/steam-region-bridge}"
+    millennium_ui_memory_saver_plugin_directory="${USER_HOME:-/home/default}/.local/share/millennium/plugins/steam-ui-memory-saver"
+    millennium_ui_memory_saver_plugin_source="${STEAM_UI_MEMORY_SAVER_SOURCE:-/opt/steam-ui-memory-saver}"
+    steam_webhelper_wrapper="${steam_runtime_root}/ubuntu12_64/steamwebhelper_sniper_wrap.sh"
+    steam_webhelper_wrapper_backup="${steam_runtime_root}/ubuntu12_64/steamwebhelper_sniper_wrap.sh.valve-original"
     millennium_archive_url="https://github.com/SteamClientHomebrew/Millennium/releases/download/v3.4.1/millennium-v3.4.1-linux-x86_64.tar.gz"
     millennium_archive_sha256="5f2f6f73915523a7b3f7ecc500dd3e6ed0e5c88a1b1db6584c40f173aa9d13d4"
 
@@ -98,8 +102,48 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         mv "${temporary_file}" "${millennium_config_file}"
     }
 
+    install_steam_ui_memory_saver() {
+        [ -d "${millennium_ui_memory_saver_plugin_source}" ] || {
+            echo "Missing Steam UI Memory Saver source: ${millennium_ui_memory_saver_plugin_source}" >&2
+            return 1
+        }
+        [ -f "${millennium_ui_memory_saver_plugin_source}/plugin.json" ] || {
+            echo 'Steam UI Memory Saver source is missing plugin.json.' >&2
+            return 1
+        }
+        [ -f "${millennium_ui_memory_saver_plugin_source}/backend/main.lua" ] || {
+            echo 'Steam UI Memory Saver source is missing backend/main.lua.' >&2
+            return 1
+        }
+        [ -f "${millennium_ui_memory_saver_plugin_source}/.millennium/Dist/index.js" ] || {
+            echo 'Steam UI Memory Saver source is missing the compiled frontend bundle.' >&2
+            return 1
+        }
+
+        install -d -o "${PUID:-1000}" -g "${PGID:-1000}" -m 0700 "$(dirname "${millennium_ui_memory_saver_plugin_directory}")"
+        install -d -o "${PUID:-1000}" -g "${PGID:-1000}" -m 0700 "${millennium_config_directory}"
+        cp -a "${millennium_ui_memory_saver_plugin_source}/." "${millennium_ui_memory_saver_plugin_directory}/"
+        chown -R "${PUID:-1000}:${PGID:-1000}" "${millennium_ui_memory_saver_plugin_directory}"
+
+        if [ ! -f "${millennium_config_file}" ]; then
+            printf '%s\n' '{"plugins":{"enabledPlugins":[]}}' > "${millennium_config_file}"
+        fi
+        command -v jq >/dev/null 2>&1 || {
+            echo 'Millennium plugin activation requires jq.' >&2
+            return 1
+        }
+        temporary_file="$(mktemp "${millennium_config_file}.tmp.XXXXXX")"
+        jq --arg plugin 'steam-ui-memory-saver' \
+            '.plugins.enabledPlugins = (((.plugins.enabledPlugins // []) + [$plugin]) | unique)' \
+            "${millennium_config_file}" > "${temporary_file}"
+        chown "${PUID:-1000}:${PGID:-1000}" "${temporary_file}"
+        chmod 0600 "${temporary_file}"
+        mv "${temporary_file}" "${millennium_config_file}"
+    }
+
     install_millennium
     install_steam_region_bridge
+    install_steam_ui_memory_saver
 
     temporary_file="$(mktemp "${millennium_region_target_file}.tmp.XXXXXX")"
     printf '%s\n' "${steam_download_region_id}" > "${temporary_file}"
@@ -142,8 +186,47 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         sed -i "s|^autostart=.*$|autostart=$1|" /etc/supervisor.d/vnc.ini
     }
 
+    set_desktop_autostart() {
+        case "$1" in
+            true|false) ;;
+            *)
+                echo 'Desktop autostart must be true or false.' >&2
+                return 1
+                ;;
+        esac
+
+        sed -i "s|^autostart=.*$|autostart=$1|" /etc/supervisor.d/desktop.ini
+    }
+
+    set_steam_webhelper_guard_autostart() {
+        case "$1" in
+            true|false) ;;
+            *)
+                echo 'Steam webhelper guard autostart must be true or false.' >&2
+                return 1
+                ;;
+        esac
+
+        sed -i "s|^autostart=.*$|autostart=$1|" /etc/supervisor.d/steamwebhelper-guard.ini
+    }
+
+    restore_steam_webhelper_wrapper() {
+        [ -f "${steam_webhelper_wrapper_backup}" ] || return 0
+        if [ -f "${steam_webhelper_wrapper}" ] && cmp -s "${steam_webhelper_wrapper_backup}" "${steam_webhelper_wrapper}"; then
+            return 0
+        fi
+
+        install -d -o "${PUID:-1000}" -g "${PGID:-1000}" -m 0700 "$(dirname "${steam_webhelper_wrapper}")"
+        temporary_file="$(mktemp "${steam_webhelper_wrapper}.restore.XXXXXX")"
+        cp --preserve=mode,timestamps "${steam_webhelper_wrapper_backup}" "${temporary_file}"
+        chown "${PUID:-1000}:${PGID:-1000}" "${temporary_file}"
+        chmod 0700 "${temporary_file}"
+        mv -f "${temporary_file}" "${steam_webhelper_wrapper}"
+    }
+
     configure_steam_ui_mode() {
         login_ui_mode="${STEAM_LOGIN_UI_MODE:-auto}"
+        steam_no_vnc_arguments='-silent -no-browser -dev -console -nofriendsui -no-dwrite -nointro -nobigpicture -nofasthtml -nocrashmonitor -noshaders -no-shared-textures -disablehighdpi -cef-single-process -cef-in-process-gpu -single_core -cef-disable-d3d11 -cef-disable-sandbox -disable-winh264 -cef-force-32bit -no-cef-sandbox -vrdisable -cef-disable-breakpad'
         case "${login_ui_mode}" in
             auto|always|never) ;;
             *)
@@ -155,26 +238,35 @@ if [ "${ENABLE_STEAM:-}" = "true" ]; then
         loginusers_file="${steam_config_directory}/loginusers.vdf"
         login_ready_marker="${steam_config_directory}/l4d2-agent-ready"
         enable_vnc=true
+        enable_steam_webhelper_guard=false
         case "${login_ui_mode}" in
             always)
                 steam_arguments=''
                 ;;
             never)
-                steam_arguments='-silent -no-browser'
+                steam_arguments="${steam_no_vnc_arguments}"
                 enable_vnc=false
+                enable_steam_webhelper_guard=true
                 ;;
             auto)
                 if { [ -f "${loginusers_file}" ] && grep -Eq '"MostRecent"[[:space:]]*"1"' "${loginusers_file}"; } || [ -f "${login_ready_marker}" ]; then
-                    steam_arguments='-silent -no-browser'
+                    steam_arguments="${steam_no_vnc_arguments}"
                     enable_vnc=false
+                    enable_steam_webhelper_guard=true
                 else
                     steam_arguments='-vgui -no-browser'
+                    enable_steam_webhelper_guard=false
                 fi
                 ;;
         esac
 
         sed -i "s|^command=.*$|command=/usr/games/steam ${steam_arguments}|" /etc/supervisor.d/steam.ini
         set_vnc_autostart "${enable_vnc}"
+        set_desktop_autostart "${enable_vnc}"
+        set_steam_webhelper_guard_autostart "${enable_steam_webhelper_guard}"
+        if [ "${enable_steam_webhelper_guard}" = false ]; then
+            restore_steam_webhelper_wrapper
+        fi
     }
 
     if [ -n "${STEAM_SHARED_LIBRARY_PATH:-}" ]; then

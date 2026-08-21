@@ -41,6 +41,7 @@ public sealed class DockerAgentContainerRuntime : IAgentContainerRuntime, IDispo
                     .ToList(),
                 NetworkMode = definition.Network,
                 ShmSize = definition.SharedMemoryBytes,
+                Memory = definition.MemoryLimitBytes,
                 SecurityOpt = definition.SecurityOptions.ToList(),
                 RestartPolicy = new RestartPolicy
                 {

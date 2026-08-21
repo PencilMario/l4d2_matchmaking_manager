@@ -1,0 +1,7 @@
+{
+  "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
+  "name": "steam-ui-memory-saver",
+  "common_name": "Steam UI Memory Saver",
+  "description": "Unload the desktop Library routes after a no-VNC Agent becomes ready.",
+  "backendType": "lua"
+}

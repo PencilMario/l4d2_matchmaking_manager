@@ -69,6 +69,7 @@ public sealed class WarmupAgentContainerService(
             options.Network,
             environment,
             2L * 1024 * 1024 * 1024,
+            agent.KeepVncAlive ? 3L * 1024 * 1024 * 1024 : 1536L * 1024 * 1024,
             [new AgentDeviceMapping("/dev/fuse", "/dev/fuse", "rwm")],
             ["apparmor=unconfined", "seccomp=unconfined"],
             "unless-stopped"), cancellationToken);

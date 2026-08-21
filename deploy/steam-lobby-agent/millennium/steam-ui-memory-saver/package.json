@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "build": "millennium-ttc --build prod"
+  },
+  "type": "module",
+  "name": "steam-ui-memory-saver",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@steambrew/api": "^5.5.3",
+    "@steambrew/client": "^5.5.3",
+    "@steambrew/ttc": "^2.7.3",
+    "@steambrew/webkit": "^5.5.3",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9"
+  }
+}

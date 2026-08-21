@@ -68,6 +68,7 @@ public sealed record ManagedAgentContainerDefinition(
     string Network,
     IReadOnlyList<string> Environment,
     long SharedMemoryBytes,
+    long MemoryLimitBytes,
     IReadOnlyList<AgentDeviceMapping> Devices,
     IReadOnlyList<string> SecurityOptions,
     string RestartPolicy);

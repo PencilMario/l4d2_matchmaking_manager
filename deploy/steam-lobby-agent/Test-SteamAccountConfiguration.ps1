@@ -47,6 +47,16 @@ if ($initializer -notmatch '-silent -no-browser') {
     throw 'The initializer must suppress the Steam UI after account login is complete.'
 }
 
+$noVncArguments = '-silent -no-browser -dev -console -nofriendsui -no-dwrite -nointro -nobigpicture -nofasthtml -nocrashmonitor -noshaders -no-shared-textures -disablehighdpi -cef-single-process -cef-in-process-gpu -single_core -cef-disable-d3d11 -cef-disable-sandbox -disable-winh264 -cef-force-32bit -no-cef-sandbox -vrdisable -cef-disable-breakpad'
+if ($initializer -notmatch [regex]::Escape("steam_no_vnc_arguments='$noVncArguments'")) {
+    throw 'The initializer must define the complete low-memory Steam argument set for no-VNC mode.'
+}
+
+$noVncArgumentReferences = [regex]::Matches($initializer, '\$\{steam_no_vnc_arguments\}')
+if ($noVncArgumentReferences.Count -lt 2) {
+    throw 'Both the never mode and logged-in auto mode must use the no-VNC Steam argument set.'
+}
+
 if (-not [regex]::IsMatch($initializer, "(?s)always\)\s*steam_arguments=''")) {
     throw 'The persistent VNC mode must start Steam with its default arguments.'
 }
@@ -55,6 +65,12 @@ if ($initializer -notmatch 'set_vnc_autostart' -or
     $initializer -notmatch '/etc/supervisor\.d/vnc\.ini' -or
     $initializer -notmatch 'set_vnc_autostart "\$\{enable_vnc\}"') {
     throw 'The initializer must explicitly set the final VNC autostart state after selecting the Steam UI mode.'
+}
+
+if ($initializer -notmatch 'set_desktop_autostart' -or
+    $initializer -notmatch '/etc/supervisor\.d/desktop\.ini' -or
+    $initializer -notmatch 'set_desktop_autostart "\$\{enable_vnc\}"') {
+    throw 'The initializer must disable the full XFCE desktop whenever no-VNC Steam mode is selected.'
 }
 
 if (-not [regex]::IsMatch(
