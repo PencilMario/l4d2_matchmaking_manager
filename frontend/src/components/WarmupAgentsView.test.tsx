@@ -93,4 +93,26 @@ describe('WarmupAgentsView VNC access', () => {
       vi.useRealTimers();
     }
   });
+
+  it('reports the settings modal lifecycle to the polling owner', () => {
+    const onModalOpenChange = vi.fn();
+    render(
+      <WarmupAgentsView
+        agents={[]}
+        attempts={[]}
+        onCreateAgent={vi.fn()}
+        onDeleteAgent={vi.fn()}
+        onModalOpenChange={onModalOpenChange}
+        onRebuildAgent={vi.fn()}
+        onRefresh={vi.fn()}
+        onStartAgent={vi.fn()}
+        onStopAgent={vi.fn()}
+        onUpdateAgent={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '创建节点' }));
+
+    expect(onModalOpenChange).toHaveBeenCalledWith(true);
+  });
 });

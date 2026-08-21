@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { SteamDownloadRegion, WarmupAgent, WarmupAttempt } from '../types';
 import { Badge } from './common/Badge';
 import { Tooltip } from './common/Tooltip';
@@ -31,6 +31,7 @@ interface WarmupAgentsViewProps {
   onRebuildAgent: (id: string) => Promise<{ success: boolean; error?: string }>;
   onOpenVncSession?: (id: string) => Promise<{ url: string; expiresAt: string }>;
   onDeleteAgent: (id: string) => Promise<boolean>;
+  onModalOpenChange?: (open: boolean) => void;
   isRefreshing?: boolean;
   steamRegions?: readonly SteamDownloadRegion[];
   isSteamRegionsLoading?: boolean;
@@ -48,6 +49,7 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
   onRebuildAgent,
   onOpenVncSession,
   onDeleteAgent,
+  onModalOpenChange,
   isRefreshing = false,
   steamRegions = [],
   isSteamRegionsLoading = false,
@@ -57,6 +59,11 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<WarmupAgent | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    onModalOpenChange?.(isModalOpen);
+    return () => onModalOpenChange?.(false);
+  }, [isModalOpen, onModalOpenChange]);
 
   // Row-specific rebuild state map: { [agentId]: boolean }
   const [rebuildingAgentIds, setRebuildingAgentIds] = useState<Record<string, boolean>>({});

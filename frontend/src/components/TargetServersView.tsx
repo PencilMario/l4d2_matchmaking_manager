@@ -29,6 +29,7 @@ interface TargetServersViewProps {
   onUpdateTarget: (id: string, data: any) => Promise<boolean>;
   onDeleteTarget: (id: string) => Promise<{ success: boolean; error?: string }>;
   onToggleTargetEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onModalOpenChange?: (open: boolean) => void;
   selectedServerId?: string | null;
   onClearSelectedServer?: () => void;
   isRefreshing?: boolean;
@@ -42,6 +43,7 @@ export const TargetServersView: React.FC<TargetServersViewProps> = ({
   onUpdateTarget,
   onDeleteTarget,
   onToggleTargetEnabled,
+  onModalOpenChange,
   selectedServerId,
   onClearSelectedServer,
   isRefreshing = false,
@@ -62,6 +64,11 @@ export const TargetServersView: React.FC<TargetServersViewProps> = ({
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<TargetServer | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [drawerErrorMessage, setDrawerErrorMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    onModalOpenChange?.(isCreateModalOpen);
+    return () => onModalOpenChange?.(false);
+  }, [isCreateModalOpen, onModalOpenChange]);
 
   // Synchronize incoming selectedServerId if opened from external link
   React.useEffect(() => {

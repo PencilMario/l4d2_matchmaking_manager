@@ -51,6 +51,9 @@ export default function App() {
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
+  // Pause background polling while a settings modal is being edited.
+  const [isPollingPaused, setIsPollingPaused] = useState(false);
+
   // Deep linking target selection
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
 
@@ -127,8 +130,9 @@ export default function App() {
 
   // Setup 5-second polling loop
   useEffect(() => {
-    if (!isAuthenticated || !token) {
+    if (!isAuthenticated || !token || isPollingPaused) {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+      pollingTimerRef.current = null;
       return;
     }
 
@@ -143,7 +147,7 @@ export default function App() {
     return () => {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
-  }, [isAuthenticated, token, refreshData]);
+  }, [isAuthenticated, token, isPollingPaused, refreshData]);
 
   // Login handler
   const handleLogin = async (inputToken: string): Promise<boolean> => {
@@ -372,6 +376,7 @@ export default function App() {
                 onUpdateTarget={handleUpdateTarget}
                 onDeleteTarget={handleDeleteTarget}
                 onToggleTargetEnabled={handleToggleTargetEnabled}
+                onModalOpenChange={setIsPollingPaused}
                 selectedServerId={selectedTargetId}
                 onClearSelectedServer={() => setSelectedTargetId(null)}
                 isRefreshing={state.isRefreshing}
@@ -390,6 +395,7 @@ export default function App() {
                 onRebuildAgent={handleRebuildAgent}
                 onOpenVncSession={handleOpenAgentVncSession}
                 onDeleteAgent={handleDeleteAgent}
+                onModalOpenChange={setIsPollingPaused}
                 isRefreshing={state.isRefreshing}
                 steamRegions={steamRegions}
                 isSteamRegionsLoading={steamRegionsLoading}
