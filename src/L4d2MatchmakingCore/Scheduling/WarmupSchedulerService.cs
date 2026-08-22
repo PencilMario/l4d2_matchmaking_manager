@@ -295,6 +295,7 @@ public sealed class WarmupSchedulerService(
                 continue;
             }
             var agent = idleAgents[nextAgentIndex++];
+            var liveProbesByTargetId = new Dictionary<Guid, LiveA2sProbe>();
             var planned = await PlanStartAsync(
                 agent,
                 target,
@@ -304,6 +305,7 @@ public sealed class WarmupSchedulerService(
                 leaseTargetServerIds,
                 plannedCursorTargets,
                 unavailableTargetIds,
+                liveProbesByTargetId,
                 cancellationToken);
             if (planned is not null)
             {
@@ -324,6 +326,7 @@ public sealed class WarmupSchedulerService(
         while (nextAgentIndex < idleAgents.Count)
         {
             var agent = idleAgents[nextAgentIndex++];
+            var liveProbesByTargetId = new Dictionary<Guid, LiveA2sProbe>();
             var planned = await PlanContinuationStartAsync(
                 agent,
                 targetServers,
@@ -334,6 +337,18 @@ public sealed class WarmupSchedulerService(
                 leaseTargetServerIds,
                 plannedCursorTargets,
                 unavailableTargetIds,
+                liveProbesByTargetId,
+                cancellationToken);
+            planned ??= await PlanOccupiedTargetStartAsync(
+                agent,
+                targetServers,
+                schedulingEngine,
+                activeWarmups,
+                leaseTargetServerIds,
+                plannedCursorTargets,
+                skippedContinuationTargets,
+                unavailableTargetIds,
+                liveProbesByTargetId,
                 cancellationToken);
             planned ??= await PlanNextStartAsync(
                 agent,
@@ -344,6 +359,7 @@ public sealed class WarmupSchedulerService(
                 plannedCursorTargets,
                 skippedContinuationTargets,
                 unavailableTargetIds,
+                liveProbesByTargetId,
                 cancellationToken);
             if (planned is not null)
             {
@@ -407,6 +423,7 @@ public sealed class WarmupSchedulerService(
         HashSet<Guid> leaseTargetServerIds,
         Dictionary<int, Guid> plannedCursorTargets,
         HashSet<Guid> unavailableTargetIds,
+        Dictionary<Guid, LiveA2sProbe> liveProbesByTargetId,
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -431,6 +448,7 @@ public sealed class WarmupSchedulerService(
                 leaseTargetServerIds,
                 plannedCursorTargets,
                 unavailableTargetIds,
+                liveProbesByTargetId,
                 cancellationToken);
             if (planned is not null)
                 return planned;
@@ -452,6 +470,62 @@ public sealed class WarmupSchedulerService(
         continuationStartedAt[planned.Server.Id] = planned.Attempt.StartedAt;
     }
 
+    private async Task<PlannedStart?> PlanOccupiedTargetStartAsync(
+        WarmupAgent agent,
+        IReadOnlyList<TargetServer> targetServers,
+        WarmupDecisionEngine schedulingEngine,
+        Dictionary<Guid, int> activeWarmups,
+        HashSet<Guid> leaseTargetServerIds,
+        Dictionary<int, Guid> plannedCursorTargets,
+        IReadOnlySet<Guid> skippedContinuationTargets,
+        HashSet<Guid> unavailableTargetIds,
+        Dictionary<Guid, LiveA2sProbe> liveProbesByTargetId,
+        CancellationToken cancellationToken)
+    {
+        var candidates = targetServers
+            .Where(server => !server.RequiresReservation &&
+                !skippedContinuationTargets.Contains(server.Id) &&
+                activeWarmups.GetValueOrDefault(server.Id) < schedulingEngine.GetEffectiveConcurrency(server))
+            .ToList();
+        var occupiedCandidates = new List<(TargetServer Server, int PlayerCount)>();
+        foreach (var candidate in candidates)
+        {
+            var probe = liveProbesByTargetId.GetValueOrDefault(candidate.Id);
+            if (probe is null)
+            {
+                probe = await ProbeLiveA2sAsync(candidate, unavailableTargetIds, cancellationToken);
+                if (probe is not null)
+                    liveProbesByTargetId[candidate.Id] = probe;
+            }
+            if (probe is null || probe.Info.PlayerCount <= 0 || probe.Info.PlayerCount >= candidate.PlayerTarget)
+                continue;
+            occupiedCandidates.Add((candidate, probe.Info.PlayerCount));
+        }
+
+        foreach (var candidate in occupiedCandidates
+                     .OrderByDescending(candidate => CalculateOccupiedTargetScore(candidate.Server, candidate.PlayerCount))
+                     .ThenBy(candidate => candidate.Server.Id))
+        {
+            var planned = await PlanStartAsync(
+                agent,
+                candidate.Server,
+                null,
+                schedulingEngine,
+                activeWarmups,
+                leaseTargetServerIds,
+                plannedCursorTargets,
+                unavailableTargetIds,
+                liveProbesByTargetId,
+                cancellationToken);
+            if (planned is not null)
+                return planned;
+        }
+        return null;
+    }
+
+    private static double CalculateOccupiedTargetScore(TargetServer server, int playerCount) =>
+        server.Priority + playerCount * 0.2d * server.Priority;
+
     private async Task<PlannedStart?> PlanNextStartAsync(
         WarmupAgent agent,
         IReadOnlyList<TargetServer> targetServers,
@@ -461,6 +535,7 @@ public sealed class WarmupSchedulerService(
         Dictionary<int, Guid> plannedCursorTargets,
         IReadOnlySet<Guid> skippedContinuationTargets,
         HashSet<Guid> unavailableTargetIds,
+        Dictionary<Guid, LiveA2sProbe> liveProbesByTargetId,
         CancellationToken cancellationToken)
     {
         var candidates = targetServers
@@ -490,6 +565,7 @@ public sealed class WarmupSchedulerService(
                 leaseTargetServerIds,
                 plannedCursorTargets,
                 unavailableTargetIds,
+                liveProbesByTargetId,
                 cancellationToken);
             if (planned is not null)
                 return planned;
@@ -505,6 +581,7 @@ public sealed class WarmupSchedulerService(
         HashSet<Guid> leaseTargetServerIds,
         Dictionary<int, Guid> plannedCursorTargets,
         HashSet<Guid> unavailableTargetIds,
+        Dictionary<Guid, LiveA2sProbe> liveProbesByTargetId,
         CancellationToken cancellationToken)
     {
         if (activeWarmups.GetValueOrDefault(server.Id) >= schedulingEngine.GetEffectiveConcurrency(server) ||
@@ -514,33 +591,15 @@ public sealed class WarmupSchedulerService(
         }
         if (unavailableTargetIds.Contains(server.Id))
             return null;
-        if (observationStore?.Get(server.Id)?.Status == "unavailable")
+        var probe = liveProbesByTargetId.GetValueOrDefault(server.Id);
+        if (probe is null)
         {
-            unavailableTargetIds.Add(server.Id);
-            return null;
-        }
-        IPEndPoint? endpoint;
-        A2sServerInfo info;
-        try
-        {
-            endpoint = await A2sEndpointResolver.ResolveIpv4Async(server.Host, server.Port, cancellationToken);
-            if (endpoint is null)
-            {
-                unavailableTargetIds.Add(server.Id);
+            probe = await ProbeLiveA2sAsync(server, unavailableTargetIds, cancellationToken);
+            if (probe is null)
                 return null;
-            }
-            info = await a2s!.GetInfoAsync(endpoint, cancellationToken);
+            liveProbesByTargetId[server.Id] = probe;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            unavailableTargetIds.Add(server.Id);
-            return null;
-        }
-        if (info.PlayerCount >= server.PlayerTarget || (server.RequiresReservation && info.PlayerCount > 0))
+        if (probe.Info.PlayerCount >= server.PlayerTarget || (server.RequiresReservation && probe.Info.PlayerCount > 0))
             return null;
 
         var now = DateTimeOffset.UtcNow;
@@ -571,7 +630,41 @@ public sealed class WarmupSchedulerService(
         }
         activeWarmups[server.Id] = activeWarmups.GetValueOrDefault(server.Id) + 1;
         plannedCursorTargets[server.Priority] = server.Id;
-        return new PlannedStart(agent, server, endpoint.Address, attempt);
+        return new PlannedStart(agent, server, probe.Endpoint.Address, attempt);
+    }
+
+    private async Task<LiveA2sProbe?> ProbeLiveA2sAsync(
+        TargetServer server,
+        HashSet<Guid> unavailableTargetIds,
+        CancellationToken cancellationToken)
+    {
+        if (unavailableTargetIds.Contains(server.Id))
+            return null;
+        if (observationStore?.Get(server.Id)?.Status == "unavailable")
+        {
+            unavailableTargetIds.Add(server.Id);
+            return null;
+        }
+        try
+        {
+            var endpoint = await A2sEndpointResolver.ResolveIpv4Async(server.Host, server.Port, cancellationToken);
+            if (endpoint is null)
+            {
+                unavailableTargetIds.Add(server.Id);
+                return null;
+            }
+            var info = await a2s!.GetInfoAsync(endpoint, cancellationToken);
+            return new LiveA2sProbe(endpoint, info);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            unavailableTargetIds.Add(server.Id);
+            return null;
+        }
     }
 
     private async Task<StartResult> StartPlannedAsync(PlannedStart plan, CancellationToken cancellationToken)
@@ -606,6 +699,7 @@ public sealed class WarmupSchedulerService(
     private sealed record RecreateRequest(Guid TargetServerId, DateTimeOffset StartedAt, WarmupAttempt? PendingAttempt = null);
     private sealed record PlannedStart(WarmupAgent Agent, TargetServer Server, IPAddress Address, WarmupAttempt Attempt);
     private sealed record StartResult(PlannedStart Plan, AgentOperationStartResult? Start, Exception? Exception);
+    private sealed record LiveA2sProbe(IPEndPoint Endpoint, A2sServerInfo Info);
 
     private async Task RestartSteamAfterAttemptAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
     {

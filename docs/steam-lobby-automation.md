@@ -12,8 +12,11 @@ HTTP 合约见 [steam-lobby-agent-api.md](steam-lobby-agent-api.md)。
   填充，并列时按 `priority` 降序和稳定 ID 选择；这条集中规则不受新目标 priority
   影响。
 - 已有目标达到并发上限、A2S 人数目标、DNS/A2S 检查失败或本轮窗口到期时，继续检查
-  下一个可接收的已有普通目标。所有已有普通目标都不可接收时，才按 `priority` 降序
-  选择新目标，同优先级的新目标依据持久化游标轮询。
+  下一个可接收的已有普通目标。所有已有普通目标都不可接收时，先从实时 A2S 玩家数
+  大于 0 且低于 `playerTarget` 的非预留服务器中选择；多个有人服务器按
+  `priority + playerCount * 0.2 * priority` 降序，分数相同时按稳定 ID 选择。
+- 没有可接收的有人服务器时，才按 `priority` 降序选择新目标，同优先级的新目标依据
+  持久化游标轮询。
 - 非预留服务器的并发上限为其 `maxConcurrentWarmups`，缺省为 36；预留服务器固定为 1。
 - Core 将 hostname 解析为 IPv4 后执行 A2S；没有 IPv4、A2S 失败或 A2S 人数已达到
   `playerTarget` 的候选会跳过，并继续考察下一个候选。
