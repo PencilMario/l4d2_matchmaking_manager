@@ -224,6 +224,51 @@ Agent 身份，也不会创建、加入或离开目标 lobby。
 
 旧的组合 `GET/PUT /v1/settings` 继续兼容，但组合 PUT 不会改写该开关，也不执行暖服排空。
 
+## 全局暖服和调度暂停时间段
+
+`GET /v1/settings/warmup-pause-windows` 和 `PUT /v1/settings/warmup-pause-windows` 使用
+Core Bearer 鉴权。时间段保存在 `CoreSettings`，按分钟使用固定的 `Asia/Shanghai`（UTC+8）
+时钟判断；控制服务所在机器的系统时区不会影响结果。
+
+读取响应和写入请求的形状如下：
+
+```json
+{
+  "windows": [
+    { "start": "00:00", "end": "08:00" },
+    { "start": "23:00", "end": "00:00" }
+  ],
+  "active": true,
+  "updatedAt": "2026-08-23T10:00:00+00:00"
+}
+```
+
+写入时只提交 `windows`：
+
+```json
+{
+  "windows": [
+    { "start": "23:00", "end": "00:00" }
+  ]
+}
+```
+
+`start` 和 `end` 必须是严格的 `HH:mm`，精度为分钟；区间使用 `[start, end)`，因此开始时刻
+包含、结束时刻不包含。`start > end` 表示跨午夜区间，例如 `23:00–00:00`；多个区间可以
+重叠，命中任意一个即暂停。空数组表示不配置暂停；相同起止时间或非法格式返回
+`400 "invalid_warmup_pause_window"`。
+
+当手动暖服开关启用且保存后的配置当前命中时间段时，Core 先持久化配置，再在共享调度锁内
+立即排空 `active`、`uncertain` 和 `restart_pending` 任务。排空失败返回 `409
+"global_warmup_drain_failed"`，但新配置仍然保留，后续每五秒 tick 会重试排空；未确认任务
+不会被误标记为完成。暂停期间恢复流程和调度 tick 不执行 A2S 查询、目标选择或新暖服启动。
+时间段结束后自动恢复调度，但不会恢复已经清理的旧任务。
+
+排空成功的 Agent 继续使用既有 Steam 恢复流程；本功能不会停止、删除或重建 Warm-up Agent
+容器。组合 `GET /v1/settings` 同时增加 `warmupPauseWindows` 和
+`warmupPauseWindowsActive` 两个非敏感字段；组合 `PUT /v1/settings` 保持兼容，但不会覆盖
+时间段配置。
+
 ## 调度可见性
 
 调度自动运行，当前管理 API 不提供手工创建 lobby、注入 metadata 或覆盖实时 A2S 观察的接口。

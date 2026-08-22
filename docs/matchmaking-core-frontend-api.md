@@ -52,6 +52,8 @@ GET    /v1/settings/steam-web-api-key
 PUT    /v1/settings/steam-web-api-key
 GET    /v1/settings/warmup-scheduling
 PUT    /v1/settings/warmup-scheduling
+GET    /v1/settings/warmup-pause-windows
+PUT    /v1/settings/warmup-pause-windows
 
 GET    /v1/warmups
 GET    /v1/lobbies/{lobbyId}
@@ -601,12 +603,17 @@ Content-Type: application/json; charset=utf-8
   "steamProxyUrl": "http://127.0.0.1:7890/",
   "steamWebApiKeyConfigured": true,
   "warmupSchedulingEnabled": true,
+  "warmupPauseWindows": [
+    { "start": "00:00", "end": "08:00" },
+    { "start": "23:00", "end": "00:00" }
+  ],
+  "warmupPauseWindowsActive": false,
   "updatedAt": "2026-08-20T10:00:00+00:00"
 }
 ```
 
 旧的 `PUT /v1/settings` 仍可写入 VNC 代理和 Steam Web API Key，但不会修改
-`warmupSchedulingEnabled`。新前端的暖服开关必须使用下面的专用资源。
+`warmupSchedulingEnabled` 或时间段配置。新前端的暖服开关和时间段必须使用下面的专用资源。
 
 ### VNC 代理
 
@@ -699,6 +706,42 @@ Content-Type: application/json; charset=utf-8
 
 `global_warmup_drain_pending` 也使用 `409`，表示仍有未确认的任务。两种冲突都会保留
 未确认任务供后续重试，并保持全局开关为禁用；前端应刷新设置、Agent 和暖服快照后再重试。
+
+### 暖服暂停时间段
+
+`GET /v1/settings/warmup-pause-windows` 返回当前时间段、当前是否命中以及更新时间：
+
+```json
+{
+  "windows": [
+    { "start": "00:00", "end": "08:00" },
+    { "start": "23:00", "end": "00:00" }
+  ],
+  "active": true,
+  "updatedAt": "2026-08-23T10:00:00+00:00"
+}
+```
+
+`PUT /v1/settings/warmup-pause-windows` 只接受以下 body，不会覆盖代理、密钥或手动开关：
+
+```json
+{
+  "windows": [
+    { "start": "23:00", "end": "00:00" }
+  ]
+}
+```
+
+时间段按 `Asia/Shanghai`（固定 UTC+8）和分钟判断，使用左闭右开 `[start, end)` 边界。
+支持多个区间、重叠区间和跨午夜区间；`23:00–00:00` 表示从 23:00 开始至午夜结束。
+空数组表示没有暂停。非法 `HH:mm`、空时间段或相同起止时间返回
+`400 "invalid_warmup_pause_window"`。
+
+如果保存后的时间段当前生效，Core 会先保存，再在共享调度锁内尝试排空
+`active`、`uncertain`、`restart_pending` 暖服任务。排空无法确认时返回
+`409 "global_warmup_drain_failed"`，但新配置仍已保存，之后每五秒 tick 会重试；任务不会被
+错误标记为完成。暂停期间恢复和调度都会跳过 A2S、目标选择及新启动；时间段结束后自动恢复，
+且不恢复旧任务。排空成功后 Agent 容器仍保持运行，不会被停止、删除或重建。
 
 ## Lobby 查询
 
