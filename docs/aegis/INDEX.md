@@ -16,3 +16,4 @@
 - [Steam 下载区域与 Millennium Bridge 修复证据](work/2026-08-20-steam-download-region-fix/50-evidence.md)
 - [A2S 不可用服务器跳过暖服实施计划](work/2026-08-21-a2s-unavailable-warmup/30-plan.md)
 - [目标服务器大厅模式设计与实施计划](work/2026-08-21-target-server-game-mode/30-plan.md)
+- [时间段暂停暖服和调度设计](specs/2026-08-23-global-warmup-pause-windows-design.md)
