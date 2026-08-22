@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Server, Cpu, Search, Gamepad2, Settings } from 'lucide-react';
+import { BarChart3, LayoutDashboard, Server, Cpu, Search, Gamepad2, Settings } from 'lucide-react';
 import { TabKey } from '../types';
 
 interface SidebarProps {
@@ -51,6 +51,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <Search className="w-4 h-4 shrink-0" />,
     },
     {
+      key: 'statistics',
+      label: '进入统计',
+      icon: <BarChart3 className="w-4 h-4 shrink-0" />,
+    },
+    {
       key: 'settings',
       label: '全局设置',
       icon: <Settings className="w-4 h-4 shrink-0" />,
@@ -83,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={item.key}
               type="button"
               onClick={() => onTabChange(item.key)}
+              aria-current={isActive ? 'page' : undefined}
               className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-xs'

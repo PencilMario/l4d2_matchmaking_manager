@@ -1,4 +1,10 @@
-import type { LobbyLookupResult, SteamDownloadRegion, TargetServerGameMode } from '../types';
+import type {
+  LobbyLookupResult,
+  PlayerEntryStatisticsQuery,
+  PlayerEntryStatisticsResponse,
+  SteamDownloadRegion,
+  TargetServerGameMode,
+} from '../types';
 
 export const AUTH_TOKEN_KEY = 'l4d2_mgmt_access_token';
 let token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
@@ -21,6 +27,55 @@ type RawWarmupSchedulingSettings = { enabled: boolean; updatedAt: string };
 type AgentVncSession = { url: string; expiresAt: string };
 type RawWarmup = { targetServerId: string; targetEndpoint: string; warmupAgentId: string; warmupAgentName: string; operationId: string; lobbyId: string | null; mode: string; state: string; phase: string; startedAt: string; observedAt: string; deadline: string; remainingSeconds: number };
 
+export function serializePlayerEntryStatisticsQuery(query: PlayerEntryStatisticsQuery): string {
+  const params = new URLSearchParams();
+  const entries: Array<[keyof PlayerEntryStatisticsQuery, string | undefined]> = [
+    ['from', query.from],
+    ['to', query.to],
+    ['granularity', query.granularity],
+    ['lobbyType', query.lobbyType],
+    ['targetMode', query.targetMode],
+    ['agentId', query.agentId],
+    ['targetServerId', query.targetServerId],
+  ];
+  entries.forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return params.toString();
+}
+
+/** Interpret datetime-local values as Shanghai time, independent of browser locale. */
+export function shanghaiLocalDateTimeToUtcIso(value: string): string | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match;
+  const localMilliseconds = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+  );
+  if (Number.isNaN(localMilliseconds)) return null;
+  const normalized = new Date(localMilliseconds);
+  if (
+    normalized.getUTCFullYear() !== Number(year) ||
+    normalized.getUTCMonth() !== Number(month) - 1 ||
+    normalized.getUTCDate() !== Number(day) ||
+    normalized.getUTCHours() !== Number(hour) ||
+    normalized.getUTCMinutes() !== Number(minute)
+  ) return null;
+  return new Date(localMilliseconds - (8 * 60 * 60 * 1000)).toISOString();
+}
+
+export function formatShanghaiDateTimeInput(date: Date): string {
+  const shanghaiMilliseconds = date.getTime() + (8 * 60 * 60 * 1000);
+  const shanghai = new Date(shanghaiMilliseconds);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${shanghai.getUTCFullYear()}-${pad(shanghai.getUTCMonth() + 1)}-${pad(shanghai.getUTCDate())}T${pad(shanghai.getUTCHours())}:${pad(shanghai.getUTCMinutes())}`;
+}
+
 async function request<T = any>(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
@@ -41,6 +96,14 @@ export const ApiService = {
     const result = await request<RawSteamDownloadRegion[]>('/v1/steam/download-regions');
     if (!result.data) throw new Error(result.error || '读取 Steam 下载区域失败');
     return result.data;
+  },
+  async fetchPlayerEntryStatistics(query: PlayerEntryStatisticsQuery = {}) {
+    const serialized = serializePlayerEntryStatisticsQuery(query);
+    const result = await request<PlayerEntryStatisticsResponse>(
+      `/v1/statistics/player-entries${serialized ? `?${serialized}` : ''}`,
+      { method: 'GET' },
+    );
+    return result;
   },
   async fetchAllState(): Promise<any> {
     const [servers, agents, warmups, observations, health] = await Promise.all([
