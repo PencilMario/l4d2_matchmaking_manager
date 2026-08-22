@@ -9,6 +9,7 @@ using L4d2MatchmakingCore.Servers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Text.Json;
 
 namespace L4d2MatchmakingCore.Tests;
 
@@ -85,6 +86,101 @@ public sealed class WarmupSchedulerServiceTests
 
         Assert.AreEqual(0, agents.StartCalls);
         Assert.AreEqual(0, agents.StopCalls);
+    }
+
+    [TestMethod]
+    public async Task ActiveWarmupPauseWindowSkipsA2sSelectorAndStarts()
+    {
+        await using var db = CreateDb();
+        var agent = CreateRunningAgent();
+        var server = CreateEnabledServer();
+        db.AddRange(agent, server, CreatePauseSettings(CreateActiveWindow()));
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var selector = new FakeSelector(agent);
+        var a2s = new FakeA2s();
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            selector,
+            a2s);
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(0, selector.ListHealthyCalls);
+        Assert.AreEqual(0, a2s.Calls);
+        Assert.AreEqual(0, agents.StartCalls);
+        Assert.AreEqual(0, await db.WarmupAttempts.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task ActiveWarmupPauseWindowDrainsCurrentAttemptsBeforeReturning()
+    {
+        await using var db = CreateDb();
+        var agent = CreateRunningAgent();
+        var server = CreateEnabledServer();
+        var operation = Guid.NewGuid();
+        db.AddRange(
+            agent,
+            server,
+            CreatePauseSettings(CreateActiveWindow()),
+            new WarmupAttempt
+            {
+                Id = Guid.NewGuid(),
+                TargetServerId = server.Id,
+                WarmupAgentId = agent.Id,
+                OperationId = operation,
+                Mode = "standard",
+                State = "active",
+                StartedAt = DateTimeOffset.UtcNow,
+                ObservedAt = DateTimeOffset.UtcNow,
+            },
+            new ReservationLease
+            {
+                TargetServerId = server.Id,
+                OperationId = operation,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10),
+            });
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s(),
+            attemptDrain: new WarmupAttemptDrainService(db, agents));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { operation }, agents.StoppedOperations.ToArray());
+        CollectionAssert.AreEqual(new[] { agent.Id }, agents.RestartedAgents.ToArray());
+        Assert.AreEqual("completed", (await db.WarmupAttempts.SingleAsync()).State);
+        Assert.IsFalse(await db.ReservationLeases.AnyAsync());
+        Assert.AreEqual("restarting", agent.Status);
+    }
+
+    [TestMethod]
+    public async Task EndedWarmupPauseWindowAllowsNormalScheduling()
+    {
+        await using var db = CreateDb();
+        var agent = CreateRunningAgent();
+        var server = CreateEnabledServer();
+        db.AddRange(agent, server, CreatePauseSettings(CreateEndedWindow()));
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s());
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        Assert.AreEqual(1, agents.StartCalls);
+        Assert.AreEqual("active", (await db.WarmupAttempts.SingleAsync()).State);
     }
 
     [TestMethod]
@@ -1039,6 +1135,49 @@ public sealed class WarmupSchedulerServiceTests
         .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
         .Options);
 
+    private static WarmupAgent CreateRunningAgent() => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = "pause-window-agent",
+        Status = "running",
+        SteamDataVolumeName = "steam",
+        AccountConfigVolumeName = "config",
+        NoVncPort = 18083,
+    };
+
+    private static TargetServer CreateEnabledServer() => new()
+    {
+        Id = Guid.NewGuid(),
+        Host = "127.0.0.1",
+        Port = 27015,
+        Enabled = true,
+        RequiresReservation = false,
+        PlayerTarget = 6,
+        AttemptWindowSeconds = 720,
+    };
+
+    private static CoreSettings CreatePauseSettings((string Start, string End) window) => new()
+    {
+        WarmupSchedulingEnabled = true,
+        WarmupPauseWindowsJson = JsonSerializer.Serialize(new[]
+        {
+            new WarmupPauseWindow(window.Start, window.End),
+        }),
+        UpdatedAt = DateTimeOffset.UtcNow,
+    };
+
+    private static (string Start, string End) CreateActiveWindow()
+    {
+        var now = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8));
+        return (now.AddMinutes(-30).ToString("HH:mm"), now.AddMinutes(30).ToString("HH:mm"));
+    }
+
+    private static (string Start, string End) CreateEndedWindow()
+    {
+        var now = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8));
+        return (now.AddHours(-2).ToString("HH:mm"), now.AddHours(-1).ToString("HH:mm"));
+    }
+
     private static WarmupSchedulerService CreateSchedulerWithCredentials(
         MatchmakingDbContext db,
         IAgentControlClient agents,
@@ -1130,6 +1269,8 @@ public sealed class WarmupSchedulerServiceTests
         public int StartCalls => _startCalls;
         public int StopCalls => _stopCalls;
         public int RestartSteamCalls => _restartSteamCalls;
+        public List<Guid> StoppedOperations { get; } = [];
+        public List<Guid> RestartedAgents { get; } = [];
         public ConcurrentQueue<AgentOperationRequest> StartRequests { get; } = new();
         public AgentOperationRequest? LastStartRequest { get; private set; }
         public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
@@ -1150,6 +1291,7 @@ public sealed class WarmupSchedulerServiceTests
         public Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _stopCalls);
+            StoppedOperations.Add(operationId);
             return throwOnStop || throwOnStopIds?.Contains(operationId) == true
                 ? Task.FromException(new HttpRequestException("agent_unavailable"))
                 : Task.CompletedTask;
@@ -1157,6 +1299,7 @@ public sealed class WarmupSchedulerServiceTests
         public Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _restartSteamCalls);
+            RestartedAgents.Add(agent.Id);
             return throwOnRestart
                 ? Task.FromException(new HttpRequestException("agent_unavailable"))
                 : Task.CompletedTask;
@@ -1177,9 +1320,13 @@ public sealed class WarmupSchedulerServiceTests
 
     private sealed class FakeSelector(WarmupAgent agent) : IHealthyAgentSelector
     {
+        public int ListHealthyCalls { get; private set; }
         public Task<WarmupAgent?> SelectAsync(CancellationToken cancellationToken) => Task.FromResult<WarmupAgent?>(agent);
-        public Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<WarmupAgent>>([agent]);
+        public Task<IReadOnlyList<WarmupAgent>> ListHealthyAsync(CancellationToken cancellationToken)
+        {
+            ListHealthyCalls++;
+            return Task.FromResult<IReadOnlyList<WarmupAgent>>([agent]);
+        }
     }
 
     private sealed class BatchSelector(IReadOnlyList<WarmupAgent> agents) : IHealthyAgentSelector
@@ -1194,9 +1341,14 @@ public sealed class WarmupSchedulerServiceTests
         IReadOnlyDictionary<int, int>? playersByPort = null,
         IReadOnlySet<int>? failingPorts = null) : ISourceA2sClient
     {
-        public Task<A2sServerInfo> GetInfoAsync(System.Net.IPEndPoint endpoint, CancellationToken cancellationToken) =>
-            failingPorts?.Contains(endpoint.Port) == true
+        public int Calls { get; private set; }
+
+        public Task<A2sServerInfo> GetInfoAsync(System.Net.IPEndPoint endpoint, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return failingPorts?.Contains(endpoint.Port) == true
                 ? Task.FromException<A2sServerInfo>(new TimeoutException("a2s_timeout"))
                 : Task.FromResult(new A2sServerInfo("test-server", playersByPort?.GetValueOrDefault(endpoint.Port) ?? 0, 8, DateTimeOffset.UtcNow));
+        }
     }
 }

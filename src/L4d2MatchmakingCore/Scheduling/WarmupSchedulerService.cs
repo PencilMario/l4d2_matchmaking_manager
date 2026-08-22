@@ -23,6 +23,7 @@ public sealed class WarmupSchedulerService(
     WarmupSchedulingGate? schedulingGate = null,
     TargetServerObservationStore? observationStore = null)
 {
+    private static readonly JsonSerializerOptions PauseWindowsJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WarmupAttemptDrainService? drain = attemptDrain;
     private readonly WarmupSchedulingGate gate = schedulingGate ?? new();
 
@@ -31,7 +32,7 @@ public sealed class WarmupSchedulerService(
 
     private async Task RecoverCoreAsync(CancellationToken cancellationToken)
     {
-        if (!await IsSchedulingEnabledAsync(cancellationToken))
+        if (!await IsSchedulingAllowedAsync(cancellationToken))
         {
             if (drain is not null)
                 await drain.DrainAllAsync(cancellationToken);
@@ -78,8 +79,12 @@ public sealed class WarmupSchedulerService(
 
     private async Task TickCoreAsync(CancellationToken cancellationToken)
     {
-        if (!await IsSchedulingEnabledAsync(cancellationToken))
+        if (!await IsSchedulingAllowedAsync(cancellationToken))
+        {
+            if (drain is not null)
+                await drain.DrainAllAsync(cancellationToken);
             return;
+        }
         if (await maintenance.IsHeldAsync(cancellationToken))
             return;
         if (selector is null || a2s is null)
@@ -377,13 +382,19 @@ public sealed class WarmupSchedulerService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<bool> IsSchedulingEnabledAsync(CancellationToken cancellationToken)
+    private async Task<bool> IsSchedulingAllowedAsync(CancellationToken cancellationToken)
     {
-        var enabled = await dbContext.CoreSettings
-            .Where(settings => settings.Name == "global")
-            .Select(settings => (bool?)settings.WarmupSchedulingEnabled)
-            .SingleOrDefaultAsync(cancellationToken);
-        return enabled ?? true;
+        var settings = await dbContext.CoreSettings.SingleOrDefaultAsync(
+            item => item.Name == "global", cancellationToken);
+        if (settings is null || !settings.WarmupSchedulingEnabled)
+            return settings is null || settings.WarmupSchedulingEnabled;
+
+        IReadOnlyList<WarmupPauseWindow> windows = string.IsNullOrWhiteSpace(settings.WarmupPauseWindowsJson)
+            ? Array.Empty<WarmupPauseWindow>()
+            : JsonSerializer.Deserialize<List<WarmupPauseWindow>>(
+                settings.WarmupPauseWindowsJson,
+                PauseWindowsJsonOptions) ?? [];
+        return !WarmupPauseWindowRules.IsActive(DateTimeOffset.UtcNow, windows);
     }
 
     private async Task<PlannedStart?> PlanContinuationStartAsync(

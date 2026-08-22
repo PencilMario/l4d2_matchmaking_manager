@@ -23,10 +23,20 @@
 - GREEN: the same focused command after implementing the DTO, JSON persistence, dedicated routes, immediate drain, and conflict mapping
   - Passed: 15; skipped: 0; failed: 0.
 
+## Task 3: Scheduler effective pause
+
+- RED: `dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter FullyQualifiedName~WarmupSchedulerServiceTests --no-restore`
+  - New pause tests exposed two failures: `TickCoreAsync` proceeded into the scheduling path and did not drain current attempts.
+- Root cause: `RecoverCoreAsync` already drained on the effective-pause early return, while `TickCoreAsync` only returned. The canonical scheduler guard therefore enforced “do not start” but not “stop existing tasks” during a time window.
+- GREEN: the same focused scheduler command after adding the shared drain branch to `TickCoreAsync`
+  - Passed: 46; skipped: 0; failed: 0.
+- Cross-slice regression: combined Core filter for rules, settings, drain, and scheduler
+  - Passed: 71; skipped: 0; failed: 0.
+
 ## Checkpoint
 
 - Completed: worktree setup, approved design, implementation plan, Task 1 rules and migration model.
-- Active slice: Task 3 scheduler effective-pause enforcement.
+- Active slice: Task 4 frontend API contracts and clients.
 - Blockers: none.
 - Drift check: implementation remains within the approved CoreSettings JSON, Asia/Shanghai, drain-on-pause, and independent-settings-card scope; no new owner or fallback was introduced.
-- Next: write failing scheduler tests proving active pause skips A2S/selector/start and drains current attempts.
+- Next: write failing CoreClient and frontend API contract tests for the dedicated pause-window resource.
