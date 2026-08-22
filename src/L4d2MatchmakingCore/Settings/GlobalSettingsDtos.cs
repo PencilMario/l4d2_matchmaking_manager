@@ -1,3 +1,5 @@
+using L4d2MatchmakingCore.Scheduling;
+
 namespace L4d2MatchmakingCore.Settings;
 
 public sealed record UpdateGlobalSettingsRequest(
@@ -9,6 +11,8 @@ public sealed record GlobalSettingsResponse(
     string? SteamProxyUrl,
     bool SteamWebApiKeyConfigured,
     bool WarmupSchedulingEnabled,
+    IReadOnlyList<WarmupPauseWindow> WarmupPauseWindows,
+    bool WarmupPauseWindowsActive,
     DateTimeOffset UpdatedAt);
 
 public sealed record UpdateVncProxyRequest(string? ProxyUrl = null);
@@ -29,4 +33,12 @@ public sealed record UpdateWarmupSchedulingRequest(bool Enabled);
 
 public sealed record WarmupSchedulingSettingsResponse(
     bool Enabled,
+    DateTimeOffset UpdatedAt);
+
+public sealed record UpdateWarmupPauseWindowsRequest(
+    IReadOnlyList<WarmupPauseWindow>? Windows = null);
+
+public sealed record WarmupPauseWindowsSettingsResponse(
+    IReadOnlyList<WarmupPauseWindow> Windows,
+    bool Active,
     DateTimeOffset UpdatedAt);

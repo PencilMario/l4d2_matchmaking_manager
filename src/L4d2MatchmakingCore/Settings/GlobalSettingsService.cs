@@ -2,6 +2,7 @@ using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Servers;
 using L4d2MatchmakingCore.Scheduling;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace L4d2MatchmakingCore.Settings;
 
@@ -16,6 +17,8 @@ public sealed class GlobalSettingsService(
     WarmupAttemptDrainService attemptDrain,
     WarmupSchedulingGate schedulingGate) : ISteamWebApiKeyProvider
 {
+    private static readonly JsonSerializerOptions PauseWindowsJsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<GlobalSettingsResponse> GetAsync(CancellationToken cancellationToken)
     {
         var settings = await GetOrCreateAsync(cancellationToken);
@@ -138,6 +141,45 @@ public sealed class GlobalSettingsService(
         return response!;
     }
 
+    public async Task<WarmupPauseWindowsSettingsResponse> GetWarmupPauseWindowsAsync(
+        CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateAsync(cancellationToken);
+        var windows = ReadPauseWindows(settings.WarmupPauseWindowsJson);
+        return ToPauseWindowsResponse(windows, settings.UpdatedAt);
+    }
+
+    public async Task<WarmupPauseWindowsSettingsResponse> UpdateWarmupPauseWindowsAsync(
+        UpdateWarmupPauseWindowsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var normalized = WarmupPauseWindowRules.Normalize(request.Windows ??
+            throw new ArgumentException("invalid_warmup_pause_window"));
+        WarmupPauseWindowsSettingsResponse? response = null;
+        InvalidOperationException? failure = null;
+
+        await schedulingGate.RunAsync(async () =>
+        {
+            var settings = await GetOrCreateAsync(cancellationToken);
+            settings.WarmupPauseWindowsJson = JsonSerializer.Serialize(normalized, PauseWindowsJsonOptions);
+            settings.UpdatedAt = DateTimeOffset.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var active = WarmupPauseWindowRules.IsActive(DateTimeOffset.UtcNow, normalized);
+            if ((!settings.WarmupSchedulingEnabled || active) && !await attemptDrain.DrainAllAsync(cancellationToken))
+            {
+                failure = new InvalidOperationException("global_warmup_drain_failed");
+                return;
+            }
+
+            response = ToPauseWindowsResponse(normalized, settings.UpdatedAt);
+        }, cancellationToken);
+
+        if (failure is not null)
+            throw failure;
+        return response!;
+    }
+
     public async Task<string?> GetSteamProxyUrlAsync(CancellationToken cancellationToken)
     {
         var settings = await dbContext.CoreSettings.AsNoTracking().SingleOrDefaultAsync(
@@ -177,6 +219,28 @@ public sealed class GlobalSettingsService(
         return settings;
     }
 
-    private static GlobalSettingsResponse ToResponse(CoreSettings settings) =>
-        new(settings.SteamProxyUrl, settings.SteamWebApiKeyCiphertext is not null, settings.WarmupSchedulingEnabled, settings.UpdatedAt);
+    private static GlobalSettingsResponse ToResponse(CoreSettings settings)
+    {
+        var windows = ReadPauseWindows(settings.WarmupPauseWindowsJson);
+        return new(
+            settings.SteamProxyUrl,
+            settings.SteamWebApiKeyCiphertext is not null,
+            settings.WarmupSchedulingEnabled,
+            windows,
+            WarmupPauseWindowRules.IsActive(DateTimeOffset.UtcNow, windows),
+            settings.UpdatedAt);
+    }
+
+    private static WarmupPauseWindowsSettingsResponse ToPauseWindowsResponse(
+        IReadOnlyList<WarmupPauseWindow> windows,
+        DateTimeOffset updatedAt) =>
+        new(windows, WarmupPauseWindowRules.IsActive(DateTimeOffset.UtcNow, windows), updatedAt);
+
+    private static IReadOnlyList<WarmupPauseWindow> ReadPauseWindows(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<WarmupPauseWindow>();
+        var windows = JsonSerializer.Deserialize<List<WarmupPauseWindow>>(json, PauseWindowsJsonOptions);
+        return WarmupPauseWindowRules.Normalize(windows ?? []);
+    }
 }

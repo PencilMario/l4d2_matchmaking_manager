@@ -13,6 +13,8 @@ public static class GlobalSettingsEndpoints
         group.MapPut("/steam-web-api-key", UpdateSteamWebApiKeyAsync);
         group.MapGet("/warmup-scheduling", GetWarmupSchedulingAsync);
         group.MapPut("/warmup-scheduling", UpdateWarmupSchedulingAsync);
+        group.MapGet("/warmup-pause-windows", GetWarmupPauseWindowsAsync);
+        group.MapPut("/warmup-pause-windows", UpdateWarmupPauseWindowsAsync);
         return endpoints;
     }
 
@@ -88,6 +90,29 @@ public static class GlobalSettingsEndpoints
         }
         catch (InvalidOperationException exception) when (
             exception.Message is "global_warmup_drain_failed" or "global_warmup_drain_pending")
+        {
+            return Results.Conflict(exception.Message);
+        }
+    }
+
+    private static Task<WarmupPauseWindowsSettingsResponse> GetWarmupPauseWindowsAsync(
+        GlobalSettingsService service,
+        CancellationToken cancellationToken) => service.GetWarmupPauseWindowsAsync(cancellationToken);
+
+    private static async Task<IResult> UpdateWarmupPauseWindowsAsync(
+        UpdateWarmupPauseWindowsRequest request,
+        GlobalSettingsService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Results.Ok(await service.UpdateWarmupPauseWindowsAsync(request, cancellationToken));
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(exception.Message);
+        }
+        catch (InvalidOperationException exception) when (exception.Message == "global_warmup_drain_failed")
         {
             return Results.Conflict(exception.Message);
         }

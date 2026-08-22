@@ -16,10 +16,17 @@
 - Build: `dotnet build src/L4d2MatchmakingCore/L4d2MatchmakingCore.csproj --no-restore`
   - Passed: 0 warnings, 0 errors.
 
+## Task 2: Settings API
+
+- RED: `dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter FullyQualifiedName~GlobalSettingsEndpointTests --no-restore`
+  - Expected failures: 5 new tests because `/v1/settings/warmup-pause-windows` was not mapped and the combined response had no new fields.
+- GREEN: the same focused command after implementing the DTO, JSON persistence, dedicated routes, immediate drain, and conflict mapping
+  - Passed: 15; skipped: 0; failed: 0.
+
 ## Checkpoint
 
 - Completed: worktree setup, approved design, implementation plan, Task 1 rules and migration model.
-- Active slice: Task 2 Settings API and persistence service.
+- Active slice: Task 3 scheduler effective-pause enforcement.
 - Blockers: none.
 - Drift check: implementation remains within the approved CoreSettings JSON, Asia/Shanghai, drain-on-pause, and independent-settings-card scope; no new owner or fallback was introduced.
-- Next: write failing endpoint contract tests for the dedicated pause-window resource and legacy compatibility.
+- Next: write failing scheduler tests proving active pause skips A2S/selector/start and drains current attempts.

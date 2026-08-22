@@ -210,6 +210,139 @@ public sealed class GlobalSettingsEndpointTests
         Assert.AreEqual("quarantined", (await db.WarmupAgents.SingleAsync()).Status);
     }
 
+    [TestMethod]
+    public async Task WarmupPauseWindowsDefaultToEmptyAndCanBeUpdatedIndependently()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new SettingsFactory();
+        using var client = CreateAuthorizedClient(factory);
+
+        var initialDedicated = await client.GetAsync("/v1/settings/warmup-pause-windows");
+        var initialCombined = await client.GetStringAsync("/v1/settings");
+        var update = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = new[]
+            {
+                new { start = "23:00", end = "00:00" },
+                new { start = "00:00", end = "08:00" },
+            },
+        });
+        var currentDedicated = await client.GetStringAsync("/v1/settings/warmup-pause-windows");
+        var currentCombined = await client.GetStringAsync("/v1/settings");
+
+        Assert.AreEqual(HttpStatusCode.OK, initialDedicated.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, update.StatusCode);
+        Assert.AreEqual(0, JsonDocument.Parse(await initialDedicated.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("windows").GetArrayLength());
+        Assert.AreEqual(0, JsonDocument.Parse(initialCombined)
+            .RootElement.GetProperty("warmupPauseWindows").GetArrayLength());
+        var dedicatedWindows = JsonDocument.Parse(currentDedicated).RootElement.GetProperty("windows");
+        Assert.AreEqual("00:00", dedicatedWindows[0].GetProperty("start").GetString());
+        Assert.AreEqual("23:00", dedicatedWindows[1].GetProperty("start").GetString());
+        Assert.AreEqual(2, JsonDocument.Parse(currentCombined)
+            .RootElement.GetProperty("warmupPauseWindows").GetArrayLength());
+    }
+
+    [TestMethod]
+    public async Task LegacySettingsUpdatePreservesWarmupPauseWindows()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new SettingsFactory();
+        using var client = CreateAuthorizedClient(factory);
+
+        await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = new[] { new { start = "22:30", end = "07:45" } },
+        });
+        var legacyUpdate = await client.PutAsJsonAsync("/v1/settings", new
+        {
+            steamProxyUrl = "http://127.0.0.1:7890",
+        });
+        var current = JsonDocument.Parse(await client.GetStringAsync("/v1/settings"));
+
+        Assert.AreEqual(HttpStatusCode.OK, legacyUpdate.StatusCode);
+        var windows = current.RootElement.GetProperty("warmupPauseWindows");
+        Assert.AreEqual(1, windows.GetArrayLength());
+        Assert.AreEqual("22:30", windows[0].GetProperty("start").GetString());
+        Assert.AreEqual("07:45", windows[0].GetProperty("end").GetString());
+    }
+
+    [TestMethod]
+    public async Task WarmupPauseWindowsRejectInvalidTimeValues()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new SettingsFactory();
+        using var client = CreateAuthorizedClient(factory);
+
+        var invalidFormat = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = new[] { new { start = "8:00", end = "08:00" } },
+        });
+        var equalEndpoints = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = new[] { new { start = "08:00", end = "08:00" } },
+        });
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, invalidFormat.StatusCode);
+        Assert.AreEqual(HttpStatusCode.BadRequest, equalEndpoints.StatusCode);
+        StringAssert.Contains(await invalidFormat.Content.ReadAsStringAsync(), "invalid_warmup_pause_window");
+        StringAssert.Contains(await equalEndpoints.Content.ReadAsStringAsync(), "invalid_warmup_pause_window");
+    }
+
+    [TestMethod]
+    public async Task SavingAnActiveWarmupPauseWindowDrainsAttemptsWithoutStoppingContainers()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient();
+        await using var factory = new SettingsFactory(control);
+        using var client = CreateAuthorizedClient(factory);
+        var agentId = Guid.NewGuid();
+        var targetId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+        await SeedAttemptAsync(factory, agentId, targetId, operationId);
+        var window = CreateActiveWindow();
+
+        var update = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = new[] { new { start = window.Start, end = window.End } },
+        });
+
+        Assert.AreEqual(HttpStatusCode.OK, update.StatusCode);
+        CollectionAssert.AreEqual(new[] { operationId }, control.StoppedOperations);
+        CollectionAssert.AreEqual(new[] { agentId }, control.RestartedAgents);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.AreEqual("completed", (await db.WarmupAttempts.SingleAsync()).State);
+        Assert.AreEqual("restarting", (await db.WarmupAgents.SingleAsync()).Status);
+    }
+
+    [TestMethod]
+    public async Task SavingAnActiveWarmupPauseWindowReturnsConflictWhenDrainFails()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient { StopException = new HttpRequestException("agent_unreachable") };
+        await using var factory = new SettingsFactory(control);
+        using var client = CreateAuthorizedClient(factory);
+        var agentId = Guid.NewGuid();
+        var targetId = Guid.NewGuid();
+        await SeedAttemptAsync(factory, agentId, targetId, Guid.NewGuid());
+        var window = CreateActiveWindow();
+
+        var update = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = new[] { new { start = window.Start, end = window.End } },
+        });
+        var settings = JsonDocument.Parse(await client.GetStringAsync("/v1/settings"));
+
+        Assert.AreEqual(HttpStatusCode.Conflict, update.StatusCode);
+        StringAssert.Contains(await update.Content.ReadAsStringAsync(), "global_warmup_drain_failed");
+        Assert.AreEqual(1, settings.RootElement.GetProperty("warmupPauseWindows").GetArrayLength());
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.AreEqual("active", (await db.WarmupAttempts.SingleAsync()).State);
+        Assert.AreEqual("quarantined", (await db.WarmupAgents.SingleAsync()).Status);
+    }
+
     private static async Task SeedAttemptAsync(
         WebApplicationFactory<global::Program> factory,
         Guid agentId,
@@ -242,6 +375,12 @@ public sealed class GlobalSettingsEndpointTests
                 ObservedAt = now,
             });
         await db.SaveChangesAsync();
+    }
+
+    private static (string Start, string End) CreateActiveWindow()
+    {
+        var now = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8));
+        return (now.AddMinutes(-30).ToString("HH:mm"), now.AddMinutes(30).ToString("HH:mm"));
     }
 
     private sealed record VncProxySettingsResponse(string? ProxyUrl, DateTimeOffset UpdatedAt);
