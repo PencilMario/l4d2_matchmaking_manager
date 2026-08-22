@@ -1,9 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import type { WarmupPauseWindow, WarmupPauseWindowsSettings } from '../api/models';
 import { ConfirmDialog } from './common/ConfirmDialog';
 import { Switch } from './common/Switch';
+import { WarmupPauseWindowsForm } from './settings/WarmupPauseWindowsForm';
 import { describeError } from '../state/display';
 
-type Settings = { steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; warmupSchedulingEnabled: boolean; updatedAt: string };
+type Settings = {
+  steamProxyUrl: string | null;
+  steamWebApiKeyConfigured: boolean;
+  warmupSchedulingEnabled: boolean;
+  warmupPauseWindows: WarmupPauseWindow[];
+  warmupPauseWindowsActive: boolean;
+  updatedAt: string;
+};
 type ProxySettings = { proxyUrl: string | null; updatedAt: string };
 type KeySettings = { configured: boolean; updatedAt: string };
 type WarmupSchedulingSettings = { enabled: boolean; updatedAt: string };
@@ -13,22 +22,32 @@ export function GlobalSettingsView({
   saveProxy,
   saveKey,
   saveWarmupScheduling,
+  saveWarmupPauseWindows,
 }: {
   load: () => Promise<Settings>;
   saveProxy: (input: { proxyUrl: string | null }) => Promise<ProxySettings>;
   saveKey: (input: { apiKey?: string; clear?: boolean }) => Promise<KeySettings>;
   saveWarmupScheduling: (input: { enabled: boolean }) => Promise<WarmupSchedulingSettings>;
+  saveWarmupPauseWindows: (input: { windows: WarmupPauseWindow[] }) => Promise<WarmupPauseWindowsSettings>;
 }) {
   const [proxy, setProxy] = useState('');
   const [steamWebApiKey, setSteamWebApiKey] = useState('');
   const [keyConfigured, setKeyConfigured] = useState(false);
   const [warmupSchedulingEnabled, setWarmupSchedulingEnabled] = useState(true);
+  const [warmupPauseWindows, setWarmupPauseWindows] = useState<WarmupPauseWindow[]>([]);
+  const [warmupPauseWindowsActive, setWarmupPauseWindowsActive] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [proxySaving, setProxySaving] = useState(false);
+  const [keySaving, setKeySaving] = useState(false);
+  const [schedulingSaving, setSchedulingSaving] = useState(false);
+  const [proxyMessage, setProxyMessage] = useState<string | null>(null);
+  const [proxyError, setProxyError] = useState<string | null>(null);
+  const [keyMessage, setKeyMessage] = useState<string | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [schedulingMessage, setSchedulingMessage] = useState<string | null>(null);
+  const [schedulingError, setSchedulingError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -38,10 +57,12 @@ export function GlobalSettingsView({
         setProxy(value.steamProxyUrl ?? '');
         setKeyConfigured(value.steamWebApiKeyConfigured);
         setWarmupSchedulingEnabled(value.warmupSchedulingEnabled);
+        setWarmupPauseWindows(value.warmupPauseWindows ?? []);
+        setWarmupPauseWindowsActive(value.warmupPauseWindowsActive ?? false);
         setUpdatedAt(value.updatedAt);
       })
       .catch(() => {
-        if (active) setError('读取全局设置失败，请重试。');
+        if (active) setProxyError('读取全局设置失败，请重试。');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -53,71 +74,79 @@ export function GlobalSettingsView({
 
   const submitProxy = async (event: FormEvent) => {
     event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setMessage(null);
+    setProxySaving(true);
+    setProxyError(null);
+    setProxyMessage(null);
     try {
       const value = await saveProxy({ proxyUrl: proxy.trim() || null });
       setProxy(value.proxyUrl ?? '');
       setUpdatedAt(value.updatedAt);
-      setMessage('VNC 代理已保存。');
+      setProxyMessage('VNC 代理已保存。');
     } catch (caught) {
-      setError(describeError(caught).message);
+      setProxyError(describeError(caught).message);
     } finally {
-      setSaving(false);
+      setProxySaving(false);
     }
   };
 
   const submitKey = async (event: FormEvent) => {
     event.preventDefault();
     if (!steamWebApiKey.trim()) return;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
+    setKeySaving(true);
+    setKeyError(null);
+    setKeyMessage(null);
     try {
       const value = await saveKey({ apiKey: steamWebApiKey.trim() });
       setKeyConfigured(value.configured);
       setSteamWebApiKey('');
       setUpdatedAt(value.updatedAt);
-      setMessage('Steam Web API Key 已保存。');
+      setKeyMessage('Steam Web API Key 已保存。');
     } catch (caught) {
-      setError(describeError(caught).message);
+      setKeyError(describeError(caught).message);
     } finally {
-      setSaving(false);
+      setKeySaving(false);
     }
   };
 
   const clearKey = async () => {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
+    setKeySaving(true);
+    setKeyError(null);
+    setKeyMessage(null);
     try {
       const value = await saveKey({ clear: true });
       setKeyConfigured(value.configured);
       setSteamWebApiKey('');
       setUpdatedAt(value.updatedAt);
-      setMessage('Steam Web API Key 已清除。');
+      setKeyMessage('Steam Web API Key 已清除。');
     } catch (caught) {
-      setError(describeError(caught).message);
+      setKeyError(describeError(caught).message);
     } finally {
-      setSaving(false);
+      setKeySaving(false);
     }
   };
 
   const updateWarmupScheduling = async (enabled: boolean) => {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
+    setSchedulingSaving(true);
+    setSchedulingError(null);
+    setSchedulingMessage(null);
     try {
       const value = await saveWarmupScheduling({ enabled });
       setWarmupSchedulingEnabled(value.enabled);
       setUpdatedAt(value.updatedAt);
-      setMessage(value.enabled ? '暖服和调度已启用。' : '暖服和调度已禁用，当前任务已清空。');
+      setSchedulingMessage(value.enabled ? '暖服和调度已启用。' : '暖服和调度已禁用，当前任务已清空。');
     } catch (caught) {
-      setError(describeError(caught).message);
+      setSchedulingError(describeError(caught).message);
     } finally {
-      setSaving(false);
+      setSchedulingSaving(false);
     }
+  };
+
+  const updatePauseWindows = async (input: { windows: WarmupPauseWindow[] }) => {
+    const value = await saveWarmupPauseWindows(input);
+    setWarmupPauseWindows(value.windows);
+    setWarmupPauseWindowsActive(value.active);
+    setUpdatedAt(value.updatedAt);
+    return value;
   };
 
   const toggleWarmupScheduling = () => {
@@ -132,49 +161,99 @@ export function GlobalSettingsView({
 
   return <section className="space-y-4">
     <h1 className="text-xl font-bold text-slate-900">全局设置</h1>
-    <div className="max-w-2xl rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-        <Switch
-          checked={warmupSchedulingEnabled}
-          description="关闭后会停止并清空当前暖服任务，暖服节点容器保持运行；重新开启后从空任务状态恢复调度。"
-          disabled={saving}
-          id="global-warmup-scheduling"
-          label="全局启用暖服和调度"
-          onChange={toggleWarmupScheduling}
-        />
-      </div>
-      <h2 className="text-sm font-semibold text-slate-900">Steam 设置</h2>
-      <p className="mt-1 text-xs leading-5 text-slate-500">VNC 代理和 Steam Web API Key 分别保存；API Key 仅由控制服务加密保存，用于补全大厅成员的公开资料。</p>
-      <form className="space-y-3" onSubmit={submitProxy}>
-        <label className="block text-xs font-medium text-slate-700">VNC 代理地址
-          <input aria-label="Steam 代理地址" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setProxy(event.target.value)} placeholder="http://127.0.0.1:7890" value={proxy} />
-          <span className="mt-1 block text-[11px] text-slate-500">支持 HTTP 或 HTTPS 代理。留空表示不配置。</span>
-        </label>
-        <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={saving} type="submit">{saving ? '正在保存' : '保存 VNC 代理'}</button>
-      </form>
-      <form className="space-y-3" onSubmit={submitKey}>
-        <label className="block text-xs font-medium text-slate-700">Steam Web API Key
-          <input aria-label="Steam Web API Key" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setSteamWebApiKey(event.target.value)} placeholder={keyConfigured ? '已配置，输入新 Key 以替换' : '输入 Steam Web API Key'} type="password" value={steamWebApiKey} />
-          <span className="mt-1 block text-[11px] text-slate-500">当前状态：{keyConfigured ? '已配置' : '未配置'}</span>
-        </label>
-        <div className="flex gap-2">
-          <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={saving || !steamWebApiKey.trim()} type="submit">{saving ? '正在保存' : '保存 Steam Web API Key'}</button>
-          {keyConfigured && <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50" disabled={saving} onClick={() => void clearKey()} type="button">清除 Steam Web API Key</button>}
+    <div className="grid max-w-5xl gap-4 md:grid-cols-2">
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-blue-600 bg-white p-5 shadow-sm" aria-labelledby="legacy-warmup-card-title">
+        <div className="settings-card__header flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-600">GLOBAL CONTROL</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-warmup-card-title">暖服和调度</h2>
+          </div>
+          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${warmupSchedulingEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{warmupSchedulingEnabled ? '已启用' : '已禁用'}</span>
         </div>
-      </form>
-      {error && <p className="text-xs text-red-700">{error}</p>}
-      {message && <p className="text-xs text-emerald-700">{message}</p>}
-      {updatedAt && <p className="mt-4 text-[11px] text-slate-400">上次更新：{new Date(updatedAt).toLocaleString('zh-CN', { hour12: false })}</p>}
+        <p className="mt-3 text-xs leading-5 text-slate-500">手动控制全局暖服与调度。关闭会停止并清空当前任务，但暖服节点容器保持运行。</p>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <Switch
+            checked={warmupSchedulingEnabled}
+            description="重新开启后从空任务状态恢复调度。"
+            disabled={schedulingSaving}
+            id="global-warmup-scheduling"
+            label="全局启用暖服和调度"
+            onChange={toggleWarmupScheduling}
+          />
+        </div>
+        {schedulingError && <p className="mt-3 text-xs text-red-700" role="alert">{schedulingError}</p>}
+        {schedulingMessage && <p className="mt-3 text-xs text-emerald-700" role="status">{schedulingMessage}</p>}
+        {updatedAt && <small className="mt-4 block text-[11px] text-slate-400">上次更新：{formatUpdatedAt(updatedAt)}</small>}
+      </article>
+
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-amber-500 bg-white p-5 shadow-sm" aria-labelledby="legacy-pause-card-title">
+        <div className="settings-card__header flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600">SCHEDULE WINDOW</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-pause-card-title">暖服暂停时间段</h2>
+          </div>
+          <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">分钟级</span>
+        </div>
+        <WarmupPauseWindowsForm initialActive={warmupPauseWindowsActive} initialWindows={warmupPauseWindows} onSave={updatePauseWindows} />
+      </article>
+
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-cyan-500 bg-white p-5 shadow-sm" aria-labelledby="legacy-proxy-card-title">
+        <div className="settings-card__header flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-600">NETWORK</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-proxy-card-title">VNC 代理</h2>
+          </div>
+          <span className="rounded-full bg-cyan-50 px-2 py-1 text-[10px] font-semibold text-cyan-700">可选</span>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">仅用于开启 VNC 服务的暖服节点。留空表示不配置。</p>
+        <form className="mt-4 space-y-3" onSubmit={submitProxy}>
+          <label className="block text-xs font-medium text-slate-700">VNC 代理地址
+            <input aria-label="Steam 代理地址" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setProxy(event.target.value)} placeholder="http://127.0.0.1:7890" value={proxy} />
+          </label>
+          <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={proxySaving} type="submit">{proxySaving ? '正在保存' : '保存 VNC 代理'}</button>
+        </form>
+        {proxyError && <p className="mt-3 text-xs text-red-700" role="alert">{proxyError}</p>}
+        {proxyMessage && <p className="mt-3 text-xs text-emerald-700" role="status">{proxyMessage}</p>}
+        {updatedAt && <small className="mt-4 block text-[11px] text-slate-400">上次更新：{formatUpdatedAt(updatedAt)}</small>}
+      </article>
+
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-violet-500 bg-white p-5 shadow-sm" aria-labelledby="legacy-key-card-title">
+        <div className="settings-card__header flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-600">STEAM DATA</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-key-card-title">Steam Web API Key</h2>
+          </div>
+          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${keyConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{keyConfigured ? '已配置' : '未配置'}</span>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">控制服务加密保存此 Key，用于补全大厅成员的公开资料。密钥不会回显。</p>
+        <form className="mt-4 space-y-3" onSubmit={submitKey}>
+          <label className="block text-xs font-medium text-slate-700">Steam Web API Key
+            <input aria-label="Steam Web API Key" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setSteamWebApiKey(event.target.value)} placeholder={keyConfigured ? '已配置，输入新 Key 以替换' : '输入 Steam Web API Key'} type="password" value={steamWebApiKey} />
+            <span className="mt-1 block text-[11px] text-slate-500">当前状态：{keyConfigured ? '已配置' : '未配置'}</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={keySaving || !steamWebApiKey.trim()} type="submit">{keySaving ? '正在保存' : '保存 Steam Web API Key'}</button>
+            {keyConfigured && <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50" disabled={keySaving} onClick={() => void clearKey()} type="button">清除 Steam Web API Key</button>}
+          </div>
+        </form>
+        {keyError && <p className="mt-3 text-xs text-red-700" role="alert">{keyError}</p>}
+        {keyMessage && <p className="mt-3 text-xs text-emerald-700" role="status">{keyMessage}</p>}
+        {updatedAt && <small className="mt-4 block text-[11px] text-slate-400">上次更新：{formatUpdatedAt(updatedAt)}</small>}
+      </article>
     </div>
     <ConfirmDialog
       confirmLabel="确认禁用"
       description="控制服务会停止并清空所有当前暖服任务。暖服节点容器不会停止，之后可以重新启用调度。"
       intent="danger"
-      isLoading={saving}
+      isLoading={schedulingSaving}
       isOpen={confirmDisable}
       onClose={() => setConfirmDisable(false)}
       onConfirm={() => { setConfirmDisable(false); void updateWarmupScheduling(false); }}
       title="确认禁用暖服和调度"
     />
   </section>;
+}
+
+function formatUpdatedAt(value: string) {
+  return new Date(value).toLocaleString('zh-CN', { hour12: false });
 }

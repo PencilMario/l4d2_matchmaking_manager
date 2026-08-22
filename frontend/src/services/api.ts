@@ -19,6 +19,7 @@ type RawVncProxySettings = { proxyUrl: string | null; updatedAt: string };
 type RawSteamWebApiKeySettings = { configured: boolean; updatedAt: string };
 type RawWarmupSchedulingSettings = { enabled: boolean; updatedAt: string };
 type RawWarmupPauseWindowsSettings = { windows: { start: string; end: string }[]; active: boolean; updatedAt: string };
+type RawGlobalSettings = { steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; warmupSchedulingEnabled: boolean; warmupPauseWindows: { start: string; end: string }[]; warmupPauseWindowsActive: boolean; updatedAt: string };
 type AgentVncSession = { url: string; expiresAt: string };
 type RawWarmup = { targetServerId: string; targetEndpoint: string; warmupAgentId: string; warmupAgentName: string; operationId: string; lobbyId: string | null; mode: string; state: string; phase: string; startedAt: string; observedAt: string; deadline: string; remainingSeconds: number };
 
@@ -69,8 +70,8 @@ export const ApiService = {
   rebuildAgent(id: string) { return request(`/v1/agents/${id}/recreate`, { method: 'POST' }); },
   openAgentVncSession(id: string) { return request<AgentVncSession>(`/v1/agents/${id}/vnc-sessions`, { method: 'POST' }); },
   deleteAgent(id: string) { return request<{ success?: boolean }>(`/v1/agents/${id}`, { method: 'DELETE' }); },
-  getGlobalSettings() { return request<{ steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; warmupSchedulingEnabled: boolean; updatedAt: string }>('/v1/settings'); },
-  updateGlobalSettings(input: { steamProxyUrl: string | null; steamWebApiKey?: string; clearSteamWebApiKey?: boolean }) { return request<{ steamProxyUrl: string | null; steamWebApiKeyConfigured: boolean; warmupSchedulingEnabled: boolean; updatedAt: string }>('/v1/settings', { method: 'PUT', body: JSON.stringify(input) }); },
+  getGlobalSettings() { return request<RawGlobalSettings>('/v1/settings'); },
+  updateGlobalSettings(input: { steamProxyUrl: string | null; steamWebApiKey?: string; clearSteamWebApiKey?: boolean }) { return request<RawGlobalSettings>('/v1/settings', { method: 'PUT', body: JSON.stringify(input) }); },
   getVncProxySettings() { return request<RawVncProxySettings>('/v1/settings/vnc-proxy'); },
   updateVncProxySettings(input: { proxyUrl: string | null }) { return request<RawVncProxySettings>('/v1/settings/vnc-proxy', { method: 'PUT', body: JSON.stringify(input) }); },
   updateSteamWebApiKeySettings(input: { apiKey?: string; clear?: boolean }) { return request<RawSteamWebApiKeySettings>('/v1/settings/steam-web-api-key', { method: 'PUT', body: JSON.stringify(input) }); },
