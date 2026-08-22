@@ -84,6 +84,34 @@ describe('CoreClient', () => {
     }));
   });
 
+  it('uses the dedicated endpoint for warmup pause windows', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        windows: [{ start: '23:00', end: '00:00' }],
+        active: true,
+        updatedAt: '2026-08-23T00:00:00Z',
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        windows: [{ start: '00:00', end: '08:00' }],
+        active: true,
+        updatedAt: '2026-08-23T00:00:01Z',
+      }));
+    const client = new CoreClient(() => 'test-token', fetcher);
+
+    await client.getWarmupPauseWindows();
+    await client.updateWarmupPauseWindows({
+      windows: [{ start: '00:00', end: '08:00' }],
+    });
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, '/v1/settings/warmup-pause-windows', expect.objectContaining({
+      method: 'GET',
+    }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, '/v1/settings/warmup-pause-windows', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ windows: [{ start: '00:00', end: '08:00' }] }),
+    }));
+  });
+
   it('calls the browser fetch with its global context by default', async () => {
     const browserFetch = vi.fn(function (this: typeof globalThis) {
       expect(this).toBe(globalThis);

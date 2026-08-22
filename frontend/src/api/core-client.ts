@@ -15,6 +15,8 @@ import type {
   VncProxySettingsInput,
   WarmupSchedulingSettings,
   WarmupSchedulingSettingsInput,
+  WarmupPauseWindowsSettings,
+  WarmupPauseWindowsSettingsInput,
 } from './models';
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -88,6 +90,14 @@ export class CoreClient {
 
   updateWarmupScheduling(input: WarmupSchedulingSettingsInput) {
     return this.request<WarmupSchedulingSettings>('/v1/settings/warmup-scheduling', { method: 'PUT', body: input });
+  }
+
+  getWarmupPauseWindows(signal?: AbortSignal) {
+    return this.request<WarmupPauseWindowsSettings>('/v1/settings/warmup-pause-windows', { signal });
+  }
+
+  updateWarmupPauseWindows(input: WarmupPauseWindowsSettingsInput) {
+    return this.request<WarmupPauseWindowsSettings>('/v1/settings/warmup-pause-windows', { method: 'PUT', body: input });
   }
 
   queryLobby(lobbyId: string, signal?: AbortSignal) {

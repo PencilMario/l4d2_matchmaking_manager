@@ -18,6 +18,7 @@ type RawSteamDownloadRegion = { id: number; name: string };
 type RawVncProxySettings = { proxyUrl: string | null; updatedAt: string };
 type RawSteamWebApiKeySettings = { configured: boolean; updatedAt: string };
 type RawWarmupSchedulingSettings = { enabled: boolean; updatedAt: string };
+type RawWarmupPauseWindowsSettings = { windows: { start: string; end: string }[]; active: boolean; updatedAt: string };
 type AgentVncSession = { url: string; expiresAt: string };
 type RawWarmup = { targetServerId: string; targetEndpoint: string; warmupAgentId: string; warmupAgentName: string; operationId: string; lobbyId: string | null; mode: string; state: string; phase: string; startedAt: string; observedAt: string; deadline: string; remainingSeconds: number };
 
@@ -75,6 +76,8 @@ export const ApiService = {
   updateSteamWebApiKeySettings(input: { apiKey?: string; clear?: boolean }) { return request<RawSteamWebApiKeySettings>('/v1/settings/steam-web-api-key', { method: 'PUT', body: JSON.stringify(input) }); },
   getWarmupSchedulingSettings() { return request<RawWarmupSchedulingSettings>('/v1/settings/warmup-scheduling'); },
   updateWarmupSchedulingSettings(input: { enabled: boolean }) { return request<RawWarmupSchedulingSettings>('/v1/settings/warmup-scheduling', { method: 'PUT', body: JSON.stringify(input) }); },
+  getWarmupPauseWindowsSettings() { return request<RawWarmupPauseWindowsSettings>('/v1/settings/warmup-pause-windows'); },
+  updateWarmupPauseWindowsSettings(input: { windows: { start: string; end: string }[] }) { return request<RawWarmupPauseWindowsSettings>('/v1/settings/warmup-pause-windows', { method: 'PUT', body: JSON.stringify(input) }); },
   async lookupLobby(id: string) {
     const result = await request<any>(`/v1/lobbies/${encodeURIComponent(id)}`);
     if (!result.data) return result;

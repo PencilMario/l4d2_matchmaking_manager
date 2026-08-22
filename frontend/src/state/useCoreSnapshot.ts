@@ -22,6 +22,8 @@ export interface CoreSnapshotClient {
   updateVncProxy?(input: import('../api/models').VncProxySettingsInput): Promise<import('../api/models').VncProxySettings>;
   updateSteamWebApiKey?(input: import('../api/models').SteamWebApiKeySettingsInput): Promise<import('../api/models').SteamWebApiKeySettings>;
   updateWarmupScheduling?(input: import('../api/models').WarmupSchedulingSettingsInput): Promise<import('../api/models').WarmupSchedulingSettings>;
+  getWarmupPauseWindows?(): Promise<import('../api/models').WarmupPauseWindowsSettings>;
+  updateWarmupPauseWindows?(input: import('../api/models').WarmupPauseWindowsSettingsInput): Promise<import('../api/models').WarmupPauseWindowsSettings>;
 }
 
 export interface CoreSnapshot {

@@ -61,6 +61,8 @@ export interface GlobalSettings {
   steamProxyUrl: string | null;
   steamWebApiKeyConfigured: boolean;
   warmupSchedulingEnabled: boolean;
+  warmupPauseWindows: WarmupPauseWindow[];
+  warmupPauseWindowsActive: boolean;
   updatedAt: string;
 }
 
@@ -96,6 +98,21 @@ export interface WarmupSchedulingSettings {
 
 export interface WarmupSchedulingSettingsInput {
   enabled: boolean;
+}
+
+export interface WarmupPauseWindow {
+  start: string;
+  end: string;
+}
+
+export interface WarmupPauseWindowsSettings {
+  windows: WarmupPauseWindow[];
+  active: boolean;
+  updatedAt: string;
+}
+
+export interface WarmupPauseWindowsSettingsInput {
+  windows: WarmupPauseWindow[];
 }
 
 export interface WarmupStatus {
