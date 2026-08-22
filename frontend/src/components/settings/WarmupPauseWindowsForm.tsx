@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import type {
   WarmupPauseWindow,
   WarmupPauseWindowsSettings,
@@ -20,11 +20,6 @@ export function WarmupPauseWindowsForm({ initialWindows, initialActive, onSave }
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setWindows(cloneWindows(initialWindows));
-    setActive(initialActive);
-  }, [initialActive, initialWindows]);
 
   const updateWindow = (index: number, field: keyof WarmupPauseWindow, value: string) => {
     setWindows(current => current.map((window, currentIndex) => currentIndex === index ? { ...window, [field]: value } : window));
