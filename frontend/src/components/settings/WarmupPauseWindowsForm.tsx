@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type {
   WarmupPauseWindow,
   WarmupPauseWindowsSettings,
@@ -17,24 +17,40 @@ type Props = {
 export function WarmupPauseWindowsForm({ initialWindows, initialActive, onSave }: Props) {
   const [windows, setWindows] = useState<WarmupPauseWindow[]>(() => cloneWindows(initialWindows));
   const [active, setActive] = useState(initialActive);
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const previousInitialWindows = useRef(initialWindows);
+  const previousInitialActive = useRef(initialActive);
+
+  useEffect(() => {
+    const windowsChanged = !areWindowsEqual(previousInitialWindows.current, initialWindows);
+    const activeChanged = previousInitialActive.current !== initialActive;
+    previousInitialWindows.current = initialWindows;
+    previousInitialActive.current = initialActive;
+    if (dirty || (!windowsChanged && !activeChanged)) return;
+    setWindows(cloneWindows(initialWindows));
+    setActive(initialActive);
+  }, [dirty, initialActive, initialWindows]);
 
   const updateWindow = (index: number, field: keyof WarmupPauseWindow, value: string) => {
     setWindows(current => current.map((window, currentIndex) => currentIndex === index ? { ...window, [field]: value } : window));
+    setDirty(true);
     setError(null);
     setMessage(null);
   };
 
   const addWindow = () => {
     setWindows(current => [...current, { start: '', end: '' }]);
+    setDirty(true);
     setError(null);
     setMessage(null);
   };
 
   const removeWindow = (index: number) => {
     setWindows(current => current.filter((_, currentIndex) => currentIndex !== index));
+    setDirty(true);
     setError(null);
     setMessage(null);
   };
@@ -55,6 +71,7 @@ export function WarmupPauseWindowsForm({ initialWindows, initialActive, onSave }
       const value = await onSave({ windows: cloneWindows(windows) });
       setWindows(cloneWindows(value.windows));
       setActive(value.active);
+      setDirty(false);
       setMessage('暖服暂停时间段已保存。');
     } catch (caught) {
       setError(describeError(caught).message);
@@ -75,11 +92,11 @@ export function WarmupPauseWindowsForm({ initialWindows, initialActive, onSave }
     {windows.length === 0 ? <p className="pause-window-form__empty">暂未设置暂停时间段</p> : <div className="pause-window-list">
       {windows.map((window, index) => <div className="pause-window-row" key={`${index}-${window.start}-${window.end}`}>
         <label className="pause-window-row__field">开始时间 {index + 1}
-          <input aria-label={`开始时间 ${index + 1}`} onChange={event => updateWindow(index, 'start', event.target.value)} type="time" value={window.start} />
+          <input aria-label={`开始时间 ${index + 1}`} disabled={saving} onChange={event => updateWindow(index, 'start', event.target.value)} type="time" value={window.start} />
         </label>
         <span className="pause-window-row__separator" aria-hidden="true">至</span>
         <label className="pause-window-row__field">结束时间 {index + 1}
-          <input aria-label={`结束时间 ${index + 1}`} onChange={event => updateWindow(index, 'end', event.target.value)} type="time" value={window.end} />
+          <input aria-label={`结束时间 ${index + 1}`} disabled={saving} onChange={event => updateWindow(index, 'end', event.target.value)} type="time" value={window.end} />
         </label>
         <button aria-label={`删除时间段 ${index + 1}`} className="button button--quiet pause-window-row__remove" disabled={saving} onClick={() => removeWindow(index)} type="button">删除</button>
       </div>)}
@@ -95,6 +112,11 @@ export function WarmupPauseWindowsForm({ initialWindows, initialActive, onSave }
 
 function cloneWindows(windows: WarmupPauseWindow[]) {
   return windows.map(window => ({ start: window.start, end: window.end }));
+}
+
+function areWindowsEqual(left: WarmupPauseWindow[], right: WarmupPauseWindow[]) {
+  return left.length === right.length && left.every((window, index) =>
+    window.start === right[index].start && window.end === right[index].end);
 }
 
 function validateWindows(windows: WarmupPauseWindow[]) {

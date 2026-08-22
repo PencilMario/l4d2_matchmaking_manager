@@ -343,6 +343,50 @@ public sealed class GlobalSettingsEndpointTests
         Assert.AreEqual("quarantined", (await db.WarmupAgents.SingleAsync()).Status);
     }
 
+    [TestMethod]
+    public async Task LeavingAnActivePauseWindowDrainsBeforeRestoringScheduling()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient
+        {
+            StopException = new HttpRequestException("agent_unreachable"),
+        };
+        await using var factory = new SettingsFactory(control);
+        using var client = CreateAuthorizedClient(factory);
+        var agentId = Guid.NewGuid();
+        var targetId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+        await SeedAttemptAsync(factory, agentId, targetId, operationId);
+        var activeWindow = CreateActiveWindow();
+
+        var enterPause = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = new[] { new { start = activeWindow.Start, end = activeWindow.End } },
+        });
+
+        var failedLeavePause = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = Array.Empty<object>(),
+        });
+        var retainedSettings = JsonDocument.Parse(await client.GetStringAsync("/v1/settings"));
+        control.StopException = null;
+        var leavePause = await client.PutAsJsonAsync("/v1/settings/warmup-pause-windows", new
+        {
+            windows = Array.Empty<object>(),
+        });
+        var settings = JsonDocument.Parse(await client.GetStringAsync("/v1/settings"));
+
+        Assert.AreEqual(HttpStatusCode.Conflict, enterPause.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, failedLeavePause.StatusCode);
+        Assert.AreEqual(1, retainedSettings.RootElement.GetProperty("warmupPauseWindows").GetArrayLength());
+        Assert.AreEqual(HttpStatusCode.OK, leavePause.StatusCode);
+        CollectionAssert.AreEqual(new[] { operationId }, control.StoppedOperations);
+        Assert.AreEqual(0, settings.RootElement.GetProperty("warmupPauseWindows").GetArrayLength());
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.AreEqual("completed", (await db.WarmupAttempts.SingleAsync()).State);
+    }
+
     private static async Task SeedAttemptAsync(
         WebApplicationFactory<global::Program> factory,
         Guid agentId,
@@ -419,7 +463,7 @@ public sealed class GlobalSettingsEndpointTests
     {
         public List<Guid> StoppedOperations { get; } = [];
         public List<Guid> RestartedAgents { get; } = [];
-        public Exception? StopException { get; init; }
+        public Exception? StopException { get; set; }
 
         public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

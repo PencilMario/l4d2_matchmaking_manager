@@ -161,12 +161,27 @@ public sealed class GlobalSettingsService(
         await schedulingGate.RunAsync(async () =>
         {
             var settings = await GetOrCreateAsync(cancellationToken);
+            var previousWindows = ReadPauseWindows(settings.WarmupPauseWindowsJson);
+            var previousActive = WarmupPauseWindowRules.IsActive(DateTimeOffset.UtcNow, previousWindows);
+            var active = WarmupPauseWindowRules.IsActive(DateTimeOffset.UtcNow, normalized);
+            var drainedBeforeSave = false;
+            if (previousActive && !active)
+            {
+                if (!await attemptDrain.DrainAllAsync(cancellationToken))
+                {
+                    failure = new InvalidOperationException("global_warmup_drain_failed");
+                    return;
+                }
+
+                drainedBeforeSave = true;
+            }
+
             settings.WarmupPauseWindowsJson = JsonSerializer.Serialize(normalized, PauseWindowsJsonOptions);
             settings.UpdatedAt = DateTimeOffset.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            var active = WarmupPauseWindowRules.IsActive(DateTimeOffset.UtcNow, normalized);
-            if ((!settings.WarmupSchedulingEnabled || active) && !await attemptDrain.DrainAllAsync(cancellationToken))
+            if ((!settings.WarmupSchedulingEnabled || active) && !drainedBeforeSave &&
+                !await attemptDrain.DrainAllAsync(cancellationToken))
             {
                 failure = new InvalidOperationException("global_warmup_drain_failed");
                 return;
