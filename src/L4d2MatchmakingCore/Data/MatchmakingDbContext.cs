@@ -94,6 +94,10 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.Property(settings => settings.SteamProxyUrl).HasMaxLength(2048);
             entity.Property(settings => settings.SteamWebApiKeyCiphertext).HasMaxLength(2048);
             entity.Property(settings => settings.WarmupSchedulingEnabled).HasDefaultValue(true);
+            entity.Property(settings => settings.WarmupPauseWindowsJson)
+                .HasColumnType("jsonb")
+                .IsRequired()
+                .HasDefaultValue("[]");
         });
     }
 }
