@@ -332,6 +332,56 @@ public sealed class WarmupSchedulerServiceTests
     }
 
     [TestMethod]
+    public async Task TickPrefersOccupiedStandardTargetOverHigherPriorityEmptyTarget()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var occupiedTarget = new TargetServer { Id = Guid.Parse("00000000-0000-0000-0000-000000000001"), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 1 };
+        var emptyTarget = new TargetServer { Id = Guid.Parse("00000000-0000-0000-0000-000000000002"), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 100 };
+        db.AddRange(agent, occupiedTarget, emptyTarget);
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s(new Dictionary<int, int> { [occupiedTarget.Port] = 1 }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        var attempt = await db.WarmupAttempts.SingleAsync(attempt => attempt.State == "active");
+        Assert.AreEqual(occupiedTarget.Id, attempt.TargetServerId);
+    }
+
+    [TestMethod]
+    public async Task TickRanksMultipleOccupiedStandardTargetsByPriorityAndPlayerWeight()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var higherPriorityTarget = new TargetServer { Id = Guid.Parse("00000000-0000-0000-0000-000000000001"), Host = "127.0.0.1", Port = 27015, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 3 };
+        var moreOccupiedTarget = new TargetServer { Id = Guid.Parse("00000000-0000-0000-0000-000000000002"), Host = "127.0.0.1", Port = 27016, Enabled = true, RequiresReservation = false, MaxConcurrentWarmups = 1, PlayerTarget = 6, AttemptWindowSeconds = 720, Priority = 2 };
+        db.AddRange(agent, higherPriorityTarget, moreOccupiedTarget);
+        await db.SaveChangesAsync();
+        var agents = new FakeAgents(null);
+        var scheduler = new WarmupSchedulerService(
+            db,
+            agents,
+            new SharedLibraryMaintenanceService(db),
+            new FakeSelector(agent),
+            new FakeA2s(new Dictionary<int, int>
+            {
+                [higherPriorityTarget.Port] = 1,
+                [moreOccupiedTarget.Port] = 5,
+            }));
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        var attempt = await db.WarmupAttempts.SingleAsync(attempt => attempt.State == "active");
+        Assert.AreEqual(moreOccupiedTarget.Id, attempt.TargetServerId);
+    }
+
+    [TestMethod]
     public async Task TickPrefersTargetWithMostExistingWarmups()
     {
         await using var db = CreateDb();
