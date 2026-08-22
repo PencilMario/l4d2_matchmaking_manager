@@ -78,17 +78,33 @@
 - Root-cause evidence: `WarmupPauseWindowsForm` owned the editable draft in local state but also copied `initialWindows` and `initialActive` into that state from an effect. A parent rerender with an equal-value, new-array settings snapshot therefore overwrote an unsaved row. The parent settings state is the canonical persisted snapshot; the form's local state is the canonical owner while editing, and the save callback already applies the API response explicitly.
 - RED: added `frontend/src/components/settings/WarmupPauseWindowsForm.test.tsx`, then ran `npm test -- --run src/components/settings/WarmupPauseWindowsForm.test.tsx`
   - Failed as expected: after rerendering with unchanged settings, `开始时间 1` was missing.
-- GREEN: removed the prop-to-draft synchronization effect and retained explicit API-response synchronization after save; the same focused command
-  - Passed: 1; failed: 0.
+- GREEN: replaced unconditional prop-to-draft synchronization with value-aware, dirty-gated synchronization and retained explicit API-response synchronization after save; the same focused command
+  - Passed: 3 tests; failed: 0.
 - Related settings regression: `npm test -- --run src/components/settings/WarmupPauseWindowsForm.test.tsx src/features/settings/SettingsWorkspace.test.tsx src/components/GlobalSettingsView.test.tsx`
-  - Passed: 3 test files, 18 tests; failed: 0.
+  - Passed: 3 test files, 20 tests; failed: 0.
 
-## Final verification
+## Task 7: Review repair for pause transitions and editor ownership
+
+- Review finding verified: when a drain failed during an active pause, clearing the window previously returned `200` without retrying the retained attempt. A separate endpoint test reproduced that path.
+- RED: `dotnet test src/L4d2MatchmakingCore/tests/L4d2MatchmakingCore.Tests.csproj --filter FullyQualifiedName~LeavingAnActivePauseWindowDrainsBeforeRestoringScheduling`
+  - Failed as expected: the second update returned `200` but the retained operation was not stopped.
+- GREEN: an active-to-inactive transition now drains before saving; a failed drain preserves the old pause configuration and returns `409`, while a successful retry saves the new configuration. The focused endpoint test passed: 1; failed: 0.
+- Review finding verified: after removing the original synchronization effect, changed external settings did not reach a clean editor. The form regression now covers clean sync, dirty draft preservation, and save-time input locking.
+- RED/GREEN: the input-lock test failed before `disabled={saving}` was restored, then `npm test -- --run src/components/settings/WarmupPauseWindowsForm.test.tsx` passed 3 tests; failed: 0.
+- Affected-slice regression: Core rules/settings/scheduler filter passed 69; frontend API, wiring, both settings surfaces, and form tests passed 30; `npm run build` passed.
+
+## Advisory review
+
+- Review range: `8eec9d1..f242da4`, read-only review by the delegated reviewer.
+- Assessment: no Critical issues. Two Important issues were reproduced and repaired: pause-exit drain could be bypassed after a prior conflict, and the editor lacked a clean/dirty external snapshot boundary. A Minor input-lock issue and inconsistent `active` examples were also repaired.
+- Residual review notes: PostgreSQL/Testcontainers coverage remains skipped in this environment; no browser-level visual/E2E run or live deployment verification was performed. Serializer ownership is still duplicated between settings and scheduler readers but is outside this slice's minimum repair.
+
+## Final verification after review repair
 
 - Core: `dotnet test L4d2MatchmakingManager.sln`
-  - Passed: 174; skipped: 3; failed: 0.
+  - Passed: 175; skipped: 3; failed: 0.
 - Frontend: `npm test -- --run`
-  - Passed: 22 test files, 69 tests; failed: 0.
+  - Passed: 22 test files, 71 tests; failed: 0.
 - Frontend build: `npm run build`
   - Passed: TypeScript compilation and Vite production build; failed: 0.
 - Diff hygiene: `git diff --check`
@@ -96,7 +112,7 @@
 
 ## Final Checkpoint
 
-- Completed: all implementation, API contract documentation, four-card UI, regression repair, and automated test/build tasks.
+- Completed: implementation, API contract documentation, four-card UI, editor and pause-transition review repairs, and full automated verification.
 - Blockers: none.
-- Drift check: the repair removed a duplicate prop-to-draft owner; no fallback or new behavior branch was added. The dedicated pause API, scheduler drain path, and Agent-container boundary remain unchanged.
-- Next: inspect the final diff, commit the documentation and regression test/fix, then obtain advisory code review before presenting branch integration options.
+- Drift check: review repairs strengthen the existing drain and editor owners without adding a fallback path. The dedicated pause API and Agent-container boundary remain unchanged.
+- Next: inspect and commit the final repair/documentation diff, then present branch integration options.

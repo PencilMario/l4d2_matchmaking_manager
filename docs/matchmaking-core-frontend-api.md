@@ -717,7 +717,7 @@ Content-Type: application/json; charset=utf-8
     { "start": "00:00", "end": "08:00" },
     { "start": "23:00", "end": "00:00" }
   ],
-  "active": true,
+  "active": false,
   "updatedAt": "2026-08-23T10:00:00+00:00"
 }
 ```
@@ -740,8 +740,10 @@ Content-Type: application/json; charset=utf-8
 如果保存后的时间段当前生效，Core 会先保存，再在共享调度锁内尝试排空
 `active`、`uncertain`、`restart_pending` 暖服任务。排空无法确认时返回
 `409 "global_warmup_drain_failed"`，但新配置仍已保存，之后每五秒 tick 会重试；任务不会被
-错误标记为完成。暂停期间恢复和调度都会跳过 A2S、目标选择及新启动；时间段结束后自动恢复，
-且不恢复旧任务。排空成功后 Agent 容器仍保持运行，不会被停止、删除或重建。
+错误标记为完成。如果旧配置当前正在暂停而新配置将退出暂停，Core 会先排空未确认任务；
+排空失败返回同一 `409` 并保留旧配置，排空成功后才保存新配置。暂停期间恢复和调度都会跳过
+A2S、目标选择及新启动；时间段结束后自动恢复，且不恢复旧任务。排空成功后 Agent 容器仍保持
+运行，不会被停止、删除或重建。
 
 ## Lobby 查询
 
