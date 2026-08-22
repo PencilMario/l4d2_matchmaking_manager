@@ -19,6 +19,10 @@ public sealed class WarmupDecisionEngineTests
         Assert.AreEqual(WarmupDecision.RecreateSameTarget, _engine.Evaluate(Reserved(), 0, AwaitingFirstMember(Now.AddSeconds(-120)), Now));
 
     [TestMethod]
+    public void StandardNoMemberFor120SecondsRecreatesSameTarget() =>
+        Assert.AreEqual(WarmupDecision.RecreateSameTarget, _engine.Evaluate(Normal(), 0, AwaitingFirstMember(Now.AddSeconds(-120)), Now));
+
+    [TestMethod]
     public void NormalQuietFor30SecondsRecreatesSameTarget() =>
         Assert.AreEqual(WarmupDecision.RecreateSameTarget, _engine.Evaluate(Normal(), 0, Active(Now.AddSeconds(-30)), Now));
 

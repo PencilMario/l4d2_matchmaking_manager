@@ -56,7 +56,7 @@ public sealed class WarmupDecisionEngine
             return WarmupDecision.SkipTarget;
         if (a2sPlayers >= server.PlayerTarget || now >= attempt.Deadline)
             return WarmupDecision.ReleaseAndReschedule;
-        if (server.RequiresReservation && attempt.Phase == WarmupPhase.AwaitingFirstMember &&
+        if (attempt.Phase == WarmupPhase.AwaitingFirstMember &&
             attempt.FirstExternalMemberAt is null && now >= attempt.LobbyReadyAt.AddSeconds(120))
         {
             return WarmupDecision.RecreateSameTarget;

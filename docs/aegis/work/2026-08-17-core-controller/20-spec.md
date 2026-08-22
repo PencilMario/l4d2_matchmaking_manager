@@ -117,6 +117,8 @@ acquire lease -> create reserved lobby -> wait first external member
 
 ```text
 create lobby -> wait for external members
+     |                 |                |
+     |                 |                +-- no member for 120 s -> leave -> recreate same server
      |                 |
      |                 +-- first/new member -> reset 30 s quiet timer
      |                                            |
@@ -127,7 +129,10 @@ create lobby -> wait for external members
 A2S target reached or 12 min attempt window reached -> leave -> reschedule
 ```
 
-在未出现外部成员时，不启动 30 秒倒计时。一个 Agent 在 12 分钟窗口内因空窗离开后，始终重建同一目标服务器；窗口结束或 A2S 达标后才交回调度器。A2S 人数是停止暖服的权威来源，Steam 大厅成员仅用于判断成员增量和空窗计时。
+在未出现外部成员时，最多等待 120 秒；无人加入则离开并重建同一目标服务器。出现成员后，
+连续 30 秒无新成员时也会重建同一目标。一个 Agent 在 12 分钟窗口内重建后仍继承原始
+尝试开始时间；窗口结束或 A2S 达标后才交回调度器。A2S 人数是停止暖服的权威来源，Steam
+大厅成员仅用于判断成员增量和空窗计时。
 
 核心以每个操作的上一轮成员集合检测进入事件，忽略拥有大厅的 Agent 自身。成员离开后再次进入视为新的进入事件并重置倒计时。由于 Steam API 的轮询本质，两个轮询周期之间发生且完全结束的加入无法被追溯，审计会记录每次实际观测时间。
 
