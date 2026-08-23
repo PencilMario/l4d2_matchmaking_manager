@@ -8,6 +8,12 @@
 Agent 没有 HTTP token。Docker 网络隔离、Core 唯一的 Docker socket 挂载和受管容器
 标签构成访问控制边界，因此不得将 Agent 端口发布到公网或其他不受信任网络。
 
+Agent 内部的统计 uploader 使用 Core 在容器创建/重建时注入的
+`PLAYER_ENTRY_REPORTING_ORIGIN` 与专用 `PLAYER_ENTRY_REPORTING_TOKEN`，调用 Core 的
+`POST /v1/internal/player-entry-events`。这不是 Agent 管理 API 的访问凭据，缺少任一变量
+时仅停用统计 uploader。Steam callback 只执行有界队列的非阻塞入队；网络失败、超时、Core
+不可用、队列满和 Agent 重启允许丢失事件。
+
 ## 会话模型
 
 一个 Agent 对应一个 Steam 账号，并由一个持久的 Steam session actor 独占 Steam API。

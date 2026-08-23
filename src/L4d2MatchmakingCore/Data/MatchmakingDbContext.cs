@@ -8,6 +8,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
     public DbSet<WarmupAgent> WarmupAgents => Set<WarmupAgent>();
     public DbSet<WarmupAttempt> WarmupAttempts => Set<WarmupAttempt>();
     public DbSet<LobbyOperationAudit> LobbyOperationAudits => Set<LobbyOperationAudit>();
+    public DbSet<PlayerEntryEvent> PlayerEntryEvents => Set<PlayerEntryEvent>();
     public DbSet<ReservationLease> ReservationLeases => Set<ReservationLease>();
     public DbSet<TargetServerRotationCursor> TargetServerRotationCursors => Set<TargetServerRotationCursor>();
     public DbSet<SharedLibraryMaintenanceLease> SharedLibraryMaintenanceLeases => Set<SharedLibraryMaintenanceLease>();
@@ -39,6 +40,7 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.Property(agent => agent.AccountConfigVolumeName).HasMaxLength(128).IsRequired();
             entity.HasIndex(agent => agent.AccountConfigVolumeName).IsUnique();
             entity.Property(agent => agent.DownloadRegion).HasMaxLength(128);
+            entity.Property(agent => agent.EntryReportingTokenHash).HasMaxLength(64);
             entity.Property(agent => agent.KeepVncAlive).HasDefaultValue(false);
             entity.Property(agent => agent.ContainerId).HasMaxLength(128);
             entity.Property(agent => agent.NoVncPort).IsRequired();
@@ -66,6 +68,24 @@ public sealed class MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> 
             entity.Property(audit => audit.EventType).HasMaxLength(128).IsRequired();
             entity.Property(audit => audit.DetailsJson).HasColumnType("jsonb").IsRequired();
             entity.HasIndex(audit => audit.ObservedAt);
+        });
+
+        modelBuilder.Entity<PlayerEntryEvent>(entity =>
+        {
+            entity.HasKey(entry => entry.EventId);
+            entity.Property(entry => entry.LobbyId).HasMaxLength(20).IsRequired();
+            entity.Property(entry => entry.LobbyType).HasMaxLength(16).IsRequired();
+            entity.Property(entry => entry.AgentNameSnapshot).HasMaxLength(128).IsRequired();
+            entity.Property(entry => entry.DownloadRegionSnapshot).HasMaxLength(128);
+            entity.Property(entry => entry.TargetServerEndpointSnapshot).HasMaxLength(320).IsRequired();
+            entity.Property(entry => entry.TargetServerNameSnapshot).HasMaxLength(256);
+            entity.Property(entry => entry.TargetModeSnapshot).HasMaxLength(16).IsRequired();
+            entity.HasIndex(entry => entry.OccurredAtUtc);
+            entity.HasIndex(entry => new { entry.AgentId, entry.OccurredAtUtc });
+            entity.HasIndex(entry => new { entry.TargetServerId, entry.OccurredAtUtc });
+            entity.HasIndex(entry => new { entry.DownloadRegionSnapshot, entry.OccurredAtUtc });
+            entity.HasIndex(entry => new { entry.TargetModeSnapshot, entry.OccurredAtUtc });
+            entity.HasIndex(entry => new { entry.LobbyType, entry.OccurredAtUtc });
         });
 
         modelBuilder.Entity<ReservationLease>(entity =>

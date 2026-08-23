@@ -38,6 +38,7 @@ CORE_SCHEDULER_MAX_STARTS_PER_TICK=16
 CORE_IMAGE=l4d2-matchmaking-core:local
 CORE_AGENT_IMAGE=l4d2-steam-lobby-agent:local
 CORE_AGENT_NETWORK=l4d2-matchmaking
+CORE_AGENT_REPORTING_ORIGIN=http://core:8080
 ```
 
 `CORE_AGENT_STEAM_API_LIBRARY_PATH` 必须是 Agent 容器内的路径，且共享库前缀固定为
@@ -170,6 +171,39 @@ RCON，并且 `status` 含有精确的当前 lobby cookie 才保持大厅；明�
 `CORE_AGENT_STEAM_LOGIN_UI_MODE` 改为 `always`，执行 `docker compose up -d` 使 Core
 重载配置，再调用目标 Agent 的 `recreate`。完成后将该值恢复为 `auto` 并再次重建该
 Agent，使其回到静默小内存模式。
+
+创建和重建 Agent 时，Core 会为该 Agent 生成独立的高熵上报 token，只保存其 SHA-256 哈希，
+并将 `PLAYER_ENTRY_REPORTING_ORIGIN`（默认 `http://core:8080`）和
+`PLAYER_ENTRY_REPORTING_TOKEN` 注入新容器。token 不出现在 Agent API 响应、日志或前端；普通
+`start` 不轮换 token。数据库中已有、尚未重建的 Agent 没有上报凭据，但仍可正常暖服；需要
+重建一次后才开始产生统计事件。缺少任一 Agent 上报变量时，只禁用统计旁路，不影响 Steam
+回调、暖服调度或大厅生命周期。
+
+## 玩家进入事件上报与统计
+
+Agent 统计的是成功发送 `ReplyJoinData` 的响应次数，不是已连接游戏服务器的真实玩家数；重复
+响应重复计数，不保存玩家 Steam ID。Agent 使用专用 token 调用：
+
+```http
+POST /v1/internal/player-entry-events
+Authorization: Bearer <agent-reporting-token>
+Content-Type: application/json
+```
+
+body 为最多 100 条事件的批次。Core 要求 token 所属 Agent 与每条事件的 `agentId` 相同，校验
+事件时间位于最近 180 天且不超过当前时间 5 分钟。首次事件返回 `202` 并计入 `accepted`；同一
+内容的重复事件计入 `duplicates`；同一 `eventId` 内容冲突返回 `409`，不覆盖原记录。管理
+`CORE_API_TOKEN` 对此端点无效，Agent token 不能访问管理接口。
+
+管理端统计查询为 `GET /v1/statistics/player-entries`，仅接受管理 Core Bearer。可选参数
+`from`、`to`（UTC ISO-8601，默认最近 24 小时）、`granularity=auto|hour|day|week`、
+`lobbyType=all|standard|reserved`、`targetMode=all|coop|versus`、`agentId` 和
+`targetServerId`。范围采用 `[from,to)`，不能超过 180 天、结束时间不能超过当前时间 5 分钟，
+趋势桶不能超过 5000。`auto` 在不超过 48 小时用小时、不超过 31 天用日，否则用周。
+响应固定使用 `Asia/Shanghai`，包含总响应次数、按实际范围小时数计算的平均每小时、趋势零桶、
+上海 0–23 点规律、Agent 聚合和下载区域聚合。目标模式未指定时归入 `versus`；只有 Core 保存
+的显式 Agent 下载区域参与区域快照，未配置归入 `默认`。原始事件每小时清理一次，保留 180 天；
+清理失败仅记录日志并等待下一周期，不影响事件接收和暖服调度。
 
 ## Lobby 查询
 

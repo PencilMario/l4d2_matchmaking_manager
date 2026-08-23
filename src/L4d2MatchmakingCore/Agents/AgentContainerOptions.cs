@@ -9,7 +9,8 @@ public sealed record AgentContainerOptions(
     int NoVncPortStart,
     int NoVncPortEnd,
     string SteamApiLibraryPath,
-    string SteamLoginUiMode = "auto")
+    string SteamLoginUiMode = "auto",
+    string ReportingOrigin = "http://core:8080")
 {
     public static AgentContainerOptions FromConfiguration(IConfiguration configuration) => new(
         configuration["CORE_AGENT_IMAGE"] ?? "l4d2-steam-lobby-agent:local",
@@ -18,7 +19,8 @@ public sealed record AgentContainerOptions(
         int.TryParse(configuration["CORE_NOVNC_PORT_START"], out var portStart) ? portStart : 18083,
         int.TryParse(configuration["CORE_NOVNC_PORT_END"], out var portEnd) ? portEnd : 18183,
         configuration["CORE_AGENT_STEAM_API_LIBRARY_PATH"] ?? throw new InvalidOperationException("core_agent_steam_api_library_path_not_configured"),
-        ParseLoginUiMode(configuration["CORE_AGENT_STEAM_LOGIN_UI_MODE"]));
+        ParseLoginUiMode(configuration["CORE_AGENT_STEAM_LOGIN_UI_MODE"]),
+        ParseReportingOrigin(configuration["CORE_AGENT_REPORTING_ORIGIN"]));
 
     private static string ParseLoginUiMode(string? configuredMode)
     {
@@ -26,5 +28,13 @@ public sealed record AgentContainerOptions(
         if (mode is not ("auto" or "always" or "never"))
             throw new InvalidOperationException("invalid_core_agent_steam_login_ui_mode");
         return mode;
+    }
+
+    private static string ParseReportingOrigin(string? configuredOrigin)
+    {
+        var origin = string.IsNullOrWhiteSpace(configuredOrigin) ? "http://core:8080" : configuredOrigin.Trim();
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var parsed) || parsed.Scheme is not ("http" or "https"))
+            throw new InvalidOperationException("invalid_core_agent_reporting_origin");
+        return parsed.ToString().TrimEnd('/');
     }
 }

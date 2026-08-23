@@ -115,4 +115,59 @@ export interface AppStateData {
   isRefreshing: boolean;
 }
 
-export type TabKey = 'overview' | 'targets' | 'agents' | 'lobby' | 'settings';
+export type TabKey = 'overview' | 'targets' | 'agents' | 'lobby' | 'statistics' | 'settings';
+
+export type PlayerEntryStatisticsGranularity = 'auto' | 'hour' | 'day' | 'week';
+export type PlayerEntryStatisticsLobbyType = 'all' | 'standard' | 'reserved';
+export type PlayerEntryStatisticsTargetMode = 'all' | 'coop' | 'versus';
+
+export interface PlayerEntryStatisticsQuery {
+  from?: string;
+  to?: string;
+  granularity?: PlayerEntryStatisticsGranularity;
+  lobbyType?: PlayerEntryStatisticsLobbyType;
+  targetMode?: PlayerEntryStatisticsTargetMode;
+  agentId?: string;
+  targetServerId?: string;
+}
+
+export interface PlayerEntryStatisticsTrendPoint {
+  bucketStartUtc: string;
+  label: string;
+  count: number;
+}
+
+export interface PlayerEntryStatisticsDailyPatternPoint {
+  hour: number;
+  label: string;
+  count: number;
+}
+
+export interface PlayerEntryStatisticsAgentRow {
+  agentId: string;
+  agentName: string;
+  nameSnapshots: string[];
+  entries: number;
+  entriesPerHour: number;
+  lastEntryAtUtc?: string | null;
+}
+
+export interface PlayerEntryStatisticsDownloadRegionRow {
+  key?: string | null;
+  label: string;
+  entries: number;
+  entriesPerHour: number;
+}
+
+export interface PlayerEntryStatisticsResponse {
+  fromUtc: string;
+  toUtc: string;
+  timeZone: string;
+  granularity: Exclude<PlayerEntryStatisticsGranularity, 'auto'>;
+  totalEntries: number;
+  entriesPerHour: number;
+  trend: PlayerEntryStatisticsTrendPoint[];
+  dailyPattern: PlayerEntryStatisticsDailyPatternPoint[];
+  agents: PlayerEntryStatisticsAgentRow[];
+  downloadRegions: PlayerEntryStatisticsDownloadRegionRow[];
+}

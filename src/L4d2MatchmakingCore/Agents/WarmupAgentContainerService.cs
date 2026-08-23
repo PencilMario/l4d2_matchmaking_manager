@@ -8,7 +8,10 @@ public sealed class WarmupAgentContainerService(
     AgentContainerOptions options,
     GlobalSettingsService? settings = null)
 {
-    public async Task<string> CreateAsync(WarmupAgent agent, CancellationToken cancellationToken)
+    public async Task<string> CreateAsync(
+        WarmupAgent agent,
+        CancellationToken cancellationToken,
+        string? reportingToken = null)
     {
         if (agent.NoVncPort < options.NoVncPortStart || agent.NoVncPort > options.NoVncPortEnd)
             throw new InvalidOperationException("invalid_novnc_port");
@@ -41,6 +44,11 @@ public sealed class WarmupAgentContainerService(
             "STEAM_DOWNLOAD_REGION=" + (agent.DownloadRegion ?? string.Empty),
             "STEAM_DOWNLOAD_REGION_STATUS_FILE=/home/default/.steam/steam/config/steam-download-region",
         };
+        if (!string.IsNullOrWhiteSpace(reportingToken))
+        {
+            environment.Add("PLAYER_ENTRY_REPORTING_ORIGIN=" + options.ReportingOrigin);
+            environment.Add("PLAYER_ENTRY_REPORTING_TOKEN=" + reportingToken);
+        }
         if (agent.KeepVncAlive && settings is not null)
         {
             var proxy = await settings.GetSteamProxyUrlAsync(cancellationToken);

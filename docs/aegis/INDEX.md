@@ -19,3 +19,4 @@
 - [时间段暂停暖服和调度设计](specs/2026-08-23-global-warmup-pause-windows-design.md)
 - [时间段暂停暖服和调度实施计划](work/2026-08-23-global-warmup-pause-windows/30-plan.md)
 - [时间段暂停暖服和调度实施证据](work/2026-08-23-global-warmup-pause-windows/50-evidence.md)
+- [Warm-up Agent 玩家进入统计设计](specs/2026-08-23-player-entry-statistics-design.md)

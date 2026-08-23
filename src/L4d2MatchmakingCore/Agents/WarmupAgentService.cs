@@ -1,5 +1,6 @@
 using System.Text.Json;
 using L4d2Matchmaking.Contracts;
+using L4d2MatchmakingCore.Auth;
 using L4d2MatchmakingCore.Data;
 using L4d2MatchmakingCore.Scheduling;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,7 @@ public sealed class WarmupAgentService(
             throw new InvalidOperationException("warmup_agent_name_exists");
 
         var now = DateTimeOffset.UtcNow;
+        var reportingToken = AgentReportingTokenService.Create(agentId);
         var agent = new WarmupAgent
         {
             Id = agentId,
@@ -48,6 +50,7 @@ public sealed class WarmupAgentService(
             CreatedAt = now,
             UpdatedAt = now,
             Status = "created",
+            EntryReportingTokenHash = reportingToken.Hash,
         };
         dbContext.WarmupAgents.Add(agent);
         AddAudit("warmup_agent_created", agent.Id, now);
@@ -55,7 +58,7 @@ public sealed class WarmupAgentService(
 
         try
         {
-            await containers.CreateAsync(agent, cancellationToken);
+            await containers.CreateAsync(agent, cancellationToken, reportingToken.Token);
             await containers.StartAsync(agent, cancellationToken);
             agent.Status = "running";
             agent.UpdatedAt = DateTimeOffset.UtcNow;
@@ -177,18 +180,119 @@ public sealed class WarmupAgentService(
         if (!await attemptDrain.DrainAgentAsync(agent.Id, cancellationToken))
             throw new InvalidOperationException("warmup_agent_recreate_drain_failed");
         await vncSessions.CloseAsync(agent.Id, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(agent.ContainerId))
-            await containers.DeleteAsync(agent, cancellationToken);
+        var previousContainerId = agent.ContainerId;
+        var previousReportingTokenHash = agent.EntryReportingTokenHash;
+        agent.ContainerId = null;
+        agent.Status = "recreate_pending";
+        agent.UpdatedAt = DateTimeOffset.UtcNow;
+        // Establish a durable safe boundary before deleting the old container. If any later
+        // database operation fails, the persisted record will not claim the old container is running.
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(previousContainerId))
+        {
+            agent.ContainerId = previousContainerId;
+            try
+            {
+                await containers.DeleteAsync(agent, cancellationToken);
+            }
+            catch
+            {
+                agent.Status = "recreate_pending";
+                agent.UpdatedAt = DateTimeOffset.UtcNow;
+                try
+                {
+                    await dbContext.SaveChangesAsync(CancellationToken.None);
+                }
+                catch
+                {
+                    // The persisted pending/null boundary remains recoverable by deterministic container name.
+                }
+                throw;
+            }
+        }
+
         agent.ContainerId = null;
         agent.Status = "created";
         agent.UpdatedAt = DateTimeOffset.UtcNow;
-        await containers.CreateAsync(agent, cancellationToken);
-        await containers.StartAsync(agent, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var reportingToken = AgentReportingTokenService.Create(agent.Id);
+        try
+        {
+            await containers.CreateAsync(agent, cancellationToken, reportingToken.Token);
+            await containers.StartAsync(agent, cancellationToken);
+        }
+        catch
+        {
+            var replacementContainerId = agent.ContainerId;
+            var replacementRemoved = await TryDeleteContainerAsync(agent);
+            agent.EntryReportingTokenHash = previousReportingTokenHash;
+            agent.ContainerId = replacementRemoved ? null : replacementContainerId;
+            agent.Status = replacementRemoved ? "created" : "recreate_pending";
+            agent.UpdatedAt = DateTimeOffset.UtcNow;
+            try
+            {
+                await dbContext.SaveChangesAsync(CancellationToken.None);
+            }
+            catch
+            {
+                // The persisted created/null boundary remains safe if compensation is unavailable.
+            }
+            throw;
+        }
+        agent.EntryReportingTokenHash = reportingToken.Hash;
         agent.Status = "running";
         agent.UpdatedAt = DateTimeOffset.UtcNow;
-        AddAudit("warmup_agent_recreated", agent.Id, agent.UpdatedAt);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var recreationAudit = AddAudit("warmup_agent_recreated", agent.Id, agent.UpdatedAt);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            var replacementContainerId = agent.ContainerId;
+            var replacementRemoved = await TryDeleteContainerAsync(agent);
+            dbContext.Entry(recreationAudit).State = EntityState.Detached;
+            agent.EntryReportingTokenHash = previousReportingTokenHash;
+            agent.ContainerId = replacementRemoved ? null : replacementContainerId;
+            agent.Status = replacementRemoved ? "created" : "recreate_pending";
+            agent.UpdatedAt = DateTimeOffset.UtcNow;
+            try
+            {
+                await dbContext.SaveChangesAsync(CancellationToken.None);
+            }
+            catch
+            {
+                // Preserve the original failure if the database is still unavailable during compensation.
+            }
+            throw;
+        }
         return ToResponse(agent);
+    }
+
+    private async Task<bool> TryDeleteContainerAsync(WarmupAgent agent)
+    {
+        if (string.IsNullOrWhiteSpace(agent.ContainerId))
+            return true;
+
+        try
+        {
+            await containers.DeleteAsync(agent, CancellationToken.None);
+            return true;
+        }
+        catch
+        {
+            try
+            {
+                await containers.StopAsync(agent, CancellationToken.None);
+            }
+            catch
+            {
+                // Keep the container ID for a later managed cleanup attempt.
+            }
+            return false;
+        }
     }
 
     public Task<bool> DeleteAsync(Guid agentId, CancellationToken cancellationToken) =>
@@ -256,14 +360,18 @@ public sealed class WarmupAgentService(
         throw new InvalidOperationException("no_free_novnc_port");
     }
 
-    private void AddAudit(string eventType, Guid agentId, DateTimeOffset observedAt) =>
-        dbContext.LobbyOperationAudits.Add(new LobbyOperationAudit
+    private LobbyOperationAudit AddAudit(string eventType, Guid agentId, DateTimeOffset observedAt)
+    {
+        var audit = new LobbyOperationAudit
         {
             WarmupAgentId = agentId,
             EventType = eventType,
             DetailsJson = JsonSerializer.Serialize(new { agentId }),
             ObservedAt = observedAt,
-        });
+        };
+        dbContext.LobbyOperationAudits.Add(audit);
+        return audit;
+    }
 
     private static string NormalizeName(string name)
     {

@@ -9,6 +9,7 @@ using L4d2MatchmakingCore.Scheduling;
 using L4d2MatchmakingCore.Servers;
 using L4d2MatchmakingCore.Settings;
 using L4d2MatchmakingCore.Steam;
+using L4d2MatchmakingCore.Statistics;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,6 +22,9 @@ builder.Services
     .AddAuthentication(StaticBearerAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, StaticBearerAuthenticationHandler>(
         StaticBearerAuthenticationHandler.SchemeName,
+        static _ => { })
+    .AddScheme<AuthenticationSchemeOptions, AgentReportingAuthenticationHandler>(
+        AgentReportingAuthenticationHandler.SchemeName,
         static _ => { });
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IRconCredentialProtector, RconCredentialProtector>();
@@ -60,12 +64,16 @@ builder.Services.AddScoped<SharedLibraryMaintenanceService>();
 builder.Services.AddScoped<WarmupSchedulerService>();
 builder.Services.AddScoped<WarmupStatusService>();
 builder.Services.AddScoped<WarmupAttemptDrainService>();
+builder.Services.AddScoped<PlayerEntryEventIngestionService>();
+builder.Services.AddScoped<PlayerEntryStatisticsQuery>();
+builder.Services.AddScoped<PlayerEntryRetentionService>();
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHostedService<AgentVncSessionCleanupService>();
     builder.Services.AddHostedService<AgentMemoryLimitBackgroundService>();
     builder.Services.AddHostedService<WarmupSchedulerBackgroundService>();
     builder.Services.AddHostedService<TargetServerObservationCollector>();
+    builder.Services.AddHostedService<PlayerEntryRetentionBackgroundService>();
 }
 
 var app = builder.Build();
@@ -90,6 +98,8 @@ app.MapLobbyQueryEndpoints();
 app.MapWarmupStatusEndpoints();
 app.MapGlobalSettingsEndpoints();
 app.MapSteamDownloadRegionEndpoints();
+app.MapPlayerEntryEventEndpoints();
+app.MapPlayerEntryStatisticsEndpoints();
 
 app.Run();
 

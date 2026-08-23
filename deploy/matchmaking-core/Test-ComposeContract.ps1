@@ -46,6 +46,10 @@ if ($compose -notmatch 'CORE_AGENT_IMAGE') {
     throw 'Core must receive the managed Agent image tag.'
 }
 
+if ($compose -notmatch 'CORE_AGENT_REPORTING_ORIGIN') {
+    throw 'Core must receive the managed Agent reporting origin.'
+}
+
 if ($compose -cmatch '(?m)^\s+CORE_API_TOKEN:\s*') {
     throw 'Core must not place the management token directly in Compose environment values.'
 }

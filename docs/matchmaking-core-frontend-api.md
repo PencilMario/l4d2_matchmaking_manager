@@ -57,7 +57,21 @@ PUT    /v1/settings/warmup-pause-windows
 
 GET    /v1/warmups
 GET    /v1/lobbies/{lobbyId}
+GET    /v1/statistics/player-entries
 ```
+
+## 玩家进入统计
+
+`GET /v1/statistics/player-entries` 使用管理 Core Bearer，返回成功 `ReplyJoinData` 响应次数，
+不代表真实玩家已经进入游戏服务器。查询参数为 `from`、`to`（UTC ISO-8601，默认最近 24 小时）、
+`granularity=auto|hour|day|week`、`lobbyType=all|standard|reserved`、
+`targetMode=all|coop|versus`、`agentId` 和 `targetServerId`。时间范围采用 `[from,to)`，最大
+180 天，结束时间最多超前 5 分钟，趋势最多 5000 个桶。
+
+响应固定为上海时区并包含 `totalEntries`、`entriesPerHour`、`trend`、`dailyPattern`、`agents`
+和 `downloadRegions`。`versus` 包含未指定模式事件；下载区域只取 Agent 的显式配置，空值显示
+为 `默认`。所有频率都以事件数除以实际选定小时数，空闲小时计入分母；趋势和规律图会返回零桶。
+原始事件保留 180 天，由 Core 每小时清理过期数据。
 
 ## 真实响应采样
 

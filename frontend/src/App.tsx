@@ -25,6 +25,7 @@ import { OverviewView } from './components/OverviewView';
 import { TargetServersView } from './components/TargetServersView';
 import { WarmupAgentsView } from './components/WarmupAgentsView';
 import { LobbyLookupView } from './components/LobbyLookupView';
+import { PlayerEntryStatisticsView } from './components/PlayerEntryStatisticsView';
 import { GlobalSettingsView } from './components/GlobalSettingsView';
 import { loadSteamDownloadRegions } from './services/steam-download-regions';
 
@@ -404,6 +405,7 @@ export default function App() {
             )}
 
             {activeTab === 'lobby' && <LobbyLookupView />}
+            {activeTab === 'statistics' && <PlayerEntryStatisticsView agents={state.agents} targets={state.targets} />}
             {activeTab === 'settings' && <GlobalSettingsView load={async () => { const result = await ApiService.getGlobalSettings(); if (!result.data) throw new Error(result.error || '读取全局设置失败'); return result.data; }} saveProxy={async input => { const result = await ApiService.updateVncProxySettings(input); if (!result.data) throw new Error(result.error || '保存 VNC 代理失败'); return result.data; }} saveKey={async input => { const result = await ApiService.updateSteamWebApiKeySettings(input); if (!result.data) throw new Error(result.error || '保存 Steam Web API Key 失败'); return result.data; }} saveWarmupScheduling={async input => { const result = await ApiService.updateWarmupSchedulingSettings(input); if (!result.data) throw new Error(result.error || '保存暖服和调度状态失败'); await refreshData(); return result.data; }} saveWarmupPauseWindows={async input => { const result = await ApiService.updateWarmupPauseWindowsSettings(input); if (!result.data) throw new Error(result.error || '保存暖服暂停时间段失败'); await refreshData(); return result.data; }} />}
           </div>
         </main>
