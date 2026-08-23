@@ -2,7 +2,7 @@
 
 ## Current slice
 
-已完成停止节点的排出门禁、冲突映射和 endpoint 回归测试；正在做文档与最终验证。
+已完成停止节点的排出门禁、冲突映射、endpoint 回归测试、文档和最终验证；等待合并。
 
 ## Completed
 
@@ -13,6 +13,7 @@
 - 聚焦 Agent endpoint 测试：17/17 通过。
 - Core 测试项目：205 通过、3 个既有 PostgreSQL 环境测试跳过。
 - Solution 测试：7 + 13 + 24 + 25 + 205，通过；Core 仍有 3 个既有环境测试跳过。
+- 独立代码审查 agent 两个等待窗口均超时，已关闭；已完成本地逐项 diff 复核。
 
 ## Evidence refs
 
@@ -27,8 +28,8 @@
 - Scope: 仍只修改 Agent 停止生命周期、对应 API 文档和 Core 集成测试。
 - Compatibility: 保留 API 路径/DTO/数据库结构；失败不停止容器，成功才完成任务。
 - Retirement: 未增加并行排出实现，继续使用 `WarmupAttemptDrainService`。
-- Decision: `continue`。
+- Decision: `continue`，待合并后验证。
 
 ## Next
 
-复核完整 diff，运行最终 `git diff --check`，记录证据，提交实现分支并合回当前 `main`。
+将证据记录提交，按本地合并流程合回 `main`，在合并结果上重跑 Core 测试和 `git diff --check`。
