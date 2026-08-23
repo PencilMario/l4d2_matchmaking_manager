@@ -29,3 +29,25 @@ describe('目标服务器模式选择', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ gameMode: null }));
   });
 });
+
+describe('目标服务器调度优先级', () => {
+  it('拒绝负数并允许 0', () => {
+    const onSubmit = vi.fn();
+    render(<TargetServerForm onSubmit={onSubmit} />);
+    const form = screen.getByRole('form', { name: '目标服务器配置表单' });
+    const priority = screen.getByRole('spinbutton', { name: '调度优先级' });
+
+    expect(priority).toHaveAttribute('min', '0');
+    fireEvent.change(screen.getByLabelText('服务器地址'), { target: { value: '203.0.113.7:27015' } });
+    fireEvent.change(priority, { target: { value: '-1' } });
+    fireEvent.submit(form);
+
+    expect(screen.getByText('调度优先级必须为大于等于 0 的整数。')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.change(priority, { target: { value: '0' } });
+    fireEvent.submit(form);
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ priority: 0 }));
+  });
+});

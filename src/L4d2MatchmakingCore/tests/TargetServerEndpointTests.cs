@@ -48,6 +48,27 @@ public sealed class TargetServerEndpointTests
     }
 
     [TestMethod]
+    public async Task CreateRejectsNegativePriority()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new ServerFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+
+        var response = await client.PostAsJsonAsync("/v1/servers", new CreateTargetServerRequest(
+            "203.0.113.7:27015",
+            false,
+            -1,
+            null,
+            null,
+            null,
+            null));
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+        StringAssert.Contains(await response.Content.ReadAsStringAsync(), "invalid_target_server_configuration");
+    }
+
+    [TestMethod]
     public async Task ModeAcceptsPresetsPreservesBlankAsNullAndRejectsCustomValues()
     {
         using var environment = new CoreTestEnvironment();
@@ -166,7 +187,7 @@ public sealed class TargetServerEndpointTests
         var updated = await client.PutAsJsonAsync($"/v1/servers/{server.Id}", new UpdateTargetServerRequest(
             "203.0.113.7:28015",
             false,
-            -2,
+            2,
             9,
             900,
             7,
@@ -183,6 +204,41 @@ public sealed class TargetServerEndpointTests
         Assert.AreEqual(HttpStatusCode.OK, fetched.StatusCode);
         Assert.AreEqual(HttpStatusCode.NoContent, deleted.StatusCode);
         Assert.AreEqual(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task UpdateRejectsNegativePriorityAndPreservesExistingPriority()
+    {
+        using var environment = new CoreTestEnvironment();
+        await using var factory = new ServerFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CoreTestEnvironment.ApiToken);
+        var created = await client.PostAsJsonAsync("/v1/servers", new CreateTargetServerRequest(
+            "203.0.113.7:28015",
+            false,
+            0,
+            null,
+            null,
+            null,
+            null));
+        var server = await created.Content.ReadFromJsonAsync<TargetServerResponse>();
+        Assert.IsNotNull(server);
+
+        var response = await client.PutAsJsonAsync($"/v1/servers/{server.Id}", new UpdateTargetServerRequest(
+            "203.0.113.7:28016",
+            false,
+            -1,
+            null,
+            null,
+            null,
+            null));
+        var fetched = await client.GetFromJsonAsync<TargetServerResponse>($"/v1/servers/{server.Id}");
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+        StringAssert.Contains(await response.Content.ReadAsStringAsync(), "invalid_target_server_configuration");
+        Assert.IsNotNull(fetched);
+        Assert.AreEqual(0, fetched.Priority);
+        Assert.AreEqual(server.Endpoint, fetched.Endpoint);
     }
 
     [TestMethod]

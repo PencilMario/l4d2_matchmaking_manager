@@ -93,6 +93,10 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
       setError('服务器地址不能为空');
       return;
     }
+    if (priority < 0) {
+      setError('调度优先级必须为大于等于 0 的整数');
+      return;
+    }
 
     setError(null);
     try {
@@ -226,12 +230,13 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
             <input
               id="target-priority"
               type="number"
+              min={0}
               value={priority}
               onChange={(e) => setPriority(parseInt(e.target.value, 10) || 0)}
               className="w-full px-3 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              整数，可为负数，数值越高越优先调度
+              整数，大于等于 0，数值越高越优先调度
             </p>
           </div>
 

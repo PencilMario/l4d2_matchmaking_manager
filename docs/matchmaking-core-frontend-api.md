@@ -163,7 +163,7 @@ Content-Type: application/json; charset=utf-8
 | --- | --- | --- |
 | `endpoint` | string | hostname 或 IPv4；未写端口时使用 `27015`。不接受 URL、IPv6、空白、凭据或端口 `0`。 |
 | `requiresReservation` | boolean | `true` 为预留大厅规则，预留服务器的有效并发固定为 `1`。 |
-| `priority` | integer/null | 越高越优先，可为负数；`null` 使用 `0`。 |
+| `priority` | integer/null | 必须大于等于 `0`，越高越优先；`null` 使用 `0`。 |
 | `maxConcurrentWarmups` | integer/null | 非预留服务器并发上限，必须大于 `0`；`null` 使用 `36`。预留服务器仍返回 `1`。 |
 | `attemptWindowSeconds` | integer/null | 单次暖服窗口，必须大于 `0`；`null` 使用 `720`。 |
 | `playerTarget` | integer/null | A2S 人数达到此值即停止暖服，必须大于 `0`；`null` 使用 `6`。 |
