@@ -145,7 +145,8 @@ public sealed class TargetServerService(
         var effectiveConcurrency = requiresReservation ? 1 : requestedConcurrency;
         var effectiveAttemptWindow = attemptWindowSeconds ?? 720;
         var effectivePlayerTarget = playerTarget ?? 6;
-        if (requestedConcurrency < 1 || effectiveAttemptWindow < 1 || effectivePlayerTarget < 1)
+        var effectivePriority = priority ?? 0;
+        if (effectivePriority < 0 || requestedConcurrency < 1 || effectiveAttemptWindow < 1 || effectivePlayerTarget < 1)
             throw new ArgumentException("invalid_target_server_configuration");
         if (rconPassword is { Length: 0 })
             throw new ArgumentException("invalid_rcon_password");
@@ -159,7 +160,7 @@ public sealed class TargetServerService(
         return new TargetServerConfiguration(
             TargetServerEndpointParser.Parse(endpoint),
             requiresReservation,
-            priority ?? 0,
+            effectivePriority,
             effectiveConcurrency,
             effectiveAttemptWindow,
             effectivePlayerTarget,
