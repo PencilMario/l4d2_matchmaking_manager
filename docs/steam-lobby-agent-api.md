@@ -131,6 +131,21 @@ metadata 确认失败返回 `503 "lobby_data_unavailable"`。临时查询离开�
 `standard` 暖服大厅返回 `503 "lobby_operation_preservation_failed"`；Core 必须隔离该
 Agent，不能继续使用该暖服操作。
 
+### `POST /v1/steam/download-region`
+
+Core 使用该路由将运行中 Agent 的下载区域立即应用到 Steam：
+
+```json
+{"regionId":"197"}
+```
+
+Agent 先原子写入账号私有的
+`~/.config/millennium/steam-region-bridge-region`，再执行现有的
+`supervisorctl restart steam`。`regionId` 为空或空白时会清空账号级目标，Bridge
+随后使用 Steam 默认区域；已有的空目标文件优先于旧环境变量回退。操作成功返回
+`202 Accepted`，写入或 Steam 重启失败则返回错误，Core 不会把失败的区域更新持久化
+为新值。该路由只重启 Steam，不重建 Agent 容器或删除账号卷。
+
 ## 运行约束
 
 - 仅 Core 创建的容器使用共享 `/mnt/steam-library`；每个账号的数据和 Steam Guard

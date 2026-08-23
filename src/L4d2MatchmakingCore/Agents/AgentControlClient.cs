@@ -14,6 +14,10 @@ public interface IAgentControlClient
     Task<AgentOperationSnapshot?> GetOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken);
     Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken);
     Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken) => Task.CompletedTask;
+    Task ApplyDownloadRegionAndRestartAsync(
+        WarmupAgent agent,
+        string? regionId,
+        CancellationToken cancellationToken) => Task.CompletedTask;
     Task<LobbySnapshot> ReadLobbyAsync(WarmupAgent agent, string lobbyId, CancellationToken cancellationToken);
     Task<LobbySnapshot> QueryLobbyAsync(
         WarmupAgent agent,
@@ -67,6 +71,18 @@ public sealed class AgentControlClient(HttpClient httpClient) : IAgentControlCli
     public async Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken)
     {
         using var response = await httpClient.PostAsync(UriFor(agent, "/v1/steam/restart"), null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task ApplyDownloadRegionAndRestartAsync(
+        WarmupAgent agent,
+        string? regionId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsJsonAsync(
+            UriFor(agent, "/v1/steam/download-region"),
+            new AgentDownloadRegionRequest(regionId),
+            cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 

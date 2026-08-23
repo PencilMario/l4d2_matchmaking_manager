@@ -40,13 +40,15 @@ local function configured_region_id()
     end
     local configured_file = configured_home .. "/.config/millennium/steam-region-bridge-region"
     local configured_value = utils.read_file(configured_file)
+    local has_configured_file = configured_value ~= nil
     local file_region_id = parse_region_id(configured_value and utils.trim(configured_value))
     local environment_region_id = parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION_ID"))
         or parse_region_id(utils.getenv("STEAM_DOWNLOAD_REGION"))
-    local target_region_id = file_region_id or environment_region_id
+    local target_region_id = has_configured_file and file_region_id or environment_region_id
     logger:info(
         "Steam Region Bridge config target " .. tostring(target_region_id)
             .. " file " .. configured_file
+            .. " hasFile " .. tostring(has_configured_file)
             .. " fileRegion " .. tostring(file_region_id)
             .. " environmentRegion " .. tostring(environment_region_id)
     )

@@ -396,7 +396,7 @@ disabled，直到后续 drain 成功。
 }
 ```
 
-`status` 当前可能为 `created`、`running`、`stopped` 或 `quarantined`。
+`status` 当前可能为 `created`、`running`、`restarting`、`stopped` 或 `quarantined`。
 `quarantined` 表示 Core 未能安全确认某个暖服操作；前端不应自动重启或复用该 Agent。
 `noVncPort` 是宿主机回环地址上的端口，不能直接作为公网连接地址。
 
@@ -468,9 +468,13 @@ Content-Type: application/json; charset=utf-8
 
 ### `PUT /v1/agents/{agentId}`
 
-请求 body 使用“[写入与读取模型](#写入与读取模型)”中的写入模型。此接口仅更新名称与
-下载区域；已在运行的容器不会自动重建，所以新的下载区域需要调用 `recreate` 后才会
-进入容器环境。
+请求 body 使用“[写入与读取模型](#写入与读取模型)”中的写入模型。名称、VNC 设置和
+下载区域仍由该接口保存；当下载区域实际变化且 Agent 正在运行或正在恢复时，Core 会先调用
+Agent 内部区域应用操作，写入账号级 Millennium 目标并重启 Steam，成功后响应状态为
+`restarting`，等待健康检查恢复为 `running`。停止中的 Agent 只保存新的下载区域，在下次
+启动时应用并重启 Steam；已创建或已隔离的 Agent 由后续生命周期操作应用。区域应用失败返回
+`409 "warmup_agent_download_region_apply_failed"`，名称、区域和状态不会更新。
+该流程不重建容器，因此不需要仅为修改下载区域调用 `recreate`。
 
 ```http
 PUT /v1/agents/b2bda1dd-7e9d-4e30-8900-366f608e26f4
@@ -486,7 +490,7 @@ Content-Type: application/json
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 
-{"id":"b2bda1dd-7e9d-4e30-8900-366f608e26f4","name":"steam-account-02","status":"running","downloadRegion":"tokyo","noVncPort":18084,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:05:00+00:00"}
+{"id":"b2bda1dd-7e9d-4e30-8900-366f608e26f4","name":"steam-account-02","status":"restarting","downloadRegion":"tokyo","noVncPort":18084,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:05:00+00:00"}
 ```
 
 名称冲突返回 `409 "warmup_agent_name_exists"`，名称不合法返回
@@ -526,7 +530,8 @@ Content-Type: application/json; charset=utf-8
 ### `POST /v1/agents/{agentId}/recreate`
 
 没有请求 body。Core 删除并重新创建该 Agent 的容器，但保留 Steam 登录与账号配置卷。
-用于镜像、Steam API 路径、下载区域或登录 UI 模式更新后使环境生效。
+用于镜像、Steam API 路径或登录 UI 模式更新后使环境生效；下载区域更新由
+`PUT /v1/agents/{agentId}` 自动应用并重启 Steam。
 
 成功响应：
 

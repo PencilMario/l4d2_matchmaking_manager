@@ -110,7 +110,16 @@ public sealed class WarmupAgentService(
         return agent is null ? null : ToResponse(agent);
     }
 
-    public async Task<WarmupAgentResponse?> UpdateAsync(
+    public Task<WarmupAgentResponse?> UpdateAsync(
+        Guid agentId,
+        UpdateWarmupAgentRequest request,
+        CancellationToken cancellationToken) =>
+        lifecycleCoordinator.ExecuteAsync(
+            agentId,
+            () => UpdateCoreAsync(agentId, request, cancellationToken),
+            cancellationToken);
+
+    private async Task<WarmupAgentResponse?> UpdateCoreAsync(
         Guid agentId,
         UpdateWarmupAgentRequest request,
         CancellationToken cancellationToken)
@@ -121,8 +130,35 @@ public sealed class WarmupAgentService(
         var name = NormalizeName(request.Name);
         if (await dbContext.WarmupAgents.AnyAsync(candidate => candidate.Id != agentId && candidate.Name == name, cancellationToken))
             throw new InvalidOperationException("warmup_agent_name_exists");
+        var downloadRegion = NormalizeRegion(request.DownloadRegion);
+        var regionChanged = !string.Equals(
+            NormalizeRegion(agent.DownloadRegion),
+            downloadRegion,
+            StringComparison.OrdinalIgnoreCase);
+        if ((agent.Status is "running" or "restarting") && regionChanged)
+        {
+            try
+            {
+                await agentControlClient.ApplyDownloadRegionAndRestartAsync(
+                    agent,
+                    downloadRegion,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "warmup_agent_download_region_apply_failed",
+                    exception);
+            }
+
+            agent.Status = "restarting";
+        }
         agent.Name = name;
-        agent.DownloadRegion = NormalizeRegion(request.DownloadRegion);
+        agent.DownloadRegion = downloadRegion;
         agent.KeepVncAlive = request.KeepVncAlive;
         agent.UpdatedAt = DateTimeOffset.UtcNow;
         AddAudit("warmup_agent_updated", agent.Id, agent.UpdatedAt);
@@ -140,7 +176,38 @@ public sealed class WarmupAgentService(
             return null;
         if (agent.Status != "running")
         {
+            var wasStopped = agent.Status == "stopped";
             await containers.StartAsync(agent, cancellationToken);
+            if (wasStopped)
+            {
+                try
+                {
+                    await agentControlClient.ApplyDownloadRegionAndRestartAsync(
+                        agent,
+                        NormalizeRegion(agent.DownloadRegion),
+                        cancellationToken);
+                }
+                catch
+                {
+                    try
+                    {
+                        await containers.StopAsync(agent, CancellationToken.None);
+                    }
+                    catch
+                    {
+                        // Preserve the stopped database state and let the next start retry application.
+                    }
+
+                    throw;
+                }
+
+                agent.Status = "restarting";
+                agent.UpdatedAt = DateTimeOffset.UtcNow;
+                AddAudit("warmup_agent_started", agent.Id, agent.UpdatedAt);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return ToResponse(agent);
+            }
+
             agent.Status = "running";
             agent.UpdatedAt = DateTimeOffset.UtcNow;
             AddAudit("warmup_agent_started", agent.Id, agent.UpdatedAt);
