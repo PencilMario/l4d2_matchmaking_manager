@@ -162,12 +162,8 @@ RCON，并且 `status` 含有精确的当前 lobby cookie 才保持大厅；明�
 - `POST /v1/agents/{id}/recreate`
 - `DELETE /v1/agents/{id}`
 
-创建和 `recreate` 会分配/保留独立账号卷；停止、删除和重建都不会删除这些卷。运行中或正在
-恢复中的 Agent 更新下载地区时，Core 会写入账号级 Millennium 目标并重启 Steam，成功响应
-暂时为 `restarting`，不重建容器；停止中的 Agent 只保存配置，并在下次 `start` 时应用后重启
-Steam。已创建或已隔离的 Agent 也只保存配置，由后续生命周期操作应用。区域应用失败返回
-`409 "warmup_agent_download_region_apply_failed"`，不会提交新的名称、区域或状态。
-`recreate` 适用于更换镜像、Steam API 路径或需要再次显示 Steam 登录 UI 的场景。名称重复、
+创建和 `recreate` 会分配/保留独立账号卷；停止、删除和重建都不会删除这些卷。`recreate`
+适用于更换镜像、下载地区、Steam API 路径或需要再次显示 Steam 登录 UI 的场景。名称重复、
 无可用 noVNC 端口返回 `409`；请求字段不合法返回 `400`；未知 ID 返回 `404`。Docker
 创建、启动、停止、删除或查询失败目前返回 `500`，调用方不应把它当作可安全重试的输入错误。
 

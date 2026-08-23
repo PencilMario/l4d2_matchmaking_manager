@@ -41,8 +41,6 @@ if ($backendContent -notmatch 'local json = require\("json"\)' -or
 
 if ($backendContent -notmatch 'steam-region-bridge-region' -or
     $backendContent -notmatch 'read_file' -or
-    $backendContent -notmatch 'configured_value ~= nil' -or
-    $backendContent -notmatch 'has_configured_file' -or
     $initializer -notmatch 'millennium_region_target_file' -or
     $initializer -notmatch 'steam-region-bridge-region' -or
     $backendContent -notmatch 'configured_home = "/home/default"' -or

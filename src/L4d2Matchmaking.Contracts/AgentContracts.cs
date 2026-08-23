@@ -53,5 +53,3 @@ public sealed record AgentHealthSnapshot(
     DateTimeOffset ObservedAt,
     string? CurrentDownloadRegion = null,
     DateTimeOffset? CefGuardAppliedAt = null);
-
-public sealed record AgentDownloadRegionRequest(string? RegionId);

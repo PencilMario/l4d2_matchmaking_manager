@@ -32,10 +32,7 @@ Steam 登录和 Steam Guard。
 `auto`。独立诊断 Compose 则使用自身的 `STEAM_LOGIN_UI_MODE=always`。
 
 每个账号的 Steam 配置均写入 `DisableShaderCache=1`。可在 Core 创建/更新 Agent 时设置
-`downloadRegion`；运行中或正在恢复的 Agent 更新区域时，Core 会先更新账号私有 Millennium
-目标文件，再重启 Steam，成功后暂时显示为 `restarting`；停止中的 Agent 只保存配置，在下次
-启动时应用并重启 Steam。
-不需要仅为下载区域变化调用 `recreate`。
+`downloadRegion`；更新后需调用 Agent 的 `recreate` 路由，令新容器取得新的数字区域 ID。
 镜像构建时会校验并预装固定版本的 Millennium，容器初始化时只在旧镜像缺少运行库时
 回退下载同一固定版本，然后自动安装并启用 `steam-region-bridge`。插件使用 Steam
 内部 `SteamClient.Settings` 接口设置

@@ -91,26 +91,7 @@ public sealed class AgentLobbyEndpointTests
         Assert.AreEqual(1, controller.RestartCalls);
     }
 
-    [TestMethod]
-    public async Task DownloadRegionUpdateWritesTheTargetAndRestartsSteam()
-    {
-        var controller = new RecordingDownloadRegionController();
-        await using var factory = new AgentFactory(new FakeSessionService(), steamDownloadRegionController: controller);
-        using var client = factory.CreateClient();
-
-        var response = await client.PostAsJsonAsync(
-            "/v1/steam/download-region",
-            new AgentDownloadRegionRequest("197"));
-
-        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
-        Assert.AreEqual("197", controller.RegionId);
-        Assert.AreEqual(1, controller.ApplyCalls);
-    }
-
-    private sealed class AgentFactory(
-        IAgentSteamSessionService service,
-        ISteamDesktopController? controller = null,
-        ISteamDownloadRegionController? steamDownloadRegionController = null) : WebApplicationFactory<global::Program>
+    private sealed class AgentFactory(IAgentSteamSessionService service, ISteamDesktopController? controller = null) : WebApplicationFactory<global::Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -123,25 +104,7 @@ public sealed class AgentLobbyEndpointTests
                     services.RemoveAll<ISteamDesktopController>();
                     services.AddSingleton(controller);
                 }
-                if (steamDownloadRegionController is not null)
-                {
-                    services.RemoveAll<ISteamDownloadRegionController>();
-                    services.AddSingleton(steamDownloadRegionController);
-                }
             });
-        }
-    }
-
-    private sealed class RecordingDownloadRegionController : ISteamDownloadRegionController
-    {
-        public string? RegionId { get; private set; }
-        public int ApplyCalls { get; private set; }
-
-        public Task ApplyAsync(string? regionId, CancellationToken cancellationToken)
-        {
-            RegionId = regionId;
-            ApplyCalls++;
-            return Task.CompletedTask;
         }
     }
 

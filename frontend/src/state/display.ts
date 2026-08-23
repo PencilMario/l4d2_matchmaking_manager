@@ -31,7 +31,6 @@ const errors: Record<string, string> = {
   invalid_rcon_password: 'RCON 密码无效。', rcon_requires_reservation: '只有需要大厅预留的服务器可以配置 RCON 密码。',
   rcon_encryption_key_not_configured: '控制服务未配置 RCON 凭据加密密钥。', core_rcon_encryption_key_invalid: '控制服务的 RCON 凭据加密配置无效。',
   invalid_warmup_agent_name: '节点名称无效。', warmup_agent_name_exists: '节点名称已存在。', no_free_novnc_port: '没有可用的 noVNC 本机端口。',
-  warmup_agent_download_region_apply_failed: 'Steam 下载区域应用失败，节点配置未修改，请检查节点状态后重试。',
   lobby_data_unavailable: '大厅数据暂时不可用。', lobby_operation_preservation_failed: '大厅操作未能确认保存。', lobby_query_agent_unavailable: '查询节点当前不可用。',
   core_request_failed: '请求控制服务失败。',
 };
