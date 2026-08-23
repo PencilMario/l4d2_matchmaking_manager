@@ -67,6 +67,32 @@ public sealed class AgentControlClientTests
     }
 
     [TestMethod]
+    public async Task ApplyDownloadRegionPostsTheTargetToTheAgentInternalRoute()
+    {
+        var handler = new RecordingHandler(
+            new AgentOperationSnapshot(Guid.NewGuid(), "active", null, null, DateTimeOffset.UnixEpoch),
+            new LobbySnapshot("109775242170052468", "owner", [], new Dictionary<string, string>(), DateTimeOffset.UnixEpoch));
+        using var httpClient = new HttpClient(handler);
+        var client = new AgentControlClient(httpClient);
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Status = "running" };
+
+        await client.ApplyDownloadRegionAndRestartAsync(agent, "197", CancellationToken.None);
+        await client.ApplyDownloadRegionAndRestartAsync(agent, null, CancellationToken.None);
+
+        CollectionAssert.AreEqual(
+            new[] { "197", "<null>" },
+            handler.DownloadRegionRequests);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "POST /v1/steam/download-region",
+                "POST /v1/steam/download-region",
+            },
+            handler.Requests);
+        Assert.IsTrue(handler.Hosts.All(host => host == $"l4d2-agent-{agent.Id:N}:8080"));
+    }
+
+    [TestMethod]
     public async Task StartSendsRconPasswordOnlyInThePrivateOperationRequest()
     {
         var operationId = Guid.NewGuid();
@@ -135,6 +161,7 @@ public sealed class AgentControlClientTests
         public List<string> Hosts { get; } = [];
         public string? RconPassword { get; private set; }
         public string? GameMode { get; private set; }
+        public List<string> DownloadRegionRequests { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -146,6 +173,11 @@ public sealed class AgentControlClientTests
                 var body = await request.Content!.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken);
                 RconPassword = body.GetProperty("rconPassword").GetString();
                 GameMode = body.GetProperty("gameMode").GetString();
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath == "/v1/steam/download-region")
+            {
+                var body = await request.Content!.ReadFromJsonAsync<AgentDownloadRegionRequest>(cancellationToken);
+                DownloadRegionRequests.Add(body?.RegionId ?? "<null>");
             }
             object payload = request.RequestUri.AbsolutePath switch
             {

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.Data;
 using Microsoft.AspNetCore.Hosting;
@@ -83,7 +84,9 @@ public sealed class WarmupAgentEndpointTests
     public async Task AgentSettingsPersistKeepVncAlive()
     {
         using var environment = new CoreTestEnvironment();
-        await using var factory = new AgentFactory(new FakeRuntime());
+        await using var factory = new AgentFactory(
+            new FakeRuntime(),
+            agentControlClient: new RecordingAgentControlClient());
         using var client = CreateAuthorizedClient(factory);
 
         var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null, true));
@@ -98,6 +101,192 @@ public sealed class WarmupAgentEndpointTests
         Assert.IsNotNull(updatedAgent);
         Assert.IsFalse(updatedAgent.KeepVncAlive);
         Assert.AreEqual("tokyo", updatedAgent.DownloadRegion);
+    }
+
+    [TestMethod]
+    public async Task UpdatingRunningAgentRegionAppliesItAndMarksTheAgentRestarting()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient();
+        await using var factory = new AgentFactory(new FakeRuntime(), agentControlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", "33"));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        var updated = await client.PutAsJsonAsync(
+            $"/v1/agents/{agent.Id}",
+            new UpdateWarmupAgentRequest("account-renamed", "197"));
+        var updatedAgent = await updated.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
+        Assert.IsNotNull(updatedAgent);
+        Assert.AreEqual("account-renamed", updatedAgent.Name);
+        Assert.AreEqual("197", updatedAgent.DownloadRegion);
+        Assert.AreEqual("restarting", updatedAgent.Status);
+        CollectionAssert.AreEqual(new[] { "197" }, control.AppliedRegions);
+    }
+
+    [TestMethod]
+    public async Task UpdatingRestartingAgentRegionAppliesTheLatestTargetImmediately()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient();
+        await using var factory = new AgentFactory(new FakeRuntime(), agentControlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", "33"));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        var firstUpdate = await client.PutAsJsonAsync(
+            $"/v1/agents/{agent.Id}",
+            new UpdateWarmupAgentRequest("account-1", "197"));
+        Assert.AreEqual(HttpStatusCode.OK, firstUpdate.StatusCode);
+
+        var secondUpdate = await client.PutAsJsonAsync(
+            $"/v1/agents/{agent.Id}",
+            new UpdateWarmupAgentRequest("account-1", "32"));
+        var updatedAgent = await secondUpdate.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, secondUpdate.StatusCode);
+        Assert.IsNotNull(updatedAgent);
+        Assert.AreEqual("restarting", updatedAgent.Status);
+        Assert.AreEqual("32", updatedAgent.DownloadRegion);
+        CollectionAssert.AreEqual(new[] { "197", "32" }, control.AppliedRegions);
+    }
+
+    [TestMethod]
+    public async Task UpdatingToTheSameRegionDoesNotRestartARunningAgent()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient();
+        await using var factory = new AgentFactory(new FakeRuntime(), agentControlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", "33"));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        var updated = await client.PutAsJsonAsync(
+            $"/v1/agents/{agent.Id}",
+            new UpdateWarmupAgentRequest("account-renamed", " 33 "));
+        var updatedAgent = await updated.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
+        Assert.IsNotNull(updatedAgent);
+        Assert.AreEqual("running", updatedAgent.Status);
+        Assert.AreEqual("account-renamed", updatedAgent.Name);
+        Assert.AreEqual(0, control.AppliedRegions.Count);
+    }
+
+    [TestMethod]
+    public async Task UpdatingStoppedAgentRegionOnlyPersistsTheNewValue()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient();
+        await using var factory = new AgentFactory(new FakeRuntime(), agentControlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", "33"));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        Assert.AreEqual(HttpStatusCode.OK, (await client.PostAsync($"/v1/agents/{agent.Id}/stop", null)).StatusCode);
+
+        var updated = await client.PutAsJsonAsync(
+            $"/v1/agents/{agent.Id}",
+            new UpdateWarmupAgentRequest("account-1", "197"));
+        var updatedAgent = await updated.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
+        Assert.IsNotNull(updatedAgent);
+        Assert.AreEqual("stopped", updatedAgent.Status);
+        Assert.AreEqual("197", updatedAgent.DownloadRegion);
+        Assert.AreEqual(0, control.AppliedRegions.Count);
+    }
+
+    [TestMethod]
+    public async Task StartingStoppedAgentAppliesTheSavedRegionAndMarksItRestarting()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient();
+        await using var factory = new AgentFactory(new FakeRuntime(), agentControlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", "33"));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        Assert.AreEqual(HttpStatusCode.OK, (await client.PostAsync($"/v1/agents/{agent.Id}/stop", null)).StatusCode);
+
+        var updated = await client.PutAsJsonAsync(
+            $"/v1/agents/{agent.Id}",
+            new UpdateWarmupAgentRequest("account-1", "197"));
+        Assert.AreEqual(HttpStatusCode.OK, updated.StatusCode);
+
+        var started = await client.PostAsync($"/v1/agents/{agent.Id}/start", null);
+        var startedAgent = await started.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, started.StatusCode);
+        Assert.IsNotNull(startedAgent);
+        Assert.AreEqual("restarting", startedAgent.Status);
+        CollectionAssert.AreEqual(new[] { "197" }, control.AppliedRegions);
+    }
+
+    [TestMethod]
+    public async Task StartingStoppedAgentLeavesItStoppedWhenRegionApplyFails()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient
+        {
+            ApplyException = new InvalidOperationException("steam_restart_failed"),
+        };
+        var runtime = new FakeRuntime();
+        await using var factory = new AgentFactory(runtime, agentControlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", "197"));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        Assert.AreEqual(HttpStatusCode.OK, (await client.PostAsync($"/v1/agents/{agent.Id}/stop", null)).StatusCode);
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            () => client.PostAsync($"/v1/agents/{agent.Id}/start", null));
+        var current = await client.GetFromJsonAsync<WarmupAgentResponse>($"/v1/agents/{agent.Id}");
+
+        Assert.IsNotNull(current);
+        Assert.AreEqual("stopped", current.Status);
+        Assert.AreEqual("197", current.DownloadRegion);
+        Assert.AreEqual(2, runtime.StopCalls);
+    }
+
+    [TestMethod]
+    public async Task FailedRunningAgentRegionApplyDoesNotPersistAnyUpdate()
+    {
+        using var environment = new CoreTestEnvironment();
+        var control = new RecordingAgentControlClient
+        {
+            ApplyException = new InvalidOperationException("steam_restart_failed"),
+        };
+        await using var factory = new AgentFactory(new FakeRuntime(), agentControlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", "33"));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        var updated = await client.PutAsJsonAsync(
+            $"/v1/agents/{agent.Id}",
+            new UpdateWarmupAgentRequest("account-renamed", "197"));
+        var failure = await updated.Content.ReadAsStringAsync();
+        var current = await client.GetFromJsonAsync<WarmupAgentResponse>($"/v1/agents/{agent.Id}");
+
+        Assert.AreEqual(HttpStatusCode.Conflict, updated.StatusCode);
+        Assert.AreEqual("\"warmup_agent_download_region_apply_failed\"", failure);
+        Assert.IsNotNull(current);
+        Assert.AreEqual("account-1", current.Name);
+        Assert.AreEqual("33", current.DownloadRegion);
+        Assert.AreEqual("running", current.Status);
     }
 
     [TestMethod]
@@ -404,7 +593,8 @@ public sealed class WarmupAgentEndpointTests
     private sealed class AgentFactory(
         FakeRuntime runtime,
         IAgentVncProxy? proxy = null,
-        SaveChangesInterceptor? saveChangesInterceptor = null) : WebApplicationFactory<global::Program>
+        SaveChangesInterceptor? saveChangesInterceptor = null,
+        IAgentControlClient? agentControlClient = null) : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
 
@@ -425,6 +615,11 @@ public sealed class WarmupAgentEndpointTests
                 services.AddSingleton<IAgentContainerRuntime>(runtime);
                 services.RemoveAll<AgentContainerOptions>();
                 services.AddSingleton(new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
+                if (agentControlClient is not null)
+                {
+                    services.RemoveAll<IAgentControlClient>();
+                    services.AddSingleton(agentControlClient);
+                }
                 if (proxy is not null)
                 {
                     services.RemoveAll<IAgentVncProxy>();
@@ -432,6 +627,48 @@ public sealed class WarmupAgentEndpointTests
                 }
             });
         }
+    }
+
+    private sealed class RecordingAgentControlClient : IAgentControlClient
+    {
+        public List<string> AppliedRegions { get; } = [];
+        public Exception? ApplyException { get; init; }
+
+        public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
+            Task.FromResult(new AgentHealthSnapshot(true, null, DateTimeOffset.UnixEpoch));
+
+        public Task<AgentOperationStartResult> StartOperationAsync(
+            WarmupAgent agent,
+            AgentOperationRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<AgentOperationSnapshot?> GetOperationAsync(
+            WarmupAgent agent,
+            Guid operationId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task StopOperationAsync(
+            WarmupAgent agent,
+            Guid operationId,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task ApplyDownloadRegionAndRestartAsync(
+            WarmupAgent agent,
+            string? regionId,
+            CancellationToken cancellationToken)
+        {
+            AppliedRegions.Add(regionId ?? "<null>");
+            return ApplyException is null ? Task.CompletedTask : Task.FromException(ApplyException);
+        }
+
+        public Task<LobbySnapshot> ReadLobbyAsync(
+            WarmupAgent agent,
+            string lobbyId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeVncProxy : IAgentVncProxy

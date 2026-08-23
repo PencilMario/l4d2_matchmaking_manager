@@ -15,6 +15,8 @@ builder.Services.AddSingleton<ISteamSessionActor>(services =>
         services.GetRequiredService<IPlayerEntryEventSink>()));
 builder.Services.AddSingleton<IAgentSteamSessionService, AgentSteamSessionService>();
 builder.Services.AddSingleton<ISteamDesktopController, SupervisorSteamDesktopController>();
+builder.Services.AddSingleton<ISteamDownloadRegionController>(services =>
+    SteamDownloadRegionController.FromEnvironment(services.GetRequiredService<ISteamDesktopController>()));
 builder.Services.AddSingleton<ISteamDesktopDetector, SteamDesktopDetector>();
 builder.Services.AddSingleton<ISteamDownloadRegionReader>(_ => SteamDownloadRegionReader.FromEnvironment());
 builder.Services.AddSingleton<ICefGuardStatusReader>(_ => FileCefGuardStatusReader.FromEnvironment());
@@ -65,6 +67,14 @@ app.MapPost("/v1/steam/restart", async (
     CancellationToken cancellationToken) =>
 {
     await controller.RestartAsync(cancellationToken);
+    return Results.Accepted();
+});
+app.MapPost("/v1/steam/download-region", async (
+    AgentDownloadRegionRequest request,
+    ISteamDownloadRegionController controller,
+    CancellationToken cancellationToken) =>
+{
+    await controller.ApplyAsync(request.RegionId, cancellationToken);
     return Results.Accepted();
 });
 app.MapGet("/v1/lobbies/{lobbyId}", async (
