@@ -521,7 +521,21 @@ Content-Type: application/json; charset=utf-8
 {"id":"b2bda1dd-7e9d-4e30-8900-366f608e26f4","name":"steam-account-02","status":"stopped","downloadRegion":"tokyo","noVncPort":18084,"createdAt":"2026-08-17T12:00:00+00:00","updatedAt":"2026-08-17T12:07:00+00:00"}
 ```
 
-未知 UUID 返回 `404`；Docker 停止失败可能返回 `500`。
+停止 `running` Agent 前，Core 会先停止该节点关联的 `active`/`uncertain` 暖服 operation；
+确认后任务变为 `completed`，匹配的 reservation lease 被释放，然后才关闭 VNC 和停止
+容器。若任一 operation 无法确认停止，接口返回：
+
+```http
+HTTP/1.1 409 Conflict
+Content-Type: application/json; charset=utf-8
+
+"warmup_agent_stop_drain_failed"
+```
+
+此时未确认任务会保留，Agent 按既有失败隔离语义处理，容器不会停止；前端应刷新节点和
+暖服数据后重试。被隔离的 Agent 可再次调用该接口重试排出，确认成功后才停止容器；未知
+UUID 返回 `404`；Docker 停止失败可能返回 `500`。其他非 `running` Agent 仍为幂等读取式
+成功。
 
 ### `POST /v1/agents/{agentId}/recreate`
 

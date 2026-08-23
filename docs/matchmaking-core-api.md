@@ -167,6 +167,13 @@ RCON，并且 `status` 含有精确的当前 lobby cookie 才保持大厅；明�
 无可用 noVNC 端口返回 `409`；请求字段不合法返回 `400`；未知 ID 返回 `404`。Docker
 创建、启动、停止、删除或查询失败目前返回 `500`，调用方不应把它当作可安全重试的输入错误。
 
+停止一个 `running` Agent 前，Core 会先排出该 Agent 关联的 `active`/`uncertain` 暖服任务，
+确认远程 operation 停止后将任务标记为 `completed` 并释放匹配的 reservation lease，
+然后才关闭 VNC 并停止容器。如果任一 operation 无法确认，返回
+`409 "warmup_agent_stop_drain_failed"`，保留未确认任务并按既有失败隔离语义处理；容器
+不会停止，调用方应刷新 Agent 和暖服状态后重试。被隔离的 Agent 再次调用停止接口时会
+重试排出，确认成功后才停止容器；其他非运行节点仍按原有幂等停止流程执行。
+
 要重新认证一个已登录账号，暂时将 Core `.env` 的
 `CORE_AGENT_STEAM_LOGIN_UI_MODE` 改为 `always`，执行 `docker compose up -d` 使 Core
 重载配置，再调用目标 Agent 的 `recreate`。完成后将该值恢复为 `auto` 并再次重建该

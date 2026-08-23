@@ -72,8 +72,20 @@ public static class WarmupAgentEndpoints
     private static Task<IResult> StartAsync(Guid agentId, WarmupAgentService service, CancellationToken cancellationToken) =>
         MutateAsync(() => service.StartAsync(agentId, cancellationToken));
 
-    private static Task<IResult> StopAsync(Guid agentId, WarmupAgentService service, CancellationToken cancellationToken) =>
-        MutateAsync(() => service.StopAsync(agentId, cancellationToken));
+    private static async Task<IResult> StopAsync(
+        Guid agentId,
+        WarmupAgentService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await MutateAsync(() => service.StopAsync(agentId, cancellationToken));
+        }
+        catch (InvalidOperationException exception) when (exception.Message == "warmup_agent_stop_drain_failed")
+        {
+            return Results.Conflict(exception.Message);
+        }
+    }
 
     private static async Task<IResult> RecreateAsync(
         Guid agentId,

@@ -157,8 +157,10 @@ public sealed class WarmupAgentService(
         var agent = await FindAsync(agentId, cancellationToken);
         if (agent is null)
             return null;
-        if (agent.Status == "running")
+        if (agent.Status is "running" or "quarantined")
         {
+            if (!await attemptDrain.DrainAgentAsync(agent.Id, cancellationToken))
+                throw new InvalidOperationException("warmup_agent_stop_drain_failed");
             await vncSessions.CloseAsync(agent.Id, cancellationToken);
             await containers.StopAsync(agent, cancellationToken);
             agent.Status = "stopped";

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using L4d2Matchmaking.Contracts;
 using L4d2MatchmakingCore.Agents;
 using L4d2MatchmakingCore.Data;
 using Microsoft.AspNetCore.Hosting;
@@ -126,6 +127,142 @@ public sealed class WarmupAgentEndpointTests
         Assert.AreEqual(2, runtime.DeleteCalls);
         Assert.IsTrue(runtime.DeleteRequests.All(request => !request.DeleteVolumes));
         Assert.AreEqual(HttpStatusCode.NotFound, (await client.GetAsync($"/v1/agents/{agent.Id}")).StatusCode);
+    }
+
+    [TestMethod]
+    public async Task StopDrainsAgentAttemptsBeforeStoppingContainer()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        var control = new FakeAgentControlClient(runtime.Events);
+        await using var factory = new AgentFactory(runtime, controlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        var firstTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015 };
+        var secondTarget = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27016 };
+        var firstOperation = Guid.NewGuid();
+        var secondOperation = Guid.NewGuid();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+            db.AddRange(
+                firstTarget,
+                secondTarget,
+                new WarmupAttempt
+                {
+                    Id = Guid.NewGuid(),
+                    TargetServerId = firstTarget.Id,
+                    WarmupAgentId = agent.Id,
+                    OperationId = firstOperation,
+                    Mode = "standard",
+                    State = "active",
+                    StartedAt = DateTimeOffset.UtcNow,
+                    ObservedAt = DateTimeOffset.UtcNow,
+                },
+                new WarmupAttempt
+                {
+                    Id = Guid.NewGuid(),
+                    TargetServerId = secondTarget.Id,
+                    WarmupAgentId = agent.Id,
+                    OperationId = secondOperation,
+                    Mode = "standard",
+                    State = "uncertain",
+                    StartedAt = DateTimeOffset.UtcNow,
+                    ObservedAt = DateTimeOffset.UtcNow,
+                },
+                new ReservationLease
+                {
+                    TargetServerId = firstTarget.Id,
+                    OperationId = firstOperation,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10),
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsync($"/v1/agents/{agent.Id}/stop", null);
+        var stopped = await response.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(stopped);
+        Assert.AreEqual("stopped", stopped.Status);
+        CollectionAssert.AreEquivalent(new[] { firstOperation, secondOperation }, control.StoppedOperations);
+        var containerStopIndex = runtime.Events.IndexOf("container-stop");
+        var lastOperationStopIndex = runtime.Events.FindLastIndex(eventName => eventName.StartsWith("operation-stop:", StringComparison.Ordinal));
+        Assert.IsTrue(containerStopIndex > lastOperationStopIndex);
+        Assert.AreEqual(1, runtime.StopCalls);
+
+        await using var afterScope = factory.Services.CreateAsyncScope();
+        var afterDb = afterScope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.AreEqual(0, await afterDb.WarmupAttempts.CountAsync(attempt => attempt.State == "active" || attempt.State == "uncertain"));
+        Assert.IsFalse(await afterDb.ReservationLeases.AnyAsync());
+    }
+
+    [TestMethod]
+    public async Task StopReturnsConflictAndKeepsContainerRunningWhenAttemptDrainFails()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        var control = new FakeAgentControlClient(runtime.Events)
+        {
+            StopException = new HttpRequestException("agent_unreachable"),
+        };
+        await using var factory = new AgentFactory(runtime, controlClient: control);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        var target = new TargetServer { Id = Guid.NewGuid(), Host = "127.0.0.1", Port = 27015 };
+        var operation = Guid.NewGuid();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+            db.AddRange(
+                target,
+                new WarmupAttempt
+                {
+                    Id = Guid.NewGuid(),
+                    TargetServerId = target.Id,
+                    WarmupAgentId = agent.Id,
+                    OperationId = operation,
+                    Mode = "standard",
+                    State = "active",
+                    StartedAt = DateTimeOffset.UtcNow,
+                    ObservedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsync($"/v1/agents/{agent.Id}/stop", null);
+
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+        StringAssert.Contains(await response.Content.ReadAsStringAsync(), "warmup_agent_stop_drain_failed");
+        Assert.AreEqual(0, runtime.StopCalls);
+        Assert.AreEqual(0, runtime.Events.Count(eventName => eventName == "container-stop"));
+
+        await using var afterScope = factory.Services.CreateAsyncScope();
+        var afterDb = afterScope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        var persistedAttempt = await afterDb.WarmupAttempts.SingleAsync();
+        var persistedAgent = await afterDb.WarmupAgents.SingleAsync(candidate => candidate.Id == agent.Id);
+        Assert.AreEqual("active", persistedAttempt.State);
+        Assert.AreEqual("quarantined", persistedAgent.Status);
+
+        control.StopException = null;
+        var retried = await client.PostAsync($"/v1/agents/{agent.Id}/stop", null);
+        var stopped = await retried.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, retried.StatusCode);
+        Assert.IsNotNull(stopped);
+        Assert.AreEqual("stopped", stopped.Status);
+        Assert.AreEqual(1, runtime.StopCalls);
+
+        await using var completedScope = factory.Services.CreateAsyncScope();
+        var completedDb = completedScope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        Assert.AreEqual("completed", (await completedDb.WarmupAttempts.SingleAsync()).State);
     }
 
     [TestMethod]
@@ -404,7 +541,8 @@ public sealed class WarmupAgentEndpointTests
     private sealed class AgentFactory(
         FakeRuntime runtime,
         IAgentVncProxy? proxy = null,
-        SaveChangesInterceptor? saveChangesInterceptor = null) : WebApplicationFactory<global::Program>
+        SaveChangesInterceptor? saveChangesInterceptor = null,
+        IAgentControlClient? controlClient = null) : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
 
@@ -423,6 +561,11 @@ public sealed class WarmupAgentEndpointTests
                 });
                 services.RemoveAll<IAgentContainerRuntime>();
                 services.AddSingleton<IAgentContainerRuntime>(runtime);
+                if (controlClient is not null)
+                {
+                    services.RemoveAll<IAgentControlClient>();
+                    services.AddSingleton(controlClient);
+                }
                 services.RemoveAll<AgentContainerOptions>();
                 services.AddSingleton(new AgentContainerOptions("image", "/library", "network", 18083, 18183, "/mnt/steam-library/libsteam_api.so"));
                 if (proxy is not null)
@@ -432,6 +575,36 @@ public sealed class WarmupAgentEndpointTests
                 }
             });
         }
+    }
+
+    private sealed class FakeAgentControlClient(ICollection<string> events) : IAgentControlClient
+    {
+        public List<Guid> StoppedOperations { get; } = [];
+        public Exception? StopException { get; set; }
+
+        public Task<AgentHealthSnapshot> GetHealthAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
+            throw new NotImplementedException();
+
+        public Task<AgentOperationStartResult> StartOperationAsync(WarmupAgent agent, AgentOperationRequest request, CancellationToken cancellationToken) =>
+            throw new NotImplementedException();
+
+        public Task<AgentOperationSnapshot?> GetOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken) =>
+            throw new NotImplementedException();
+
+        public Task StopOperationAsync(WarmupAgent agent, Guid operationId, CancellationToken cancellationToken)
+        {
+            if (StopException is not null)
+                return Task.FromException(StopException);
+            StoppedOperations.Add(operationId);
+            events.Add($"operation-stop:{operationId}");
+            return Task.CompletedTask;
+        }
+
+        public Task RestartSteamAsync(WarmupAgent agent, CancellationToken cancellationToken) =>
+            throw new NotImplementedException();
+
+        public Task<LobbySnapshot> ReadLobbyAsync(WarmupAgent agent, string lobbyId, CancellationToken cancellationToken) =>
+            throw new NotImplementedException();
     }
 
     private sealed class FakeVncProxy : IAgentVncProxy
@@ -497,6 +670,7 @@ public sealed class WarmupAgentEndpointTests
         public int StopVncCalls { get; private set; }
         public int DeleteCalls { get; private set; }
         public List<(string ContainerId, bool DeleteVolumes)> DeleteRequests { get; } = [];
+        public List<string> Events { get; } = [];
 
         public Task<IReadOnlySet<int>> GetUsedHostPortsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(_usedPorts);
@@ -530,6 +704,7 @@ public sealed class WarmupAgentEndpointTests
         public Task StopAsync(string containerId, CancellationToken cancellationToken)
         {
             StopCalls++;
+            Events.Add("container-stop");
             return Task.CompletedTask;
         }
 
