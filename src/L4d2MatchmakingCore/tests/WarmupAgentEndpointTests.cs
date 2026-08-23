@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -125,6 +126,112 @@ public sealed class WarmupAgentEndpointTests
         Assert.AreEqual(2, runtime.DeleteCalls);
         Assert.IsTrue(runtime.DeleteRequests.All(request => !request.DeleteVolumes));
         Assert.AreEqual(HttpStatusCode.NotFound, (await client.GetAsync($"/v1/agents/{agent.Id}")).StatusCode);
+    }
+
+    [TestMethod]
+    public async Task RecreateCleansUpTheNewContainerWhenItCannotStart()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        await using var factory = new AgentFactory(runtime);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        runtime.FailNextStart = true;
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            () => client.PostAsync($"/v1/agents/{agent.Id}/recreate", null));
+
+        var afterFailure = await client.GetFromJsonAsync<WarmupAgentResponse>($"/v1/agents/{agent.Id}");
+
+        Assert.AreEqual(2, runtime.CreateCalls);
+        Assert.AreEqual(2, runtime.DeleteCalls);
+        Assert.IsTrue(runtime.DeleteRequests.All(request => !request.DeleteVolumes));
+        Assert.IsNotNull(afterFailure);
+        Assert.AreEqual("created", afterFailure.Status);
+    }
+
+    [TestMethod]
+    public async Task RecreateCleansUpTheNewContainerWhenPersistingItsTokenFails()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        var saveFailure = new FailOnSaveNumberInterceptor(6);
+        await using var factory = new AgentFactory(runtime, saveChangesInterceptor: saveFailure);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+        await using var beforeScope = factory.Services.CreateAsyncScope();
+        var beforeDb = beforeScope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        var previousHash = (await beforeDb.WarmupAgents.SingleAsync(candidate => candidate.Id == agent.Id)).EntryReportingTokenHash;
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            () => client.PostAsync($"/v1/agents/{agent.Id}/recreate", null));
+
+        var afterFailure = await client.GetFromJsonAsync<WarmupAgentResponse>($"/v1/agents/{agent.Id}");
+        await using var afterScope = factory.Services.CreateAsyncScope();
+        var afterDb = afterScope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        var persisted = await afterDb.WarmupAgents.SingleAsync(candidate => candidate.Id == agent.Id);
+
+        Assert.AreEqual(2, runtime.CreateCalls);
+        Assert.AreEqual(2, runtime.DeleteCalls);
+        Assert.IsTrue(runtime.DeleteRequests.Any(request => request.ContainerId == "container-2"));
+        Assert.IsNotNull(afterFailure);
+        Assert.AreEqual("created", afterFailure.Status);
+        Assert.IsNull(persisted.ContainerId);
+        Assert.AreEqual(previousHash, persisted.EntryReportingTokenHash);
+    }
+
+    [TestMethod]
+    public async Task RecreateRetainsAReplacementContainerForLaterCleanupWhenDeletionFails()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime { FailDeleteContainers = new HashSet<string> { "container-2" } };
+        var saveFailure = new FailOnSaveNumberInterceptor(6);
+        await using var factory = new AgentFactory(runtime, saveChangesInterceptor: saveFailure);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            () => client.PostAsync($"/v1/agents/{agent.Id}/recreate", null));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        var persisted = await db.WarmupAgents.SingleAsync(candidate => candidate.Id == agent.Id);
+
+        Assert.AreEqual("recreate_pending", persisted.Status);
+        Assert.AreEqual("container-2", persisted.ContainerId);
+    }
+
+    [TestMethod]
+    public async Task RecreateKeepsThePersistedPendingBoundaryWhenCompensationSaveFails()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        var saveFailure = new FailOnSaveNumbersInterceptor(6, 7);
+        await using var factory = new AgentFactory(runtime, saveChangesInterceptor: saveFailure);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            () => client.PostAsync($"/v1/agents/{agent.Id}/recreate", null));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+        var persisted = await db.WarmupAgents.SingleAsync(candidate => candidate.Id == agent.Id);
+
+        Assert.AreEqual("created", persisted.Status);
+        Assert.IsNull(persisted.ContainerId);
     }
 
     [TestMethod]
@@ -294,7 +401,10 @@ public sealed class WarmupAgentEndpointTests
         return client;
     }
 
-    private sealed class AgentFactory(FakeRuntime runtime, IAgentVncProxy? proxy = null) : WebApplicationFactory<global::Program>
+    private sealed class AgentFactory(
+        FakeRuntime runtime,
+        IAgentVncProxy? proxy = null,
+        SaveChangesInterceptor? saveChangesInterceptor = null) : WebApplicationFactory<global::Program>
     {
         private readonly string _databaseName = Guid.NewGuid().ToString("N");
 
@@ -305,7 +415,12 @@ public sealed class WarmupAgentEndpointTests
             {
                 services.RemoveAll<DbContextOptions<MatchmakingDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<MatchmakingDbContext>>();
-                services.AddDbContext<MatchmakingDbContext>(options => options.UseInMemoryDatabase(_databaseName));
+                services.AddDbContext<MatchmakingDbContext>(options =>
+                {
+                    options.UseInMemoryDatabase(_databaseName);
+                    if (saveChangesInterceptor is not null)
+                        options.AddInterceptors(saveChangesInterceptor);
+                });
                 services.RemoveAll<IAgentContainerRuntime>();
                 services.AddSingleton<IAgentContainerRuntime>(runtime);
                 services.RemoveAll<AgentContainerOptions>();
@@ -334,6 +449,37 @@ public sealed class WarmupAgentEndpointTests
         }
     }
 
+    private sealed class FailOnSaveNumberInterceptor(int failureNumber) : SaveChangesInterceptor
+    {
+        private int saveCount;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref saveCount) == failureNumber)
+                throw new InvalidOperationException("database_save_failed");
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class FailOnSaveNumbersInterceptor(params int[] failureNumbers) : SaveChangesInterceptor
+    {
+        private readonly HashSet<int> failures = failureNumbers.ToHashSet();
+        private int saveCount;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (failures.Contains(Interlocked.Increment(ref saveCount)))
+                throw new InvalidOperationException("database_save_failed");
+            return ValueTask.FromResult(result);
+        }
+    }
+
     private sealed class FakeRuntime(IReadOnlySet<int>? usedPorts = null) : IAgentContainerRuntime
     {
         private readonly IReadOnlySet<int> _usedPorts = usedPorts ?? new HashSet<int>();
@@ -341,6 +487,8 @@ public sealed class WarmupAgentEndpointTests
         public TaskCompletionSource? CreateStarted { get; init; }
         public TaskCompletionSource? DeleteStarted { get; init; }
         public Exception? VncStateException { get; init; }
+        public bool FailNextStart { get; set; }
+        public IReadOnlySet<string> FailDeleteContainers { get; init; } = new HashSet<string>();
         public AgentVncState VncState { get; set; } = AgentVncState.Stopped;
         public int CreateCalls { get; private set; }
         public int StartCalls { get; private set; }
@@ -371,6 +519,11 @@ public sealed class WarmupAgentEndpointTests
         public Task StartAsync(string containerId, CancellationToken cancellationToken)
         {
             StartCalls++;
+            if (FailNextStart)
+            {
+                FailNextStart = false;
+                return Task.FromException(new InvalidOperationException("agent_start_failed"));
+            }
             return Task.CompletedTask;
         }
 
@@ -385,6 +538,8 @@ public sealed class WarmupAgentEndpointTests
             DeleteCalls++;
             DeleteRequests.Add((containerId, deleteVolumes));
             DeleteStarted?.TrySetResult();
+            if (FailDeleteContainers.Contains(containerId))
+                return Task.FromException(new InvalidOperationException("agent_delete_failed"));
             return Task.CompletedTask;
         }
 

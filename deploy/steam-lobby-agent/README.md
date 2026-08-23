@@ -52,6 +52,13 @@ Steam 登录和 Steam Guard。
 端口，Agent HTTP 保持在 Docker 内网。内部 API 见
 [steam-lobby-agent-api.md](../../docs/steam-lobby-agent-api.md)。
 
+## 玩家进入统计上报
+
+Core 管理的 Agent 创建或重建时会自动注入 `PLAYER_ENTRY_REPORTING_ORIGIN` 和每个 Agent
+独立的 `PLAYER_ENTRY_REPORTING_TOKEN`。这两个变量只用于上报成功的 `ReplyJoinData` 响应，
+不会出现在管理 API 响应或日志中；缺少任一变量时仅禁用统计上报，不影响暖服。旧 Agent
+需要执行一次重建才会获得统计凭据。独立诊断 Compose 可保留变量为空。
+
 Ubuntu 宿主机若启用了 AppArmor 用户命名空间限制，需要管理员按上游 Steam 镜像要求配置
 `kernel.apparmor_restrict_unprivileged_userns=0`。这是宿主机级安全放宽，应限制 Docker
 管理权限并定期复核。

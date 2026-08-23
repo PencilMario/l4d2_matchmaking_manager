@@ -113,6 +113,34 @@ public sealed class DockerAgentContainerRuntimeTests
     }
 
     [TestMethod]
+    public async Task CreateInjectsReportingOriginAndTokenOnlyWhenProvided()
+    {
+        var runtime = new FakeRuntime();
+        var options = new AgentContainerOptions(
+            "image",
+            "/library",
+            "network",
+            18083,
+            18183,
+            "/mnt/steam-library/libsteam_api.so",
+            ReportingOrigin: "http://core.internal:8080");
+        var service = new WarmupAgentContainerService(runtime, options);
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "account-1", NoVncPort = 18083 };
+
+        await service.CreateAsync(agent, CancellationToken.None, "agent-id.secret");
+        Assert.IsNotNull(runtime.Definition);
+        CollectionAssert.Contains(runtime.Definition.Environment.ToList(), "PLAYER_ENTRY_REPORTING_ORIGIN=http://core.internal:8080");
+        CollectionAssert.Contains(runtime.Definition.Environment.ToList(), "PLAYER_ENTRY_REPORTING_TOKEN=agent-id.secret");
+
+        var disabledRuntime = new FakeRuntime();
+        var disabledService = new WarmupAgentContainerService(disabledRuntime, options);
+        await disabledService.CreateAsync(new WarmupAgent { Id = Guid.NewGuid(), Name = "account-2", NoVncPort = 18084 }, CancellationToken.None);
+        Assert.IsNotNull(disabledRuntime.Definition);
+        CollectionAssert.DoesNotContain(disabledRuntime.Definition.Environment.ToList(), "PLAYER_ENTRY_REPORTING_ORIGIN=http://core.internal:8080");
+        CollectionAssert.DoesNotContain(disabledRuntime.Definition.Environment.ToList(), "PLAYER_ENTRY_REPORTING_TOKEN=agent-id.secret");
+    }
+
+    [TestMethod]
     public async Task CreateDefaultsToReclaimedVncMode()
     {
         var runtime = new FakeRuntime();

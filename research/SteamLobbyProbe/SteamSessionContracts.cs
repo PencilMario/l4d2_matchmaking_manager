@@ -26,7 +26,6 @@ internal interface ISteamNativeRuntime : IDisposable
     void LeaveLobby(ulong lobbyId);
     void PumpCallbacks();
 }
-
 internal enum NativeLobbyJoinResult
 {
     Success,

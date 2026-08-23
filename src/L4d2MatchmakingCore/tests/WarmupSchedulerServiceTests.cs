@@ -64,7 +64,7 @@ public sealed class WarmupSchedulerServiceTests
         var server = new TargetServer
         {
             Id = Guid.NewGuid(),
-            Host = "127.0.0.1",
+            Host = "localhost",
             Port = 27015,
             Enabled = true,
         };
@@ -156,6 +156,42 @@ public sealed class WarmupSchedulerServiceTests
         await scheduler.TickAsync(CancellationToken.None);
 
         Assert.AreEqual("coop", agents.LastStartRequest?.GameMode);
+    }
+
+    [TestMethod]
+    public async Task TickPassesImmutableEntryStatisticsContextWithVersusDefault()
+    {
+        await using var db = CreateDb();
+        var agent = new WarmupAgent { Id = Guid.NewGuid(), Name = "agent", Status = "running", DownloadRegion = "hongkong", SteamDataVolumeName = "steam", AccountConfigVolumeName = "config", NoVncPort = 18083 };
+        var server = new TargetServer
+        {
+            Id = Guid.NewGuid(),
+            Host = "localhost",
+            Port = 27015,
+            Enabled = true,
+            RequiresReservation = false,
+            GameMode = null,
+            PlayerTarget = 6,
+            AttemptWindowSeconds = 720,
+        };
+        db.AddRange(agent, server);
+        await db.SaveChangesAsync();
+        var observations = new TargetServerObservationStore();
+        observations.Replace(server.Id, new TargetServerObservation(server.Id, "online", "target-name", 0, 8, DateTimeOffset.UtcNow));
+        var agents = new FakeAgents(null);
+        var scheduler = CreateSchedulerWithObservationStore(db, agents, new SharedLibraryMaintenanceService(db), new FakeSelector(agent), new FakeA2s(), observations);
+
+        await scheduler.TickAsync(CancellationToken.None);
+
+        var context = agents.LastStartRequest?.EntryStatisticsContext;
+        Assert.IsNotNull(context);
+        Assert.AreEqual(agent.Id, context.AgentId);
+        Assert.AreEqual("agent", context.AgentNameSnapshot);
+        Assert.AreEqual("33", context.ConfiguredDownloadRegionSnapshot);
+        Assert.AreEqual(server.Id, context.TargetServerId);
+        Assert.AreEqual("127.0.0.1:27015", context.TargetServerEndpointSnapshot);
+        Assert.AreEqual("target-name", context.TargetServerNameSnapshot);
+        Assert.AreEqual("versus", context.TargetModeSnapshot);
     }
 
     [TestMethod]

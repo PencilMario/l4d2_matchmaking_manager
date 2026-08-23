@@ -579,6 +579,14 @@ public sealed class WarmupSchedulerService(
                 rconPassword)
             {
                 GameMode = plan.Server.GameMode,
+                EntryStatisticsContext = new EntryStatisticsContext(
+                    plan.Agent.Id,
+                    plan.Agent.Name,
+                    PlayerEntryStatisticsContract.NormalizeDownloadRegion(plan.Agent.DownloadRegion),
+                    plan.Server.Id,
+                    $"{plan.Address}:{plan.Server.Port}",
+                    observationStore?.Get(plan.Server.Id)?.ServerName,
+                    PlayerEntryStatisticsContract.NormalizeGameMode(plan.Server.GameMode)),
             }, cancellationToken);
             return new StartResult(plan, start, null);
         }

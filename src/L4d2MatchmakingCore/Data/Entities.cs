@@ -24,6 +24,7 @@ public sealed class WarmupAgent
     public string SteamDataVolumeName { get; set; } = string.Empty;
     public string AccountConfigVolumeName { get; set; } = string.Empty;
     public string? DownloadRegion { get; set; }
+    public string? EntryReportingTokenHash { get; set; }
     public bool KeepVncAlive { get; set; }
     public string? ContainerId { get; set; }
     public int NoVncPort { get; set; }
@@ -60,6 +61,23 @@ public sealed class LobbyOperationAudit
     public string EventType { get; set; } = string.Empty;
     public string DetailsJson { get; set; } = "{}";
     public DateTimeOffset ObservedAt { get; set; }
+}
+
+public sealed class PlayerEntryEvent
+{
+    public Guid EventId { get; set; }
+    public DateTimeOffset OccurredAtUtc { get; set; }
+    public DateTimeOffset IngestedAtUtc { get; set; }
+    public Guid OperationId { get; set; }
+    public string LobbyId { get; set; } = string.Empty;
+    public string LobbyType { get; set; } = string.Empty;
+    public Guid AgentId { get; set; }
+    public string AgentNameSnapshot { get; set; } = string.Empty;
+    public string? DownloadRegionSnapshot { get; set; }
+    public Guid TargetServerId { get; set; }
+    public string TargetServerEndpointSnapshot { get; set; } = string.Empty;
+    public string? TargetServerNameSnapshot { get; set; }
+    public string TargetModeSnapshot { get; set; } = string.Empty;
 }
 
 public sealed class ReservationLease

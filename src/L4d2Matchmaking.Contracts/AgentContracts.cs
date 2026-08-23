@@ -14,6 +14,7 @@ public sealed record AgentOperationRequest(
     string? RconPassword = null)
 {
     public string? GameMode { get; init; }
+    public EntryStatisticsContext? EntryStatisticsContext { get; init; }
 }
 
 public sealed record LobbyMemberSnapshot(string SteamId, string? PersonaName, string? AvatarUrl = null);

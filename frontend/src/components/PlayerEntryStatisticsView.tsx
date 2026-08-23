@@ -200,21 +200,25 @@ export function PlayerEntryStatisticsView({ agents, targets }: PlayerEntryStatis
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const requestSequence = useRef(0);
 
   const loadStatistics = useCallback(async (nextQuery: PlayerEntryStatisticsQuery) => {
+    const requestId = ++requestSequence.current;
     setIsLoading(true);
     setError(null);
     try {
       const response = await ApiService.fetchPlayerEntryStatistics(nextQuery);
+      if (requestId !== requestSequence.current) return;
       if (!response.data) {
         setError(response.error || '读取玩家进入统计失败');
         return;
       }
       setResult(response.data);
     } catch {
+      if (requestId !== requestSequence.current) return;
       setError('读取玩家进入统计失败');
     } finally {
-      setIsLoading(false);
+      if (requestId === requestSequence.current) setIsLoading(false);
     }
   }, []);
 
@@ -307,23 +311,22 @@ export function PlayerEntryStatisticsView({ agents, targets }: PlayerEntryStatis
           </div>
           <div className="pes-note"><span>统计口径</span>成功 ReplyJoinData 响应，不代表真实进服；未配置 Agent 下载区域显示为“默认”。</div>
 
-          {result.totalEntries === 0 ? (
+          {result.totalEntries === 0 && (
             <div className="pes-state pes-state--empty" role="status"><BarChart3 size={24} /><strong>选定范围内暂无进入事件</strong><p>可以扩大时间范围，或调整 Agent、Target Server、大厅类型和目标模式筛选。</p></div>
-          ) : (
-            <>
-              <div className="pes-chart-grid"><TrendSection result={result} /><DailyPatternSection result={result} /></div>
-              <div className="pes-table-grid">
-                <section className="pes-card" aria-labelledby="pes-agent-heading">
-                  <div className="pes-section-heading"><div><h2 id="pes-agent-heading">Agent 统计</h2><p>按 Agent 统计进入响应及频率；名称快照用于识别历史改名。</p></div></div>
-                  <div className="pes-data-table-wrap"><table aria-label="Agent 统计" className="pes-data-table"><thead><tr><th>Agent</th><th>响应次数</th><th>每小时</th><th>最近响应（上海）</th></tr></thead><tbody>{result.agents.length === 0 ? <tr><td colSpan={4}>暂无 Agent 数据</td></tr> : result.agents.map((agent) => <tr key={agent.agentId}><td><strong>{agent.agentName}</strong>{agent.nameSnapshots.length > 1 && <small className="pes-table-note" title={agent.nameSnapshots.join('、')}>历史名称：{agent.nameSnapshots.join('、')}</small>}</td><td>{formatCount(agent.entries)}</td><td>{formatRate(agent.entriesPerHour)}</td><td>{formatShanghaiDateTime(agent.lastEntryAtUtc)}</td></tr>)}</tbody></table></div>
-                </section>
-                <section className="pes-card" aria-labelledby="pes-region-heading">
-                  <div className="pes-section-heading"><div><h2 id="pes-region-heading">下载区域统计</h2><p>只使用 Agent 的显式配置，未配置的历史事件归入默认。</p></div></div>
-                  <div className="pes-data-table-wrap"><table aria-label="下载区域统计" className="pes-data-table"><thead><tr><th>下载区域</th><th>响应次数</th><th>每小时</th></tr></thead><tbody>{result.downloadRegions.length === 0 ? <tr><td colSpan={3}>暂无下载区域数据</td></tr> : result.downloadRegions.map((region, index) => <tr key={region.key ?? `default-${index}`}><td><strong>{region.key == null ? '默认' : region.label}</strong></td><td>{formatCount(region.entries)}</td><td>{formatRate(region.entriesPerHour)}</td></tr>)}</tbody></table></div>
-                </section>
-              </div>
-            </>
           )}
+          <>
+            <div className="pes-chart-grid"><TrendSection result={result} /><DailyPatternSection result={result} /></div>
+            <div className="pes-table-grid">
+              <section className="pes-card" aria-labelledby="pes-agent-heading">
+                <div className="pes-section-heading"><div><h2 id="pes-agent-heading">Agent 统计</h2><p>按 Agent 统计进入响应及频率；名称快照用于识别历史改名。</p></div></div>
+                <div className="pes-data-table-wrap"><table aria-label="Agent 统计" className="pes-data-table"><thead><tr><th>Agent</th><th>响应次数</th><th>每小时</th><th>最近响应（上海）</th></tr></thead><tbody>{result.agents.length === 0 ? <tr><td colSpan={4}>暂无 Agent 数据</td></tr> : result.agents.map((agent) => <tr key={agent.agentId}><td><strong>{agent.agentName}</strong>{agent.nameSnapshots.length > 1 && <small className="pes-table-note" title={agent.nameSnapshots.join('、')}>历史名称：{agent.nameSnapshots.join('、')}</small>}</td><td>{formatCount(agent.entries)}</td><td>{formatRate(agent.entriesPerHour)}</td><td>{formatShanghaiDateTime(agent.lastEntryAtUtc)}</td></tr>)}</tbody></table></div>
+              </section>
+              <section className="pes-card" aria-labelledby="pes-region-heading">
+                <div className="pes-section-heading"><div><h2 id="pes-region-heading">下载区域统计</h2><p>只使用 Agent 的显式配置，未配置的历史事件归入默认。</p></div></div>
+                <div className="pes-data-table-wrap"><table aria-label="下载区域统计" className="pes-data-table"><thead><tr><th>下载区域</th><th>响应次数</th><th>每小时</th></tr></thead><tbody>{result.downloadRegions.length === 0 ? <tr><td colSpan={3}>暂无下载区域数据</td></tr> : result.downloadRegions.map((region, index) => <tr key={region.key ?? `default-${index}`}><td><strong>{region.key == null ? '默认' : region.label}</strong></td><td>{formatCount(region.entries)}</td><td>{formatRate(region.entriesPerHour)}</td></tr>)}</tbody></table></div>
+              </section>
+            </div>
+          </>
         </>
       )}
     </div>

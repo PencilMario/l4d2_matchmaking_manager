@@ -213,6 +213,51 @@ describe('玩家进入统计页', () => {
     expect(fetchStatistics).toHaveBeenCalledTimes(3);
     rerender(<PlayerEntryStatisticsView agents={stateAgents} targets={stateTargets} />);
   });
+
+  it('keeps zero trend buckets and current zero Agent rows visible when there are no events', async () => {
+    vi.spyOn(ApiService, 'fetchPlayerEntryStatistics').mockResolvedValue({
+      data: {
+        ...response,
+        totalEntries: 0,
+        entriesPerHour: 0,
+        agents: [{ ...response.agents[0], entries: 0, entriesPerHour: 0, lastEntryAtUtc: null }],
+        downloadRegions: [],
+      },
+      error: null,
+      status: 200,
+    });
+
+    render(<PlayerEntryStatisticsView agents={stateAgents} targets={stateTargets} />);
+
+    expect(await screen.findByText('选定范围内暂无进入事件')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '时间趋势' })).toBeInTheDocument();
+    const agentRow = within(screen.getByRole('table', { name: 'Agent 统计' })).getByRole('row', { name: /暖服节点 Alpha/ });
+    expect(agentRow).toHaveTextContent('暖服节点 Alpha');
+    expect(within(agentRow).getAllByText('0')).toHaveLength(2);
+  });
+
+  it('does not let an earlier request overwrite a later query result', async () => {
+    type StatisticsResult = Awaited<ReturnType<typeof ApiService.fetchPlayerEntryStatistics>>;
+    let resolveFirst!: (value: StatisticsResult) => void;
+    let resolveSecond!: (value: StatisticsResult) => void;
+    const firstRequest = new Promise<StatisticsResult>((resolve) => { resolveFirst = resolve; });
+    const secondRequest = new Promise<StatisticsResult>((resolve) => { resolveSecond = resolve; });
+    const fetchStatistics = vi.spyOn(ApiService, 'fetchPlayerEntryStatistics')
+      .mockReturnValueOnce(firstRequest)
+      .mockReturnValueOnce(secondRequest);
+
+    render(<PlayerEntryStatisticsView agents={stateAgents} targets={stateTargets} />);
+    await waitFor(() => expect(fetchStatistics).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: '最近 7 天' }));
+    await waitFor(() => expect(fetchStatistics).toHaveBeenCalledTimes(2));
+
+    resolveSecond({ data: { ...response, totalEntries: 222, entriesPerHour: 9.25 }, error: null, status: 200 });
+    expect(await screen.findByText('222')).toBeInTheDocument();
+    resolveFirst({ data: { ...response, totalEntries: 111, entriesPerHour: 4.625 }, error: null, status: 200 });
+
+    await waitFor(() => expect(screen.getByText('222')).toBeInTheDocument());
+    expect(screen.queryByText('111')).not.toBeInTheDocument();
+  });
 });
 
 describe('统计导航入口', () => {

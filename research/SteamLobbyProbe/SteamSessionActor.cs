@@ -29,7 +29,14 @@ public sealed class SteamSessionActor : ISteamSessionActor
 
     public static ISteamSessionActor Create(string steamApiLibraryPath) =>
         new SteamSessionActor(
-            new SteamNativeRuntime(steamApiLibraryPath),
+            new SteamNativeRuntime(steamApiLibraryPath, null),
+            new RandomCampaignSelector());
+
+    public static ISteamSessionActor Create(
+        string steamApiLibraryPath,
+        IPlayerEntryEventSink eventSink) =>
+        new SteamSessionActor(
+            new SteamNativeRuntime(steamApiLibraryPath, eventSink),
             new RandomCampaignSelector());
 
     public Task<AgentHealthSnapshot> ObserveHealthAsync(CancellationToken cancellationToken) =>

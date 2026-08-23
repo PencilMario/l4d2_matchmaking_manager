@@ -3,7 +3,9 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using L4d2Matchmaking.Contracts;
 
-internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNativeRuntime
+internal sealed class SteamNativeRuntime(
+    string steamApiLibraryPath,
+    IPlayerEntryEventSink? playerEntryEventSink) : ISteamNativeRuntime
 {
     private const int LobbyTypePublic = 2;
     private const int LobbyEnterCallback = 504;
@@ -21,6 +23,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
     private int _pipe;
     private bool _initialized;
     private ActiveLobbyJoinDataResponder? _activeJoinDataResponder;
+    private AgentOperationRequest? _activeOperationRequest;
 
     public AgentHealthSnapshot ObserveHealth()
     {
@@ -111,6 +114,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
                 created.LobbyId,
                 ownerSteamId,
                 address + ":" + request.Port);
+            _activeOperationRequest = request;
             return lobby;
         }
         catch
@@ -210,7 +214,10 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         if (lobbyId != 0)
         {
             if (_activeJoinDataResponder?.LobbyId == lobbyId)
+            {
                 _activeJoinDataResponder = null;
+                _activeOperationRequest = null;
+            }
             _api!.LeaveLobby(_matchmaking, lobbyId);
         }
     }
@@ -246,6 +253,7 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
         finally
         {
             _activeJoinDataResponder = null;
+            _activeOperationRequest = null;
             if (_module != 0)
                 NativeLibrary.Free(_module);
             _module = 0;
@@ -332,8 +340,14 @@ internal sealed class SteamNativeRuntime(string steamApiLibraryPath) : ISteamNat
             if (_activeJoinDataResponder.TryCreateReply(lobbyId, message, senderSteamId, out var reply) &&
                 reply.Length > 0)
             {
-                var sent = _api.SendLobbyChatMsg(_matchmaking, lobbyId, reply);
-                Console.WriteLine($"ReplyJoinData lobby_id={lobbyId} recipient={senderSteamId} size={reply.Length} sent={sent}");
+                var sent = ReplyJoinDataSendCoordinator.SendAndCapture(
+                    () => _api.SendLobbyChatMsg(_matchmaking, lobbyId, reply),
+                    _activeOperationRequest,
+                    lobbyId,
+                    playerEntryEventSink,
+                    DateTimeOffset.UtcNow,
+                    exception => Console.Error.WriteLine($"player_entry_event_sink_failed code={exception.GetType().Name}"));
+                Console.WriteLine($"ReplyJoinData lobby_id={lobbyId} size={reply.Length} sent={sent}");
             }
         }
         finally

@@ -1,10 +1,18 @@
 using L4d2LobbyAgent.Probe;
+using L4d2LobbyAgent.Reporting;
 using L4d2Matchmaking.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(AgentSessionOptions.FromEnvironment());
+builder.Services.AddSingleton(PlayerEntryReportingOptions.FromEnvironment());
+builder.Services.AddSingleton<PlayerEntryEventQueue>(services =>
+    new PlayerEntryEventQueue(services.GetRequiredService<PlayerEntryReportingOptions>().QueueCapacity));
+builder.Services.AddSingleton<PlayerEntryEventSink>();
+builder.Services.AddSingleton<IPlayerEntryEventSink>(services => services.GetRequiredService<PlayerEntryEventSink>());
 builder.Services.AddSingleton<ISteamSessionActor>(services =>
-    SteamSessionActor.Create(services.GetRequiredService<AgentSessionOptions>().SteamApiLibraryPath));
+    SteamSessionActor.Create(
+        services.GetRequiredService<AgentSessionOptions>().SteamApiLibraryPath,
+        services.GetRequiredService<IPlayerEntryEventSink>()));
 builder.Services.AddSingleton<IAgentSteamSessionService, AgentSteamSessionService>();
 builder.Services.AddSingleton<ISteamDesktopController, SupervisorSteamDesktopController>();
 builder.Services.AddSingleton<ISteamDesktopDetector, SteamDesktopDetector>();
@@ -12,6 +20,14 @@ builder.Services.AddSingleton<ISteamDownloadRegionReader>(_ => SteamDownloadRegi
 builder.Services.AddSingleton<ICefGuardStatusReader>(_ => FileCefGuardStatusReader.FromEnvironment());
 builder.Services.AddSingleton<IAgentReadinessMarker>(_ => FileAgentReadinessMarker.FromEnvironment());
 builder.Services.AddSingleton<ProbeStatusService>();
+builder.Services.AddHttpClient<PlayerEntryEventUploader>((services, client) =>
+{
+    var options = services.GetRequiredService<PlayerEntryReportingOptions>();
+    if (options.Origin is not null)
+        client.BaseAddress = options.Origin;
+    client.Timeout = Timeout.InfiniteTimeSpan;
+});
+builder.Services.AddHostedService(services => services.GetRequiredService<PlayerEntryEventUploader>());
 
 var app = builder.Build();
 
