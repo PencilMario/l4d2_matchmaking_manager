@@ -100,7 +100,7 @@ export function GlobalSettingsView({
       setKeyConfigured(value.configured);
       setSteamWebApiKey('');
       setUpdatedAt(value.updatedAt);
-      setKeyMessage('Steam Web API Key 已保存。');
+      setKeyMessage('Steam Web API 密钥已保存。');
     } catch (caught) {
       setKeyError(describeError(caught).message);
     } finally {
@@ -117,7 +117,7 @@ export function GlobalSettingsView({
       setKeyConfigured(value.configured);
       setSteamWebApiKey('');
       setUpdatedAt(value.updatedAt);
-      setKeyMessage('Steam Web API Key 已清除。');
+      setKeyMessage('Steam Web API 密钥已清除。');
     } catch (caught) {
       setKeyError(describeError(caught).message);
     } finally {
@@ -162,11 +162,11 @@ export function GlobalSettingsView({
   return <section className="space-y-4">
     <h1 className="text-xl font-bold text-slate-900">全局设置</h1>
     <div className="grid max-w-5xl gap-4 md:grid-cols-2">
-      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-blue-600 bg-white p-5 shadow-sm" aria-labelledby="legacy-warmup-card-title">
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-blue-600 bg-white p-5 shadow-sm" aria-labelledby="warmup-card-title">
         <div className="settings-card__header flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-600">GLOBAL CONTROL</p>
-            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-warmup-card-title">暖服和调度</h2>
+            <p className="text-[10px] font-bold tracking-[0.16em] text-blue-600">运行控制</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="warmup-card-title">暖服和调度</h2>
           </div>
           <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${warmupSchedulingEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{warmupSchedulingEnabled ? '已启用' : '已禁用'}</span>
         </div>
@@ -186,29 +186,29 @@ export function GlobalSettingsView({
         {updatedAt && <small className="mt-4 block text-[11px] text-slate-400">上次更新：{formatUpdatedAt(updatedAt)}</small>}
       </article>
 
-      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-amber-500 bg-white p-5 shadow-sm" aria-labelledby="legacy-pause-card-title">
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-amber-500 bg-white p-5 shadow-sm" aria-labelledby="pause-card-title">
         <div className="settings-card__header flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600">SCHEDULE WINDOW</p>
-            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-pause-card-title">暖服暂停时间段</h2>
+            <p className="text-[10px] font-bold tracking-[0.16em] text-amber-600">时间策略</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="pause-card-title">暖服暂停时间段</h2>
           </div>
           <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">分钟级</span>
         </div>
         <WarmupPauseWindowsForm initialActive={warmupPauseWindowsActive} initialWindows={warmupPauseWindows} onSave={updatePauseWindows} />
       </article>
 
-      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-cyan-500 bg-white p-5 shadow-sm" aria-labelledby="legacy-proxy-card-title">
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-cyan-500 bg-white p-5 shadow-sm" aria-labelledby="proxy-card-title">
         <div className="settings-card__header flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-600">NETWORK</p>
-            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-proxy-card-title">VNC 代理</h2>
+            <p className="text-[10px] font-bold tracking-[0.16em] text-cyan-600">网络连接</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="proxy-card-title">VNC 代理</h2>
           </div>
           <span className="rounded-full bg-cyan-50 px-2 py-1 text-[10px] font-semibold text-cyan-700">可选</span>
         </div>
         <p className="mt-3 text-xs leading-5 text-slate-500">仅用于开启 VNC 服务的暖服节点。留空表示不配置。</p>
         <form className="mt-4 space-y-3" onSubmit={submitProxy}>
           <label className="block text-xs font-medium text-slate-700">VNC 代理地址
-            <input aria-label="Steam 代理地址" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setProxy(event.target.value)} placeholder="http://127.0.0.1:7890" value={proxy} />
+            <input aria-label="VNC 代理地址" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setProxy(event.target.value)} placeholder="http://127.0.0.1:7890" value={proxy} />
           </label>
           <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={proxySaving} type="submit">{proxySaving ? '正在保存' : '保存 VNC 代理'}</button>
         </form>
@@ -217,23 +217,23 @@ export function GlobalSettingsView({
         {updatedAt && <small className="mt-4 block text-[11px] text-slate-400">上次更新：{formatUpdatedAt(updatedAt)}</small>}
       </article>
 
-      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-violet-500 bg-white p-5 shadow-sm" aria-labelledby="legacy-key-card-title">
+      <article className="settings-card rounded-xl border border-slate-200 border-l-4 border-l-violet-500 bg-white p-5 shadow-sm" aria-labelledby="key-card-title">
         <div className="settings-card__header flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-600">STEAM DATA</p>
-            <h2 className="mt-1 text-base font-semibold text-slate-900" id="legacy-key-card-title">Steam Web API Key</h2>
+            <p className="text-[10px] font-bold tracking-[0.16em] text-violet-600">Steam 数据对接</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900" id="key-card-title">Steam Web API 密钥</h2>
           </div>
           <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${keyConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{keyConfigured ? '已配置' : '未配置'}</span>
         </div>
-        <p className="mt-3 text-xs leading-5 text-slate-500">控制服务加密保存此 Key，用于补全大厅成员的公开资料。密钥不会回显。</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">控制服务会加密保存此密钥，用于补全大厅成员的公开资料。密钥不会回显。</p>
         <form className="mt-4 space-y-3" onSubmit={submitKey}>
-          <label className="block text-xs font-medium text-slate-700">Steam Web API Key
-            <input aria-label="Steam Web API Key" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setSteamWebApiKey(event.target.value)} placeholder={keyConfigured ? '已配置，输入新 Key 以替换' : '输入 Steam Web API Key'} type="password" value={steamWebApiKey} />
+          <label className="block text-xs font-medium text-slate-700">Steam Web API 密钥
+            <input aria-label="Steam Web API 密钥" className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-xs" onChange={event => setSteamWebApiKey(event.target.value)} placeholder={keyConfigured ? '已配置，输入新密钥以替换' : '输入 Steam Web API 密钥'} type="password" value={steamWebApiKey} />
             <span className="mt-1 block text-[11px] text-slate-500">当前状态：{keyConfigured ? '已配置' : '未配置'}</span>
           </label>
           <div className="flex flex-wrap gap-2">
-            <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={keySaving || !steamWebApiKey.trim()} type="submit">{keySaving ? '正在保存' : '保存 Steam Web API Key'}</button>
-            {keyConfigured && <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50" disabled={keySaving} onClick={() => void clearKey()} type="button">清除 Steam Web API Key</button>}
+            <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={keySaving || !steamWebApiKey.trim()} type="submit">{keySaving ? '正在保存' : '保存 Steam Web API 密钥'}</button>
+            {keyConfigured && <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50" disabled={keySaving} onClick={() => void clearKey()} type="button">清除 Steam Web API 密钥</button>}
           </div>
         </form>
         {keyError && <p className="mt-3 text-xs text-red-700" role="alert">{keyError}</p>}

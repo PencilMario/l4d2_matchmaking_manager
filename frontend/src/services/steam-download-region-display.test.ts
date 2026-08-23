@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatSteamDownloadRegion, normalizeSteamDownloadRegion } from './steam-download-region-display';
+import { formatStatisticsDownloadRegion, formatSteamDownloadRegion, normalizeSteamDownloadRegion } from './steam-download-region-display';
 
 const regions = [
   { id: 32, name: '日本 - 东京' },
@@ -18,5 +18,11 @@ describe('Steam download region display', () => {
     expect(formatSteamDownloadRegion('cng', regions)).toBe('中国 - 上海');
     expect(formatSteamDownloadRegion('168', regions)).toBe('中国 - 青岛');
     expect(formatSteamDownloadRegion(undefined, regions)).toBe('--');
+  });
+
+  it('displays statistics region codes as directory names and null as default', () => {
+    expect(formatStatisticsDownloadRegion('47', regions)).toBe('中国 - 上海');
+    expect(formatStatisticsDownloadRegion('168', regions)).toBe('中国 - 青岛');
+    expect(formatStatisticsDownloadRegion(null, regions)).toBe('默认');
   });
 });

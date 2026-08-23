@@ -31,11 +31,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, initialError }) =
     }
   };
 
-  const handleUsePreset = () => {
-    setToken('l4d2-adm-secret');
-    setErrorMessage(null);
-  };
-
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-md border border-slate-200 p-8 space-y-6">
@@ -110,17 +105,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, initialError }) =
           </button>
         </form>
 
-        {/* Quick test preset */}
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <span>测试环境快捷凭据：</span>
-          <button
-            type="button"
-            onClick={handleUsePreset}
-            className="text-blue-600 hover:text-blue-700 hover:underline font-mono text-[11px]"
-          >
-            填入默认测试令牌
-          </button>
-        </div>
       </div>
     </div>
   );

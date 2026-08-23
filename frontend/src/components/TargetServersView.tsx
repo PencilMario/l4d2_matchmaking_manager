@@ -29,9 +29,9 @@ interface TargetServersViewProps {
   onUpdateTarget: (id: string, data: any) => Promise<boolean>;
   onDeleteTarget: (id: string) => Promise<{ success: boolean; error?: string }>;
   onToggleTargetEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
-  onModalOpenChange?: (open: boolean) => void;
   selectedServerId?: string | null;
   onClearSelectedServer?: () => void;
+  onModalOpenChange?: (open: boolean) => void;
   isRefreshing?: boolean;
 }
 
@@ -43,9 +43,9 @@ export const TargetServersView: React.FC<TargetServersViewProps> = ({
   onUpdateTarget,
   onDeleteTarget,
   onToggleTargetEnabled,
-  onModalOpenChange,
   selectedServerId,
   onClearSelectedServer,
+  onModalOpenChange,
   isRefreshing = false,
 }) => {
   // Search and Filter States

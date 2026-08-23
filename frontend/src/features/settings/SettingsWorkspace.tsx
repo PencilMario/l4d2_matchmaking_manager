@@ -88,7 +88,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateW
       const value = await updateKey({ apiKey: steamWebApiKey.trim() });
       setSettings(current => current ? { ...current, steamWebApiKeyConfigured: value.configured, updatedAt: value.updatedAt } : current);
       setSteamWebApiKey('');
-      setKeyMessage('Steam Web API Key 已保存。');
+      setKeyMessage('Steam Web API 密钥已保存。');
     } catch (caught) {
       setKeyError(describeError(caught).message);
     } finally {
@@ -104,7 +104,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateW
       const value = await updateKey({ clear: true });
       setSettings(current => current ? { ...current, steamWebApiKeyConfigured: value.configured, updatedAt: value.updatedAt } : current);
       setSteamWebApiKey('');
-      setKeyMessage('Steam Web API Key 已清除。');
+      setKeyMessage('Steam Web API 密钥已清除。');
     } catch (caught) {
       setKeyError(describeError(caught).message);
     } finally {
@@ -149,7 +149,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateW
       <article className="settings-card" aria-labelledby="workspace-warmup-card-title">
         <div className="settings-card__header">
           <div>
-            <p className="settings-card__eyebrow">GLOBAL CONTROL</p>
+            <p className="settings-card__eyebrow">运行控制</p>
             <h2 id="workspace-warmup-card-title">暖服和调度</h2>
           </div>
           <span className={`settings-card__badge ${warmupSchedulingEnabled ? 'settings-card__badge--success' : 'settings-card__badge--muted'}`}>{warmupSchedulingEnabled ? '已启用' : '已禁用'}</span>
@@ -173,7 +173,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateW
       <article className="settings-card" aria-labelledby="workspace-pause-card-title">
         <div className="settings-card__header">
           <div>
-            <p className="settings-card__eyebrow settings-card__eyebrow--amber">SCHEDULE WINDOW</p>
+            <p className="settings-card__eyebrow settings-card__eyebrow--amber">时间策略</p>
             <h2 id="workspace-pause-card-title">暖服暂停时间段</h2>
           </div>
           <span className="settings-card__badge settings-card__badge--amber">分钟级</span>
@@ -184,7 +184,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateW
       <article className="settings-card" aria-labelledby="workspace-proxy-card-title">
         <div className="settings-card__header">
           <div>
-            <p className="settings-card__eyebrow settings-card__eyebrow--cyan">NETWORK</p>
+            <p className="settings-card__eyebrow settings-card__eyebrow--cyan">网络连接</p>
             <h2 id="workspace-proxy-card-title">VNC 代理</h2>
           </div>
           <span className="settings-card__badge settings-card__badge--cyan">可选</span>
@@ -192,7 +192,7 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateW
         <p className="settings-card__description">仅用于开启 VNC 服务的暖服节点。留空表示不配置。</p>
         <form className="form-grid settings-card__form" onSubmit={saveProxy}>
           <label className="form-field form-field--wide">VNC 代理地址
-            <input aria-label="Steam 代理地址" onChange={event => setProxy(event.target.value)} placeholder="http://127.0.0.1:7890" value={proxy} />
+            <input aria-label="VNC 代理地址" onChange={event => setProxy(event.target.value)} placeholder="http://127.0.0.1:7890" value={proxy} />
             <small>支持 HTTP 或 HTTPS 代理，例如 http://127.0.0.1:7890。</small>
           </label>
           <div className="form-actions form-field--wide"><button className="button button--primary" disabled={proxySaving} type="submit">{proxySaving ? '正在保存' : '保存 VNC 代理'}</button></div>
@@ -205,20 +205,20 @@ export function SettingsWorkspace({ getSettings, updateProxy, updateKey, updateW
       <article className="settings-card" aria-labelledby="workspace-key-card-title">
         <div className="settings-card__header">
           <div>
-            <p className="settings-card__eyebrow settings-card__eyebrow--violet">STEAM DATA</p>
-            <h2 id="workspace-key-card-title">Steam Web API Key</h2>
+            <p className="settings-card__eyebrow settings-card__eyebrow--violet">Steam 数据对接</p>
+            <h2 id="workspace-key-card-title">Steam Web API 密钥</h2>
           </div>
           <span className={`settings-card__badge ${settings?.steamWebApiKeyConfigured ? 'settings-card__badge--success' : 'settings-card__badge--muted'}`}>{settings?.steamWebApiKeyConfigured ? '已配置' : '未配置'}</span>
         </div>
-        <p className="settings-card__description">控制服务加密保存此 Key，用于补全大厅成员的公开资料。密钥不会回显。</p>
+        <p className="settings-card__description">控制服务加密保存此密钥，用于补全大厅成员的公开资料。密钥不会回显。</p>
         <form className="form-grid settings-card__form" onSubmit={saveSteamWebApiKey}>
-          <label className="form-field form-field--wide">Steam Web API Key
-            <input aria-label="Steam Web API Key" onChange={event => setSteamWebApiKey(event.target.value)} placeholder={settings?.steamWebApiKeyConfigured ? '已配置，输入新 Key 以替换' : '输入 Steam Web API Key'} type="password" value={steamWebApiKey} />
+          <label className="form-field form-field--wide">Steam Web API 密钥
+            <input aria-label="Steam Web API 密钥" onChange={event => setSteamWebApiKey(event.target.value)} placeholder={settings?.steamWebApiKeyConfigured ? '已配置，输入新密钥以替换' : '输入 Steam Web API 密钥'} type="password" value={steamWebApiKey} />
             <small>当前状态：{settings?.steamWebApiKeyConfigured ? '已配置' : '未配置'}</small>
           </label>
           <div className="form-actions form-field--wide">
-            <button className="button button--primary" disabled={keySaving || !steamWebApiKey.trim()} type="submit">{keySaving ? '正在保存' : '保存 Steam Web API Key'}</button>
-            {settings?.steamWebApiKeyConfigured ? <button className="button button--quiet" disabled={keySaving} onClick={() => void clearSteamWebApiKey()} type="button">清除 Steam Web API Key</button> : null}
+            <button className="button button--primary" disabled={keySaving || !steamWebApiKey.trim()} type="submit">{keySaving ? '正在保存' : '保存 Steam Web API 密钥'}</button>
+            {settings?.steamWebApiKeyConfigured ? <button className="button button--quiet" disabled={keySaving} onClick={() => void clearSteamWebApiKey()} type="button">清除 Steam Web API 密钥</button> : null}
           </div>
         </form>
         {keyError && <p className="inline-error" role="alert">{keyError}</p>}

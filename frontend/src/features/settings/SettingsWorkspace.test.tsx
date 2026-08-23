@@ -34,7 +34,7 @@ describe('全局设置', () => {
     expect(screen.getAllByRole('article')).toHaveLength(4);
     expect(screen.getByRole('heading', { name: '暖服和调度' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'VNC 代理' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Steam Web API Key' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Steam Web API 密钥' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '暖服暂停时间段' })).toBeInTheDocument();
   });
 
@@ -47,12 +47,12 @@ describe('全局设置', () => {
       updateKey,
     });
 
-    const input = await screen.findByPlaceholderText('已配置，输入新 Key 以替换');
+    const input = await screen.findByPlaceholderText('已配置，输入新密钥以替换');
     expect(input).toHaveAttribute('type', 'password');
     expect(input).toHaveValue('');
     expect(screen.getByText('当前状态：已配置')).toBeInTheDocument();
     fireEvent.change(input, { target: { value: 'new-secret-key' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存 Steam Web API Key' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存 Steam Web API 密钥' }));
 
     await waitFor(() => expect(updateKey).toHaveBeenCalledWith({ apiKey: 'new-secret-key' }));
     expect(updateProxy).not.toHaveBeenCalled();
@@ -67,8 +67,8 @@ describe('全局设置', () => {
       updateKey,
     });
 
-    await screen.findByPlaceholderText('已配置，输入新 Key 以替换');
-    fireEvent.click(screen.getByRole('button', { name: '清除 Steam Web API Key' }));
+    await screen.findByPlaceholderText('已配置，输入新密钥以替换');
+    fireEvent.click(screen.getByRole('button', { name: '清除 Steam Web API 密钥' }));
 
     await waitFor(() => expect(updateKey).toHaveBeenCalledWith({ clear: true }));
     expect(updateProxy).not.toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe('全局设置', () => {
     const updateWarmupPauseWindows = vi.fn();
     renderWorkspace({ updateProxy, updateKey, updateWarmupPauseWindows });
 
-    const input = await screen.findByLabelText('Steam 代理地址');
+    const input = await screen.findByLabelText('VNC 代理地址');
     fireEvent.change(input, { target: { value: 'http://127.0.0.1:7890' } });
     fireEvent.click(screen.getByRole('button', { name: '保存 VNC 代理' }));
 

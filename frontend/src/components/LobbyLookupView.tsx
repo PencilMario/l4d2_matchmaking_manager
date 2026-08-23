@@ -215,27 +215,14 @@ export const LobbyLookupView: React.FC = () => {
               <span className="text-xs text-slate-500 block">一键加入大厅 URI</span>
               {joinUri ? (
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    aria-label="Steam 大厅加入 URI"
-                    className="min-w-0 flex-1 px-2.5 py-1.5 text-xs font-mono text-slate-700 bg-slate-50 border border-slate-200 rounded-md"
-                    readOnly
-                    value={joinUri}
-                    onFocus={(event) => event.currentTarget.select()}
-                  />
-                  <button
-                    type="button"
-                    aria-label="复制加入 URI"
-                    onClick={() => void copyJoinUri()}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shrink-0"
-                  >
+                  <input aria-label="Steam 大厅加入 URI" className="min-w-0 flex-1 px-2.5 py-1.5 text-xs font-mono text-slate-700 bg-slate-50 border border-slate-200 rounded-md" readOnly value={joinUri} onFocus={(event) => event.currentTarget.select()} />
+                  <button type="button" aria-label="复制加入 URI" onClick={() => void copyJoinUri()} className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shrink-0">
                     <Copy className="w-3.5 h-3.5" />
                     <span>{uriCopied ? '已复制' : '复制加入 URI'}</span>
                   </button>
                 </div>
               ) : (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-2">
-                  当前结果未返回房主 Steam ID，暂时无法生成完整加入 URI。
-                </p>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-2">当前结果未返回房主 Steam ID，暂时无法生成完整加入 URI。</p>
               )}
             </div>
           </div>

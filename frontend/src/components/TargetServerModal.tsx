@@ -174,29 +174,6 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
           </p>
         </div>
 
-        {/* Lobby Game Mode */}
-        <div>
-          <label
-            htmlFor="target-game-mode"
-            className="block text-xs font-medium text-slate-700 mb-1"
-          >
-            模式类型
-          </label>
-          <select
-            id="target-game-mode"
-            value={gameMode}
-            onChange={(e) => setGameMode(e.target.value as TargetServerGameMode | '')}
-            className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">未指定（保持默认）</option>
-            <option value="versus">versus</option>
-            <option value="coop">coop</option>
-          </select>
-          <p className="text-[11px] text-slate-500 mt-1">
-            仅可选择预设；未指定时使用现有 versus 大厅 metadata
-          </p>
-        </div>
-
         {/* Server Name */}
         <div>
           <label
@@ -283,6 +260,23 @@ export const TargetServerModal: React.FC<TargetServerModalProps> = ({
                 : '普通服务器默认 36 并发'}
             </p>
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="target-game-mode" className="block text-xs font-medium text-slate-700 mb-1">
+            目标模式
+          </label>
+          <select
+            id="target-game-mode"
+            value={gameMode}
+            onChange={(event) => setGameMode(event.target.value as TargetServerGameMode | '')}
+            className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">未指定（使用默认模式）</option>
+            <option value="versus">对抗模式</option>
+            <option value="coop">战役合作</option>
+          </select>
+          <p className="text-[11px] text-slate-500 mt-1">未指定时由大厅元数据决定。</p>
         </div>
 
         {/* Timeout & Target Players */}

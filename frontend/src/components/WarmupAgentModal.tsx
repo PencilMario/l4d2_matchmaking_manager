@@ -53,10 +53,8 @@ export const WarmupAgentModal: React.FC<WarmupAgentModalProps> = ({
   useEffect(() => {
     const select = steamRegionSelectRef.current;
     if (!select) return;
-
     const preventWheelSelection = (event: WheelEvent) => event.preventDefault();
     select.addEventListener('wheel', preventWheelSelection, { passive: false });
-
     return () => select.removeEventListener('wheel', preventWheelSelection);
   }, [isOpen]);
 

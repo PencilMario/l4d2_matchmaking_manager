@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, LayoutDashboard, Server, Cpu, Search, Gamepad2, Settings } from 'lucide-react';
+import { LayoutDashboard, Server, Cpu, Search, Gamepad2, BarChart2, Settings } from 'lucide-react';
 import { TabKey } from '../types';
 
 interface SidebarProps {
@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       key: 'statistics',
       label: '进入统计',
-      icon: <BarChart3 className="w-4 h-4 shrink-0" />,
+      icon: <BarChart2 className="w-4 h-4 shrink-0" />,
     },
     {
       key: 'settings',

@@ -60,22 +60,22 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
   const [editingAgent, setEditingAgent] = useState<WarmupAgent | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    onModalOpenChange?.(isModalOpen);
-    return () => onModalOpenChange?.(false);
-  }, [isModalOpen, onModalOpenChange]);
-
   // Row-specific rebuild state map: { [agentId]: boolean }
   const [rebuildingAgentIds, setRebuildingAgentIds] = useState<Record<string, boolean>>({});
   const [rebuildConfirmAgent, setRebuildConfirmAgent] = useState<WarmupAgent | null>(null);
   const [rebuildErrors, setRebuildErrors] = useState<Record<string, string>>({});
   const [feedbackMessages, setFeedbackMessages] = useState<Record<string, string>>({});
-  const [vncOpeningAgentIds, setVncOpeningAgentIds] = useState<Record<string, boolean>>({});
-  const [vncErrors, setVncErrors] = useState<Record<string, string>>({});
 
   // Delete confirm
   const [deleteConfirmAgent, setDeleteConfirmAgent] = useState<WarmupAgent | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [vncOpeningAgentIds, setVncOpeningAgentIds] = useState<Record<string, boolean>>({});
+  const [vncErrors, setVncErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    onModalOpenChange?.(isModalOpen);
+    return () => onModalOpenChange?.(false);
+  }, [isModalOpen, onModalOpenChange]);
 
   // Actions
   const handleOpenCreate = () => {
@@ -87,11 +87,6 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
     setEditingAgent(agent);
     setIsModalOpen(true);
   };
-
-  const handleCloseModal = useCallback(() => {
-    setIsModalOpen(false);
-    setEditingAgent(null);
-  }, []);
 
   const handleModalSubmit = async (data: { name: string; steamRegion?: string; keepVncAlive: boolean }) => {
     setIsSubmitting(true);
@@ -112,6 +107,11 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
     }
   };
 
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setEditingAgent(null);
+  }, []);
+
   const handleOpenVnc = async (agent: WarmupAgent) => {
     if (!onOpenVncSession) return;
     const popup = window.open('', '_blank');
@@ -119,7 +119,6 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
       setVncErrors((prev) => ({ ...prev, [agent.id]: '浏览器阻止了 VNC 新窗口，请允许弹窗后重试' }));
       return;
     }
-
     popup.opener = null;
     setVncOpeningAgentIds((prev) => ({ ...prev, [agent.id]: true }));
     setVncErrors((prev) => {
@@ -130,9 +129,9 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
     try {
       const session = await onOpenVncSession(agent.id);
       popup.location.replace(session.url);
-    } catch (err: any) {
+    } catch (error: unknown) {
       popup.close();
-      setVncErrors((prev) => ({ ...prev, [agent.id]: err?.message || '打开 VNC 连接失败' }));
+      setVncErrors((prev) => ({ ...prev, [agent.id]: error instanceof Error ? error.message : '打开 VNC 连接失败' }));
     } finally {
       setVncOpeningAgentIds((prev) => {
         const next = { ...prev };
@@ -246,7 +245,7 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
                 <th className="py-2.5 px-4">节点名称</th>
                 <th className="py-2.5 px-3">运行状态</th>
                 <th className="py-2.5 px-3">Steam 下载区域</th>
-                <th className="py-2.5 px-3">VNC 连接</th>
+                <th className="py-2.5 px-3">noVNC 本机端口</th>
                 <th className="py-2.5 px-3 text-center">关联暖服任务数</th>
                 <th className="py-2.5 px-3">创建时间</th>
                 <th className="py-2.5 px-3">更新时间</th>
@@ -279,8 +278,8 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
                     (a) => a.agentId === agent.id && (a.status === 'active' || a.status === 'uncertain')
                   ).length;
                   const rowRebuildError = rebuildErrors[agent.id];
-                  const rowVncError = vncErrors[agent.id];
                   const rowFeedback = feedbackMessages[agent.id];
+                  const rowVncError = vncErrors[agent.id];
 
                   return (
                     <React.Fragment key={agent.id}>
@@ -331,16 +330,10 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
                           )}
                         </td>
 
-                        {/* VNC Connection */}
-                        <td className="py-3 px-3 whitespace-nowrap">
+                        {/* VNC connection */}
+                        <td className="py-3 px-3 font-mono text-slate-700 whitespace-nowrap">
                           <Tooltip content={vncTooltip}>
-                            <button
-                              type="button"
-                              disabled={!canOpenVnc}
-                              onClick={() => void handleOpenVnc(agent)}
-                              aria-label={`打开 VNC 连接 ${agent.name}`}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded text-blue-600 hover:bg-blue-50 focus:outline-hidden disabled:text-slate-300 disabled:hover:bg-transparent disabled:opacity-70"
-                            >
+                            <button type="button" disabled={!canOpenVnc} onClick={() => void handleOpenVnc(agent)} aria-label={`打开 VNC 连接 ${agent.name}`} className="inline-flex h-7 w-7 items-center justify-center rounded text-blue-600 hover:bg-blue-50 focus:outline-hidden disabled:text-slate-300 disabled:hover:bg-transparent disabled:opacity-70">
                               {isVncOpening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MonitorUp className="w-3.5 h-3.5" />}
                             </button>
                           </Tooltip>
@@ -466,18 +459,13 @@ export const WarmupAgentsView: React.FC<WarmupAgentsViewProps> = ({
                                 </button>
                               </div>
                             )}
-                            {rowVncError && (
-                              <div className="flex items-center gap-2 text-red-700 bg-red-50 p-2 rounded border border-red-200">
-                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                <span>{rowVncError}</span>
-                              </div>
-                            )}
                             {rowFeedback && (
                               <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200">
                                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
                                 <span>{rowFeedback}</span>
                               </div>
                             )}
+                            {rowVncError && <div className="flex items-center gap-2 text-red-700 bg-red-50 p-2 rounded border border-red-200"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /><span>{rowVncError}</span></div>}
                           </td>
                         </tr>
                       )}

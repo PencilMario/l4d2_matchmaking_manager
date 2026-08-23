@@ -43,8 +43,15 @@ describe('全局设置', () => {
     expect(screen.getAllByRole('article')).toHaveLength(4);
     expect(screen.getByRole('heading', { name: '暖服和调度' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'VNC 代理' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Steam Web API Key' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Steam Web API 密钥' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '暖服暂停时间段' })).toBeInTheDocument();
+    expect(screen.getByText('运行控制')).toBeInTheDocument();
+    expect(screen.getByText('网络连接')).toBeInTheDocument();
+    expect(screen.getByText('Steam 数据对接')).toBeInTheDocument();
+    expect(screen.queryByText('GLOBAL CONTROL')).not.toBeInTheDocument();
+    expect(screen.queryByText('SCHEDULE WINDOW')).not.toBeInTheDocument();
+    expect(screen.queryByText('NETWORK')).not.toBeInTheDocument();
+    expect(screen.queryByText('STEAM DATA')).not.toBeInTheDocument();
   });
 
   it('loads and saves the Steam proxy without touching pause windows', async () => {
@@ -53,7 +60,7 @@ describe('全局设置', () => {
     const saveWarmupPauseWindows = vi.fn();
     renderView({ saveProxy, saveKey, saveWarmupPauseWindows });
 
-    const input = await screen.findByLabelText('Steam 代理地址');
+    const input = await screen.findByLabelText('VNC 代理地址');
     fireEvent.change(input, { target: { value: 'http://127.0.0.1:7890' } });
     fireEvent.click(screen.getByRole('button', { name: '保存 VNC 代理' }));
 
@@ -72,15 +79,15 @@ describe('全局设置', () => {
       saveKey,
     });
 
-    const key = await screen.findByPlaceholderText('已配置，输入新 Key 以替换');
+    const key = await screen.findByPlaceholderText('已配置，输入新密钥以替换');
     expect(key).toHaveAttribute('type', 'password');
     expect(key).toHaveValue('');
     fireEvent.change(key, { target: { value: 'replacement-key' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存 Steam Web API Key' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存 Steam Web API 密钥' }));
     await waitFor(() => expect(saveKey).toHaveBeenCalledWith({ apiKey: 'replacement-key' }));
     expect(saveProxy).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: '清除 Steam Web API Key' }));
+    fireEvent.click(screen.getByRole('button', { name: '清除 Steam Web API 密钥' }));
     await waitFor(() => expect(saveKey).toHaveBeenLastCalledWith({ clear: true }));
   });
 

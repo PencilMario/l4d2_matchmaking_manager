@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   TargetServer,
   WarmupAgent,
@@ -30,9 +30,9 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronRight,
+  Search,
   ChevronsUpDown,
   CornerDownRight,
-  Search,
   Users,
 } from 'lucide-react';
 
@@ -45,6 +45,8 @@ interface OverviewViewProps {
   onNavigateToTarget: (targetId: string) => void;
   onNavigateTab: (tab: TabKey) => void;
 }
+
+type ServerFilterType = 'all' | 'active' | 'uncertain' | 'unavailable';
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
   targets,
@@ -62,32 +64,18 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const runningAgents = agents.filter((a) => a.status === 'running');
   const quarantinedAgents = agents.filter((a) => a.status === 'quarantined');
 
-  type ServerGroup = {
-    server: TargetServer;
-    attempts: WarmupAttempt[];
-    activeAttempts: WarmupAttempt[];
-    uncertainAttempts: WarmupAttempt[];
-    associatedAgents: WarmupAgent[];
-    serverRemainingSeconds: number;
-    isServerActiveWarmup: boolean;
-    isServerUncertain: boolean;
-  };
+  // Search & Filter state for the Grouped Hierarchical Table
+  const [filterType, setFilterType] = useState<ServerFilterType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const groupedServers = useMemo<ServerGroup[]>(() => {
-    const attemptGroups = new Map<string, WarmupAttempt[]>();
-    attempts.forEach((attempt) => {
-      const group = attemptGroups.get(attempt.targetServerId) ?? [];
-      group.push(attempt);
-      attemptGroups.set(attempt.targetServerId, group);
-    });
-
+  // Grouping logic: Organize attempts and agents by Target Server
+  const groupedServers = useMemo(() => {
     const serversById = new Map(targets.map((server) => [server.id, server]));
-    const allServerIds = new Set([...targets.map((server) => server.id), ...attemptGroups.keys()]);
+    const serverIds = Array.from(new Set([...targets.map((server) => server.id), ...attempts.map((attempt) => attempt.targetServerId)]));
 
-    return [...allServerIds].map((serverId) => {
-      const serverAttempts = [...(attemptGroups.get(serverId) ?? [])].sort(
-        (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt),
-      );
+    return serverIds.map((serverId) => {
+      // Find all attempts associated with this server
+      const serverAttempts = attempts.filter((a) => a.targetServerId === serverId);
       const fallbackAttempt = serverAttempts[0];
       const server = serversById.get(serverId) ?? {
         id: serverId,
@@ -106,79 +94,102 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         createdAt: fallbackAttempt?.startedAt ?? new Date(0).toISOString(),
         updatedAt: fallbackAttempt?.updatedAt ?? new Date(0).toISOString(),
       };
-      const activeAttempts = serverAttempts.filter((attempt) => attempt.status === 'active');
-      const uncertainAttempts = serverAttempts.filter((attempt) => attempt.status === 'uncertain');
-      const agentIds = new Set(serverAttempts.map((attempt) => attempt.agentId));
-      const associatedAgents = agents.filter((agent) => agentIds.has(agent.id));
+      const serverActiveAttempts = serverAttempts.filter((a) => a.status === 'active');
+      const serverUncertainAttempts = serverAttempts.filter((a) => a.status === 'uncertain');
+
+      // Server-level remaining time calculation (relative to the target server's warmup session)
+      let serverRemainingSeconds = 0;
+      let isServerActiveWarmup = false;
+      let isServerUncertain = false;
+
+      if (serverActiveAttempts.length > 0) {
+        isServerActiveWarmup = true;
+        // The server-level remaining time is the active countdown on this server
+        serverRemainingSeconds = Math.max(...serverActiveAttempts.map((a) => a.remainingSeconds));
+      } else if (serverUncertainAttempts.length > 0) {
+        isServerUncertain = true;
+        serverRemainingSeconds = 0;
+      }
+
+      // Unique agents currently dispatched to this server
+      const uniqueAgentIds = Array.from(new Set(serverAttempts.map((a) => a.agentId)));
+      const associatedAgents = uniqueAgentIds
+        .map((id) => agents.find((ag) => ag.id === id))
+        .filter((ag): ag is WarmupAgent => Boolean(ag));
 
       return {
         server,
         attempts: serverAttempts,
-        activeAttempts,
-        uncertainAttempts,
+        activeAttempts: serverActiveAttempts,
+        uncertainAttempts: serverUncertainAttempts,
         associatedAgents,
-        serverRemainingSeconds: activeAttempts.length > 0
-          ? Math.min(...activeAttempts.map((attempt) => attempt.remainingSeconds))
-          : 0,
-        isServerActiveWarmup: activeAttempts.length > 0,
-        isServerUncertain: uncertainAttempts.length > 0,
+        serverRemainingSeconds,
+        isServerActiveWarmup,
+        isServerUncertain,
       };
-    }).sort((a, b) => {
-      const aStartedAt = a.attempts[0]?.startedAt ?? a.server.updatedAt;
-      const bStartedAt = b.attempts[0]?.startedAt ?? b.server.updatedAt;
-      return Date.parse(bStartedAt) - Date.parse(aStartedAt);
     });
-  }, [agents, attempts, targets]);
+  }, [targets, attempts, agents]);
 
-  type ServerFilterType = 'all' | 'active' | 'uncertain' | 'unavailable';
-  const [filterType, setFilterType] = useState<ServerFilterType>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [expandedServerIds, setExpandedServerIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-
-  useEffect(() => {
-    setExpandedServerIds((current) => {
-      const next = new Set([...current].filter((id) => groupedServers.some((group) => group.server.id === id)));
-      groupedServers.forEach((group) => {
-        if (group.isServerActiveWarmup || group.isServerUncertain) next.add(group.server.id);
-      });
-      if (next.size === 0 && groupedServers.length > 0) next.add(groupedServers[0].server.id);
-      return next;
+  // Expanded server IDs set: default expand all servers that have active or uncertain attempts
+  const [expandedServerIds, setExpandedServerIds] = useState<Set<string>>(() => {
+    const defaultExpanded = new Set<string>();
+    groupedServers.forEach((g) => {
+      if (g.isServerActiveWarmup || g.isServerUncertain) {
+        defaultExpanded.add(g.server.id);
+      }
     });
-  }, [groupedServers]);
-
-  const filteredGroupedServers = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return groupedServers.filter((group) => {
-      if (filterType === 'active' && !group.isServerActiveWarmup) return false;
-      if (filterType === 'uncertain' && !group.isServerUncertain) return false;
-      if (filterType === 'unavailable' && group.server.a2sStatus !== 'unavailable') return false;
-      if (!query) return true;
-
-      return [
-        group.server.name,
-        group.server.endpoint,
-        ...group.associatedAgents.map((agent) => agent.name),
-        ...group.attempts.map((attempt) => attempt.lobbyId),
-      ].some((value) => value?.toLowerCase().includes(query));
-    });
-  }, [filterType, groupedServers, searchQuery]);
+    // If no active, expand first server by default
+    if (defaultExpanded.size === 0 && groupedServers.length > 0) {
+      defaultExpanded.add(groupedServers[0].server.id);
+    }
+    return defaultExpanded;
+  });
 
   const toggleServerExpand = (serverId: string) => {
-    setExpandedServerIds((current) => {
-      const next = new Set(current);
-      if (next.has(serverId)) next.delete(serverId);
-      else next.add(serverId);
+    setExpandedServerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(serverId)) {
+        next.delete(serverId);
+      } else {
+        next.add(serverId);
+      }
       return next;
     });
   };
 
-  const toggleAllServers = () => {
-    setExpandedServerIds((current) => current.size === groupedServers.length
-      ? new Set()
-      : new Set(groupedServers.map((group) => group.server.id)));
+  const handleToggleExpandAll = () => {
+    if (expandedServerIds.size === groupedServers.length) {
+      setExpandedServerIds(new Set());
+    } else {
+      setExpandedServerIds(new Set(groupedServers.map((g) => g.server.id)));
+    }
   };
+
+  // Filter and search grouped servers
+  const filteredGroupedServers = useMemo(() => {
+    return groupedServers.filter((group) => {
+      const { server, attempts, associatedAgents } = group;
+
+      // Filter type check
+      if (filterType === 'active' && !group.isServerActiveWarmup) return false;
+      if (filterType === 'uncertain' && !group.isServerUncertain) return false;
+      if (filterType === 'unavailable' && server.a2sStatus !== 'unavailable') return false;
+
+      // Search query check
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchServerName = (server.name || '').toLowerCase().includes(q);
+        const matchServerEndpoint = server.endpoint.toLowerCase().includes(q);
+        const matchAgent = associatedAgents.some((ag) => ag.name.toLowerCase().includes(q));
+        const matchAttemptLobby = attempts.some((at) => (at.lobbyId || '').includes(q));
+        if (!matchServerName && !matchServerEndpoint && !matchAgent && !matchAttemptLobby) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [groupedServers, filterType, searchQuery]);
 
   const summaryCards = [
     {
@@ -249,7 +260,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         {summaryCards.map((card, idx) => (
           <div
             key={idx}
-            onClick={card.onClick}
+                      onClick={card.onClick}
             className={`p-3.5 rounded-lg border ${card.border} ${card.bg} shadow-xs flex flex-col justify-between transition-all cursor-pointer hover:shadow-sm hover:border-slate-300`}
           >
             <div className="flex items-center justify-between mb-2">
@@ -372,61 +383,398 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
       )}
 
+      {/* Grouped Hierarchical Data Table (按服务器分组层级暖服数据表) */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/70 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+        {/* Table Header Toolbar */}
+        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Server className="w-4 h-4 text-blue-600" />
-              <h2 className="text-sm font-semibold text-slate-900">暖服调度层级监控</h2>
+              <h2 className="text-sm font-semibold text-slate-900">
+                暖服调度层级监控
+              </h2>
             </div>
-            <span className="text-xs text-slate-500 font-mono">({filteredGroupedServers.length} 台服务器 / {attempts.length} 个暖服任务)</span>
+            <span className="text-xs text-slate-500 font-mono">
+              ({filteredGroupedServers.length} 台服务器 / {attempts.length} 个暖服任务)
+            </span>
           </div>
+
+          {/* Filters & Controls */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex items-center bg-slate-200/80 p-0.5 rounded-md text-xs" aria-label="服务器筛选">
-              {([
-                ['all', `全部服务器 (${groupedServers.length})`],
-                ['active', `正在暖服 (${groupedServers.filter((group) => group.isServerActiveWarmup).length})`],
-                ['uncertain', `结果未确认 (${groupedServers.filter((group) => group.isServerUncertain).length})`],
-              ] as const).map(([value, label]) => (
-                <button key={value} type="button" onClick={() => setFilterType(value)} className={`px-2.5 py-1 rounded font-medium transition-colors ${filterType === value ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>{label}</button>
-              ))}
+            {/* Filter Tabs */}
+            <div className="inline-flex items-center bg-slate-200/80 p-0.5 rounded-md text-xs">
+              <button
+                type="button"
+                onClick={() => setFilterType('all')}
+                className={`px-2.5 py-1 rounded font-medium transition-all ${
+                  filterType === 'all'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                全部服务器 ({groupedServers.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType('active')}
+                className={`px-2.5 py-1 rounded font-medium transition-all ${
+                  filterType === 'active'
+                    ? 'bg-white text-blue-700 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                正在暖服 ({groupedServers.filter((g) => g.isServerActiveWarmup).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType('uncertain')}
+                className={`px-2.5 py-1 rounded font-medium transition-all ${
+                  filterType === 'uncertain'
+                    ? 'bg-white text-amber-700 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                结果未确认 ({groupedServers.filter((g) => g.isServerUncertain).length})
+              </button>
             </div>
-            <label className="relative">
-              <span className="sr-only">搜索服务器、节点或大厅</span>
+
+            {/* Search Input */}
+            <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索服务器 / 节点 / 大厅" className="pl-8 pr-2.5 py-1 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-blue-500 w-48" />
-            </label>
-            <button type="button" onClick={toggleAllServers} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-md shadow-2xs transition-colors">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索服务器 / 节点 / 大厅"
+                className="pl-8 pr-2.5 py-1 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-blue-500 w-44"
+              />
+            </div>
+
+            {/* Expand / Collapse All Button */}
+            <button
+              type="button"
+              onClick={handleToggleExpandAll}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-md shadow-2xs transition-colors"
+              title={expandedServerIds.size === groupedServers.length ? '折叠全部' : '展开全部'}
+            >
               <ChevronsUpDown className="w-3.5 h-3.5" />
-              <span>{expandedServerIds.size === groupedServers.length ? '全部折叠' : '全部展开'}</span>
+              <span>
+                {expandedServerIds.size === groupedServers.length ? '全部折叠' : '全部展开'}
+              </span>
             </button>
           </div>
         </div>
+
+        {/* Grouped Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px] text-left text-xs border-collapse">
-            <thead><tr className="bg-slate-100/90 text-slate-600 border-b border-slate-200 font-semibold select-none"><th className="py-2.5 px-3 w-10" /><th className="py-2.5 px-3">目标服务器</th><th className="py-2.5 px-3">A2S 状态 / 在线人数</th><th className="py-2.5 px-3">关联暖服节点数</th><th className="py-2.5 px-3">服务器暖服剩余时间</th><th className="py-2.5 px-3">调度设置</th><th className="py-2.5 px-4 text-right">操作</th></tr></thead>
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100/90 text-slate-600 border-b border-slate-200 font-semibold select-none">
+                <th className="py-2.5 px-3 w-10 text-center"></th>
+                <th className="py-2.5 px-3">目标服务器</th>
+                <th className="py-2.5 px-3">A2S 状态 / 在线人数</th>
+                <th className="py-2.5 px-3">关联暖服节点数</th>
+                <th className="py-2.5 px-3">服务器暖服剩余时间</th>
+                <th className="py-2.5 px-3">调度设置</th>
+                <th className="py-2.5 px-4 text-right">操作</th>
+              </tr>
+            </thead>
+
             <tbody className="divide-y divide-slate-200 text-slate-700">
-              {filteredGroupedServers.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-400">未找到匹配的目标服务器或暖服记录</td></tr> : filteredGroupedServers.map((group) => {
-                const { server, attempts: serverAttempts, activeAttempts, uncertainAttempts, serverRemainingSeconds } = group;
-                const isExpanded = expandedServerIds.has(server.id);
-                const a2sInfo = formatA2sStatus(server.a2sStatus);
-                const isActive = group.isServerActiveWarmup;
-                const isUncertain = group.isServerUncertain;
-                const attemptWindow = server.attemptWindowSeconds || 720;
-                const progress = Math.min(100, Math.max(0, (serverRemainingSeconds / attemptWindow) * 100));
-                return <React.Fragment key={server.id}>
-                  <tr className={`cursor-pointer select-none transition-colors ${isExpanded ? 'bg-blue-50/20 hover:bg-blue-50/35' : 'hover:bg-slate-50/90'} ${isActive ? 'border-l-4 border-l-blue-600' : isUncertain ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-transparent'}`} onClick={() => toggleServerExpand(server.id)}>
-                    <td className="py-3 px-3 text-center"><button type="button" aria-label={isExpanded ? '折叠节点列表' : '展开节点列表'} onClick={(event) => { event.stopPropagation(); toggleServerExpand(server.id); }} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded transition-colors">{isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</button></td>
-                    <td className="py-3 px-3"><div className="flex items-center gap-2"><span className="font-semibold text-slate-900 text-sm">{server.name || server.endpoint}</span>{!server.enabled && <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">调度已禁用</span>}</div><div className="text-[11px] text-slate-500 font-mono mt-0.5">{server.endpoint}</div></td>
-                    <td className="py-3 px-3 whitespace-nowrap"><div className="flex items-center gap-2"><Badge label={a2sInfo.label} badgeClass={a2sInfo.badgeClass} dotClass={a2sInfo.dotClass} /><span className="flex items-center gap-1 font-mono text-slate-700 font-medium"><Users className="w-3.5 h-3.5 text-slate-400" />{server.maxPlayers > 0 ? `${server.currentPlayers} / ${server.maxPlayers}` : '--'}</span></div></td>
-                    <td className="py-3 px-3 whitespace-nowrap">{isActive ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200"><span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />{activeAttempts.length} 个节点正在暖服</span> : isUncertain ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300"><AlertTriangle className="w-3 h-3" />{uncertainAttempts.length} 结果未确认</span> : <span className="text-slate-400">{serverAttempts.length > 0 ? `已结束 (${serverAttempts.length} 项)` : '无关联暖服任务'}</span>}</td>
-                    <td className="py-3 px-3 whitespace-nowrap">{isActive ? <div className="space-y-1"><div className="flex items-center gap-1.5 font-mono text-sm font-bold text-blue-700"><Clock className="w-3.5 h-3.5 text-blue-600" />{formatSecondsToTime(serverRemainingSeconds)}<span className="text-[11px] font-normal text-slate-400">/ {formatSecondsToTime(attemptWindow)}</span></div><div className="w-32 h-1.5 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full" style={{ width: `${progress}%` }} /></div></div> : isUncertain ? <span className="text-amber-700 font-mono font-medium">00:00 (超时未确认)</span> : <span className="text-slate-400 font-mono">未在暖服</span>}</td>
-                    <td className="py-3 px-3 text-slate-600 text-[11px] whitespace-nowrap"><div>目标人数: <strong className="text-slate-800">{server.playerTarget || '--'} 人</strong></div><div className="text-slate-400 mt-0.5">优先级: {server.priority} · {server.requiresReservation ? '需要预留 (并发 1)' : `最大并发 ${server.maxConcurrentWarmups}`}</div></td>
-                    <td className="py-3 px-4 text-right whitespace-nowrap"><button type="button" onClick={(event) => { event.stopPropagation(); onNavigateToTarget(server.id); }} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors">定位服务器 <ExternalLink className="w-3 h-3" /></button></td>
-                  </tr>
-                   {isExpanded && <tr><td colSpan={7} className="p-0 bg-slate-50/70"><div className="border-y border-slate-200 py-3 px-4 pl-10 space-y-2"><div className="flex items-center justify-between text-xs text-slate-500 font-medium pb-1.5 border-b border-slate-200/80"><span className="flex items-center gap-1.5 text-slate-700 font-semibold"><CornerDownRight className="w-3.5 h-3.5 text-slate-400" />分配至该服务器的暖服节点与任务 ({serverAttempts.length})</span><span className="text-[11px] text-slate-400">任务剩余时间共享该服务器暖服周期</span></div>{serverAttempts.length === 0 ? <div className="py-4 text-center text-slate-400">当前服务器暂无暖服任务分配记录</div> : <div className="overflow-x-auto"><table className="w-full min-w-[840px] text-left text-xs border-collapse bg-white border border-slate-200"><thead><tr className="bg-slate-100/80 text-slate-600 border-b border-slate-200"><th className="py-2 px-3">暖服节点</th><th className="py-2 px-3">运行模式</th><th className="py-2 px-3">任务状态</th><th className="py-2 px-3">执行阶段</th><th className="py-2 px-3">大厅 ID</th><th className="py-2 px-3">服务器暖服开始时间</th><th className="py-2 px-3">详情 / 异常说明</th></tr></thead><tbody className="divide-y divide-slate-100">{serverAttempts.map((attempt) => { const statusInfo = formatAttemptStatus(attempt.status); const agent = group.associatedAgents.find((item) => item.id === attempt.agentId); return <tr key={attempt.id} className="hover:bg-slate-50/90"><td className="py-2 px-3 font-mono"><div className="flex items-center gap-1.5"><Cpu className="w-3.5 h-3.5 text-blue-600" /><strong className="text-slate-900">{attempt.agentName}</strong></div><span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">{formatSteamDownloadRegion(agent?.steamRegion, steamRegions)}</span></td><td className="py-2 px-3 whitespace-nowrap">{formatOperationMode(attempt.operationMode)}</td><td className="py-2 px-3 whitespace-nowrap"><Badge label={statusInfo.label} badgeClass={statusInfo.badgeClass} dotClass={statusInfo.dotClass} /></td><td className="py-2 px-3 whitespace-nowrap"><span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">{formatAttemptPhase(attempt.phase)}</span></td><td className="py-2 px-3 font-mono whitespace-nowrap">{attempt.lobbyId ? <Tooltip content={`完整大厅 ID: ${attempt.lobbyId}`}><span className="bg-slate-50 px-1.5 py-0.5 rounded text-[11px] text-slate-800 border border-slate-200">{attempt.lobbyId}</span></Tooltip> : <span className="text-slate-400">--</span>}</td><td className="py-2 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">{formatDateTime(attempt.startedAt)}</td><td className="py-2 px-3 text-[11px]">{attempt.errorMessage ? <span className="text-red-700 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{attempt.errorMessage}</span> : attempt.status === 'active' ? <span className="text-blue-700">正在引导玩家流入匹配</span> : <span className="text-slate-400">正常完成调度</span>}</td></tr>; })}</tbody></table></div>}</div></td></tr>}
-                </React.Fragment>;
-              })}
+              {filteredGroupedServers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-slate-400 text-xs">
+                    未找到匹配的目标服务器或暖服记录
+                  </td>
+                </tr>
+              ) : (
+                filteredGroupedServers.map((group) => {
+                  const {
+                    server,
+                    attempts: serverAttempts,
+                    activeAttempts: serverActiveAttempts,
+                    uncertainAttempts: serverUncertainAttempts,
+                    serverRemainingSeconds,
+                    isServerActiveWarmup,
+                    isServerUncertain,
+                  } = group;
+
+                  const isExpanded = expandedServerIds.has(server.id);
+                  const a2sInfo = formatA2sStatus(server.a2sStatus);
+                  const attemptWindow = server.attemptWindowSeconds || 720;
+                  const progressPercent = Math.min(
+                    100,
+                    Math.max(0, (serverRemainingSeconds / attemptWindow) * 100)
+                  );
+
+                  return (
+                    <React.Fragment key={server.id}>
+                      {/* Parent Row (Target Server) */}
+                      <tr
+                        className={`transition-colors cursor-pointer select-none ${
+                          isExpanded ? 'bg-blue-50/20 hover:bg-blue-50/35' : 'bg-white hover:bg-slate-50/90'
+                        } ${isServerActiveWarmup ? 'border-l-4 border-l-blue-600' : isServerUncertain ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-transparent'}`}
+                        onClick={() => toggleServerExpand(server.id)}
+                      >
+                        {/* Toggle Icon */}
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            type="button"
+                            aria-label={isExpanded ? '折叠节点列表' : '展开节点列表'}
+                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleServerExpand(server.id);
+                            }}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-slate-600" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-slate-400" />
+                            )}
+                          </button>
+                        </td>
+
+                        {/* Target Server Info */}
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="font-semibold text-slate-900 text-sm">
+                              {server.name || server.endpoint}
+                            </div>
+                            {!server.enabled && (
+                              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                调度已禁用
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                            {server.endpoint}
+                          </div>
+                        </td>
+
+                        {/* A2S & Players */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              label={a2sInfo.label}
+                              badgeClass={a2sInfo.badgeClass}
+                              dotClass={a2sInfo.dotClass}
+                            />
+                            <div className="flex items-center gap-1 font-mono text-slate-700 font-medium">
+                              <Users className="w-3.5 h-3.5 text-slate-400" />
+                              <span>
+                                {server.currentPlayers} / {server.maxPlayers}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Associated Agents Count */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {serverActiveAttempts.length > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                                {serverActiveAttempts.length} 个节点正在暖服
+                              </span>
+                            ) : serverUncertainAttempts.length > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                                <AlertTriangle className="w-3 h-3 text-amber-700" />
+                                {serverUncertainAttempts.length} 结果未确认
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">
+                                {serverAttempts.length > 0
+                                  ? `空闲 (${serverAttempts.length} 项历史记录)`
+                                  : '无关联暖服任务'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Server-level Warm-up Remaining Time (服务器暖服剩余时间) */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          {isServerActiveWarmup ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 font-mono text-sm font-bold text-blue-700">
+                                <Clock className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                                <span>{formatSecondsToTime(serverRemainingSeconds)}</span>
+                                <span className="text-[11px] font-normal text-slate-400">
+                                  / {formatSecondsToTime(attemptWindow)}
+                                </span>
+                              </div>
+                              {/* Progress bar */}
+                              <div className="w-32 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-blue-600 rounded-full transition-all duration-1000"
+                                  style={{ width: `${progressPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : isServerUncertain ? (
+                            <div className="flex items-center gap-1 text-amber-700 font-mono font-medium">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                              <span>00:00 (超时未确认)</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">
+                              未在暖服
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Scheduling Settings */}
+                        <td className="py-3 px-3 text-slate-600 text-[11px] whitespace-nowrap">
+                          <div>
+                            目标人数: <span className="font-semibold text-slate-800">{server.playerTarget} 人</span>
+                          </div>
+                          <div className="text-slate-400 mt-0.5">
+                            优先级: {server.priority} · {server.requiresReservation ? '需要预留 (并发1)' : `最大并发 ${server.maxConcurrentWarmups}`}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigateToTarget(server.id);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
+                            title="前往目标服务器管理"
+                          >
+                            <span>定位服务器</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Child Rows (Sub-Table / Hierarchical Warm-up Nodes & Attempts) */}
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={7} className="p-0 bg-slate-50/70">
+                            <div className="border-y border-slate-200 py-3 px-4 pl-10 space-y-2">
+                              <div className="flex items-center justify-between text-xs text-slate-500 font-medium pb-1.5 border-b border-slate-200/80">
+                                <div className="flex items-center gap-1.5">
+                                  <CornerDownRight className="w-3.5 h-3.5 text-slate-400" />
+                                  <span className="text-slate-700 font-semibold">
+                                    分配至该服务器的暖服节点与任务 ({serverAttempts.length})
+                                  </span>
+                                </div>
+                                <span className="text-[11px] text-slate-400">
+                                  任务剩余时间共享该服务器暖服周期
+                                </span>
+                              </div>
+
+                              {serverAttempts.length === 0 ? (
+                                <div className="py-4 text-center text-xs text-slate-400">
+                                  当前服务器暂无活跃或历史暖服任务分配记录
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-xs border-collapse bg-white rounded border border-slate-200">
+                                    <thead>
+                                      <tr className="bg-slate-100/80 text-slate-600 border-b border-slate-200">
+                                        <th className="py-2 px-3 font-semibold">暖服节点</th>
+                                        <th className="py-2 px-3 font-semibold">运行模式</th>
+                                        <th className="py-2 px-3 font-semibold">任务状态</th>
+                                        <th className="py-2 px-3 font-semibold">执行阶段</th>
+                                        <th className="py-2 px-3 font-semibold">大厅 ID</th>
+                                        <th className="py-2 px-3 font-semibold">服务器暖服开始时间</th>
+                                        <th className="py-2 px-3 font-semibold">详情 / 异常说明</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                                      {serverAttempts.map((attempt) => {
+                                        const attemptStatusInfo = formatAttemptStatus(attempt.status);
+                                        const agentObj = agents.find((ag) => ag.id === attempt.agentId);
+
+                                        return (
+                                          <tr
+                                            key={attempt.id}
+                                            className="hover:bg-slate-50/90 transition-colors"
+                                          >
+                                            {/* Node Info */}
+                                            <td className="py-2 px-3 font-mono">
+                                              <div className="flex items-center gap-1.5">
+                                                <Cpu className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                                <span className="font-semibold text-slate-900">
+                                                  {attempt.agentName}
+                                                </span>
+                                                <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">
+                                                  {formatSteamDownloadRegion(agentObj?.steamRegion, steamRegions)}
+                                                </span>
+                                              </div>
+                                            </td>
+
+                                            {/* Operation Mode */}
+                                            <td className="py-2 px-3 whitespace-nowrap text-slate-600">
+                                              {formatOperationMode(attempt.operationMode)}
+                                            </td>
+
+                                            {/* Attempt Status */}
+                                            <td className="py-2 px-3 whitespace-nowrap">
+                                              <Badge
+                                                label={attemptStatusInfo.label}
+                                                badgeClass={attemptStatusInfo.badgeClass}
+                                                dotClass={attemptStatusInfo.dotClass}
+                                              />
+                                            </td>
+
+                                            {/* Phase */}
+                                            <td className="py-2 px-3 whitespace-nowrap text-slate-700 font-medium">
+                                              <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">
+                                                {formatAttemptPhase(attempt.phase)}
+                                              </span>
+                                            </td>
+
+                                            {/* Lobby ID */}
+                                            <td className="py-2 px-3 font-mono whitespace-nowrap">
+                                              {attempt.lobbyId ? (
+                                                <Tooltip content={`完整大厅 ID: ${attempt.lobbyId}`}>
+                                                  <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">
+                                                    {attempt.lobbyId}
+                                                  </span>
+                                                </Tooltip>
+                                              ) : (
+                                                <span className="text-slate-400">--</span>
+                                              )}
+                                            </td>
+
+                                            {/* Started At */}
+                                            <td className="py-2 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                                              {formatDateTime(attempt.startedAt)}
+                                            </td>
+
+                                            {/* Message / Error */}
+                                            <td className="py-2 px-3 text-slate-500 text-[11px]">
+                                              {attempt.errorMessage ? (
+                                                <span className="text-red-700 font-medium flex items-center gap-1">
+                                                  <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                                                  {attempt.errorMessage}
+                                                </span>
+                                              ) : attempt.status === 'active' ? (
+                                                <span className="text-blue-700">正在引导玩家流入匹配</span>
+                                              ) : (
+                                                <span className="text-slate-400">正常完成调度</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

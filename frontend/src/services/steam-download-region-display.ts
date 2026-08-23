@@ -22,3 +22,11 @@ export function formatSteamDownloadRegion(
   if (!normalized) return '--';
   return regions.find((region) => String(region.id) === normalized)?.name ?? '未知区域';
 }
+
+export function formatStatisticsDownloadRegion(
+  value: string | null | undefined,
+  regions: readonly SteamDownloadRegion[],
+): string {
+  if (value == null || value.trim() === '') return '默认';
+  return formatSteamDownloadRegion(value, regions);
+}

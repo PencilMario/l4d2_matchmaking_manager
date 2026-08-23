@@ -180,11 +180,6 @@ export const TargetServerDrawer: React.FC<TargetServerDrawerProps> = ({
           </div>
 
           <div>
-            <span className="text-slate-500 block mb-0.5">模式类型</span>
-            <span className="font-medium text-slate-800">{server.gameMode || '未指定（默认 versus）'}</span>
-          </div>
-
-          <div>
             <span className="text-slate-500 block mb-0.5">调度优先级</span>
             <span className="font-mono font-semibold text-slate-800">
               {server.priority}
