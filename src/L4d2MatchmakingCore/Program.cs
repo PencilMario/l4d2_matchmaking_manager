@@ -71,6 +71,7 @@ if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHostedService<AgentVncSessionCleanupService>();
     builder.Services.AddHostedService<AgentMemoryLimitBackgroundService>();
+    builder.Services.AddHostedService<WarmupAgentRecoveryBackgroundService>();
     builder.Services.AddHostedService<WarmupSchedulerBackgroundService>();
     builder.Services.AddHostedService<TargetServerObservationCollector>();
     builder.Services.AddHostedService<PlayerEntryRetentionBackgroundService>();

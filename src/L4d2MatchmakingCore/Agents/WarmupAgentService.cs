@@ -174,6 +174,32 @@ public sealed class WarmupAgentService(
     public Task<WarmupAgentResponse?> RecreateAsync(Guid agentId, CancellationToken cancellationToken) =>
         lifecycleCoordinator.ExecuteAsync(agentId, () => RecreateCoreAsync(agentId, cancellationToken), cancellationToken);
 
+    public async Task RecoverPendingAsync(CancellationToken cancellationToken)
+    {
+        var pendingAgentIds = await dbContext.WarmupAgents
+            .AsNoTracking()
+            .Where(agent => agent.Status == "recreate_pending")
+            .OrderBy(agent => agent.UpdatedAt)
+            .Select(agent => agent.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var agentId in pendingAgentIds)
+        {
+            try
+            {
+                await RecreateAsync(agentId, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // Keep the durable pending boundary and retry on the next recovery pass.
+            }
+        }
+    }
+
     private async Task<WarmupAgentResponse?> RecreateCoreAsync(Guid agentId, CancellationToken cancellationToken)
     {
         var agent = await FindAsync(agentId, cancellationToken);

@@ -348,6 +348,41 @@ public sealed class WarmupAgentEndpointTests
     }
 
     [TestMethod]
+    public async Task PendingRecreateIsRecoveredByRecreatingTheAgent()
+    {
+        using var environment = new CoreTestEnvironment();
+        var runtime = new FakeRuntime();
+        await using var factory = new AgentFactory(runtime);
+        using var client = CreateAuthorizedClient(factory);
+
+        var created = await client.PostAsJsonAsync("/v1/agents", new CreateWarmupAgentRequest("account-1", null));
+        var agent = await created.Content.ReadFromJsonAsync<WarmupAgentResponse>();
+        Assert.IsNotNull(agent);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MatchmakingDbContext>();
+            var pending = await db.WarmupAgents.SingleAsync(candidate => candidate.Id == agent.Id);
+            pending.Status = "recreate_pending";
+            pending.ContainerId = "stale-container";
+            await db.SaveChangesAsync();
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<WarmupAgentService>();
+            await service.RecoverPendingAsync(CancellationToken.None);
+        }
+
+        var recovered = await client.GetFromJsonAsync<WarmupAgentResponse>($"/v1/agents/{agent.Id}");
+        Assert.IsNotNull(recovered);
+        Assert.AreEqual("running", recovered.Status);
+        Assert.AreEqual(2, runtime.CreateCalls);
+        Assert.AreEqual(2, runtime.StartCalls);
+        Assert.AreEqual(1, runtime.DeleteCalls);
+    }
+
+    [TestMethod]
     public async Task RecreateKeepsThePersistedPendingBoundaryWhenCompensationSaveFails()
     {
         using var environment = new CoreTestEnvironment();
